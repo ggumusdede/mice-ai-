@@ -3,7 +3,8 @@
 import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse,
 } from '@simplewebauthn/server';
-import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
+type AuthenticationResponseJSON = Parameters<typeof verifyAuthenticationResponse>[0]['response'];
+export type RegistrationResponseJSON = Parameters<typeof verifyRegistrationResponse>[0]['response'];
 import type { DecisionInput } from '@mice/shared';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
