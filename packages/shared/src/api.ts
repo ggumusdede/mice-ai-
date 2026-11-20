@@ -215,3 +215,41 @@ export type {
   DecisionInput, Delegation, FieldExtra, FinanceEntry, GeneratedDocument, Guest, InboundMessage, MessageDraft,
   OfferEvaluation, Project, Quote, Rfq, ServiceItem, Supplier, SupplierOffer, Task, User,
 };
+
+// ---------- Additions requested by apps/web (ADDITIVE — not yet in the original contract) ----------
+// GET  /api/projects/:id/field-extras              -> List<FieldExtra>    (operations tab + saha paneli limit total)
+// POST /api/projects/:id/field-issues   body FieldIssueInput -> FieldIssue (saha: anlık sorun kaydı, §7 Adım 6)
+// GET  /api/projects/:id/field-issues              -> List<FieldIssue>
+// POST /api/documents/:id/regenerate               -> GeneratedDocument   (stale → current, §3.5)
+// GET  /api/public/rooming/:token                  -> PublicRoomingView
+// POST /api/public/rooming/:token  body PublicRoomingSubmit -> {ok:true; saved:number}
+// GET  /api/public/extras/:token                   -> PublicExtraView
+// GET  /api/public/survey/:token                   -> PublicSurveyView
+// POST /api/public/survey/:token   body PublicSurveySubmit -> {ok:true}
+// POST /api/public/rfq/:token/files  multipart file -> {ok:true; fileName:string}  (PDF/Excel/görsel ek, §17.5)
+// PATCH /api/checklist/:id  body {status:'active'|'rejected'} -> ChecklistQuestion (admin only)
+// POST /api/delegations  body DelegationInput -> Delegation
+export interface FieldIssueInput { description: string; severity: 'low' | 'medium' | 'high'; occurredAt?: string }
+export interface FieldIssue extends FieldIssueInput { id: ID; projectId: ID; enteredBy: ID; createdAt: string }
+export interface FieldExtraInput { description: string; amountTry: number; customerPhone?: string }
+export interface DelegationInput { delegateId: ID; startsAt: string; endsAt: string }
+export interface PublicRoomingGuestInput {
+  fullName: string; email?: string; phone?: string; roomType?: string; arrival?: string; departure?: string;
+  /** §17.9 explicit, unticked by default: "Bilgilerimin sonraki etkinliklerde kullanılmasına izin veriyorum" */
+  consentReuse: boolean;
+}
+export interface PublicRoomingView {
+  agencyName: string; projectCode: string; eventTitle: string | null; startDate: string | null; endDate: string | null;
+  roomTypes: string[]; privacyNoticeUrl: string | null; deadlineAt: string | null; readOnly: boolean; submittedCount: number;
+}
+export interface PublicRoomingSubmit { guests: PublicRoomingGuestInput[] }
+export interface PublicExtraView {
+  agencyName: string; projectCode: string; description: string; amountTry: number; createdAt: string;
+  approvedAt: string | null; approverName: string | null;
+}
+export interface PublicSurveyView {
+  agencyName: string; projectCode: string; submitted: boolean;
+  questions: { id: string; text: string; type: 'rating' | 'text' }[];
+}
+export interface PublicSurveySubmit { answers: Record<string, number | string> }
+export interface DailySummary { lines: string[] }

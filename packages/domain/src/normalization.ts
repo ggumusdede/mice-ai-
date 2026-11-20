@@ -132,7 +132,7 @@ export function detectHiddenCosts(offer: SupplierOffer, pax: number | null): Hid
     out.push({ type: 'payment', severity: 'info', description: `Ödeme koşulu: ${offer.paymentTerms.trim()}` });
   }
   if (has(offer.cancellationTerms)) {
-    const strict = NON_REFUNDABLE.test(offer.cancellationTerms);
+    const strict = NON_REFUNDABLE.test(offer.cancellationTerms.toLocaleLowerCase('tr-TR'));
     out.push({ type: 'cancellation', severity: strict ? 'critical' : 'warning', description: `İptal koşulu: ${offer.cancellationTerms.trim()}` });
   }
   if (has(offer.overtimeTerms)) {
