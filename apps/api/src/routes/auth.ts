@@ -11,7 +11,7 @@ import { authenticationOptions, registrationOptions, registrationVerify, verifyA
 const loginBody = z.object({ email: z.string().email(), password: z.string().min(1) });
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/auth/login', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req): Promise<LoginResponse> => {
+  app.post('/api/auth/login', async (req): Promise<LoginResponse> => {
     const body = parse(loginBody, req.body);
     const found = await withoutTenant((db) => db.query('SELECT * FROM auth_lookup_user($1)', [body.email]).then((r) => r.rows[0]));
     if (!found || !found.active || !(await verifyPassword(body.password, found.password_hash))) throw unauthorized('E-posta veya şifre hatalı');

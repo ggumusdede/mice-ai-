@@ -40,9 +40,10 @@ export function renderPdf(spec: PdfSpec): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40, info: { Title: spec.header.title, Author: spec.header.agencyName } });
     const chunks: Buffer[] = [];
-    doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+    const stream = doc as unknown as NodeJS.EventEmitter;
+    stream.on('data', (c: Buffer) => chunks.push(c));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
     const regular = FONT ?? 'Helvetica';
     const bold = FONT_BOLD ?? 'Helvetica-Bold';
 

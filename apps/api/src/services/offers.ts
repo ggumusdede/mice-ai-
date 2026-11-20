@@ -51,6 +51,11 @@ export async function getOfferRow(ctx: Ctx, id: string, forUpdate = false): Prom
   return rows[0];
 }
 
+/** VAT rates are fractions everywhere in the domain (0.1 = %10). @mice/ai returns percent (10) → normalize at the boundary. */
+export function normalizeLines(lines: OfferLine[]): OfferLine[] {
+  return (lines ?? []).map((l) => ({ ...l, vatRate: l.vatRate > 1 ? Math.round(l.vatRate * 100) / 10000 : l.vatRate }));
+}
+
 /** Creates a new offer version (v+1) and supersedes the previous latest version of the same item × supplier. */
 export async function createOfferVersion(ctx: Ctx, item: Row, input: OfferInput): Promise<Row> {
   const supplier = (await ctx.db.query('SELECT * FROM suppliers WHERE id = $1', [input.supplierId])).rows[0];
@@ -68,7 +73,7 @@ export async function createOfferVersion(ctx: Ctx, item: Row, input: OfferInput)
        guarantee_pax, attrition_terms, payment_terms, prepayment_rate, cancellation_terms, overtime_terms, notes, confidence,
        field_confidence, raw_text, file_name, verified_by, verified_at, negotiation_round, ai_action_id, created_by)
      VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING *`,
-    [item.project_id, rfqId, item.id, input.supplierId, (prev?.version ?? 0) + 1, input.source, input.currency, JSON.stringify(input.lines ?? []),
+    [item.project_id, rfqId, item.id, input.supplierId, (prev?.version ?? 0) + 1, input.source, input.currency, JSON.stringify(normalizeLines(input.lines)),
       input.optionUntil ?? null, input.guaranteePax ?? null, input.attritionTerms ?? null, input.paymentTerms ?? null,
       input.prepaymentRate ?? null, input.cancellationTerms ?? null, input.overtimeTerms ?? null, input.notes ?? null, input.confidence,
       input.fieldConfidence ? JSON.stringify(input.fieldConfidence) : null, input.rawText ?? null, input.fileName ?? null,
@@ -362,12 +367,7 @@ export async function negotiate(ctx: Ctx, offerId: string, args: NegotiationArgu
     [item.id, o.supplier_id])).rows[0].r as number;
   const can = canNegotiate(current, rules.maxNegotiationRounds);
   if (!can.allowed) {
-    await ctx.db.query(
-      `INSERT INTO tasks (tenant_id, project_id, assignee_id, kind, title, source, origin_key, entity_type, entity_id)
-       VALUES (app_tenant_id(), $1, $2, 'call_supplier', $3, 'rule', $4, 'supplier_offer', $5) ON CONFLICT (tenant_id, origin_key) DO NOTHING`,
-      [p.id, p.owner_id ?? user.id, `${p.code}: pazarlık turu limiti doldu — tedarikçiyi telefonla arayın`, `negotiation:${item.id}:${o.supplier_id}:call`, o.id],
-    );
-    throw conflict(can.reason ?? `En fazla ${rules.maxNegotiationRounds} tur taslak; sonrası telefonla`, 'NEGOTIATION_LIMIT');
+    throw conflict(can.reason ?? `En fazla ${rules.maxNegotiationRounds} tur taslak; sonrası telefonla`, 'NEGOTIATION_LIMIT', { offerId });
   }
   const supplier = (await ctx.db.query('SELECT * FROM suppliers WHERE id = $1', [o.supplier_id])).rows[0];
   const others = (await ctx.db.query(
@@ -400,6 +400,17 @@ export async function negotiate(ctx: Ctx, offerId: string, args: NegotiationArgu
   });
   await ctx.db.query('UPDATE negotiation_rounds SET decision_id = $2 WHERE id = $1', [round.id, gate.decision.id]);
   return mapDraft((await ctx.db.query('SELECT * FROM message_drafts WHERE id = $1', [draft.id])).rows[0]);
+}
+
+/** After the round limit the human takes over by phone (§7 Adım 2) — runs in its own transaction (the refused request rolls back). */
+export async function ensureNegotiationCallTask(ctx: Ctx, offerId: string): Promise<void> {
+  const o = await getOfferRow(ctx, offerId);
+  const p = await getProjectRow(ctx, o.project_id);
+  await ctx.db.query(
+    `INSERT INTO tasks (tenant_id, project_id, assignee_id, kind, title, source, origin_key, entity_type, entity_id)
+     VALUES (app_tenant_id(), $1, $2, 'call_supplier', $3, 'rule', $4, 'supplier_offer', $5) ON CONFLICT (tenant_id, origin_key) DO NOTHING`,
+    [p.id, p.owner_id ?? ctx.user?.id ?? null, `${p.code}: pazarlık turu limiti doldu — tedarikçiyi telefonla arayın`, `negotiation:${o.service_item_id}:${o.supplier_id}:call`, o.id],
+  );
 }
 
 export async function addChannelPrice(ctx: Ctx, input: ChannelPriceInput): Promise<{ id: string }> {

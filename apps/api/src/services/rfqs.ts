@@ -18,7 +18,7 @@ export const LINK_PLACEHOLDER = '{{TEDARIKCI_LINKI}}';
 const DEFAULT_READONLY_DAYS = 30;
 
 export function supplierLink(ctx: Ctx, token: string): string {
-  return `${ctx.deps.config.publicBaseUrl}/supplier/rfq/${token}`;
+  return `${ctx.deps.config.publicBaseUrl}/s/rfq/${token}`;
 }
 
 export async function getRfqRow(ctx: Ctx, id: string, forUpdate = false): Promise<Row> {

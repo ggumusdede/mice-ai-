@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts",
+    "dev": "tsx watch --no-experimental-require-module src/server.ts",
+    "start": "tsx --no-experimental-require-module src/server.ts",
+    "migrate": "tsx --no-experimental-require-module src/db/migrate.ts",
+    "seed": "tsx --no-experimental-require-module src/db/seed.ts",
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "worker": "tsx --no-experimental-require-module src/worker.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.1.0",

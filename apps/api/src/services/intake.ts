@@ -4,6 +4,7 @@ import type { IntakeRequest, IntakeResponse, RequestExtraction, ServiceKind } fr
 import {
   findDuplicates, markLowConfidence, missingFromChecklist, rfqMinimumMissing, suggestAssignee, slugTr,
 } from '@mice/domain';
+import { budgetIsPerPerson } from '@mice/ai';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
 import { mapChecklist, mapDraft, mapProject } from '../lib/mappers.js';
@@ -68,6 +69,9 @@ export async function runIntake(ctx: Ctx, req: IntakeRequest): Promise<IntakeRes
   const seq = await nextSeq(ctx, 'project');
   const start = val(extraction.startDate);
   const pax = val(extraction.pax);
+  // project budget is the TOTAL; "kişi başı 250 EUR" × pax
+  const rawBudget = val(extraction.budget);
+  const budget = rawBudget != null && budgetIsPerPerson(extraction.budget) && pax ? rawBudget * pax : rawBudget;
   const code = await projectCode(ctx, { seq, customer_id: customer?.id ?? null, customer_name: customerName, start_date: start, pax, venue_name: null });
   const title = [customerName, val(extraction.eventType), pax ? `${pax} kişi` : null].filter(Boolean).join(' · ') || req.subject || 'Yeni talep';
   const p = (await ctx.db.query(
@@ -78,7 +82,7 @@ export async function runIntake(ctx: Ctx, req: IntakeRequest): Promise<IntakeRes
     [seq, code, customer?.id ?? null, customerName, title, val(extraction.eventType), start, val(extraction.endDate),
       val(extraction.dateFlexibility), pax, val(extraction.roomsSgl), val(extraction.roomsDbl), val(extraction.city),
       val(extraction.district), val(extraction.hallLayout), val(extraction.fnb), val(extraction.technical), val(extraction.transfer),
-      val(extraction.budget), val(extraction.budgetCurrency), val(extraction.decisionDate), val(extraction.billingInfo),
+      budget, val(extraction.budgetCurrency), val(extraction.decisionDate), val(extraction.billingInfo),
       JSON.stringify(extraction), receivedAt, rules.quoteTargetBusinessDays, user.id],
   )).rows[0];
   await ctx.db.query('UPDATE inbound_messages SET project_id = $2 WHERE id = $1', [inbound.id, p.id]);
