@@ -23,8 +23,28 @@ export function shouldAnonymize(g: { consentReuse: boolean; consentWithdrawnAt: 
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 // TR numbers: +90 / 0090 / 0 prefix, optional (area), 3-3-2-2 grouping; bare 10 digits only when mobile (5xx)
-const TR_PHONE_RE = /(?<![\d+])((?:\+|00)90[\s.-]*|0[\s.-]*)?\(?([2-5]\d{2})\)?[\s.-]*(\d{3})[\s.-]*(\d{2})[\s.-]*(\d{2})(?!\d)/g;
+const TR_PHONE_RE = /(?<![\d+])\(?((?:\+|00)90[\s.-]*|0[\s.-]*)?\(?([2-5]\d{2})\)?[\s.-]*(\d{3})[\s.-]*(\d{2})[\s.-]*(\d{2})(?!\d)/g;
 const INTL_PHONE_RE = /(?<![\d\w])\+(?!90)\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}(?!\d)/g;
+
+/** Case-insensitive key for a name, folding Turkish dotted/dotless i. */
+function nameKey(s: string): string {
+  return s.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR').replace(/ı/g, 'i');
+}
+/** Regex source matching `name` regardless of (Turkish) letter case; i/ı/I/İ are interchangeable, any whitespace between words. */
+function trInsensitivePattern(name: string): string {
+  let src = '';
+  for (const ch of name) {
+    if (/\s/.test(ch)) {
+      src += '\\s+';
+      continue;
+    }
+    const variants = new Set([ch, ch.toLowerCase(), ch.toUpperCase(), ch.toLocaleLowerCase('tr-TR'), ch.toLocaleUpperCase('tr-TR')]);
+    if ('iıIİ'.includes(ch)) for (const v of 'iıIİ') variants.add(v);
+    const parts = [...variants].filter((v) => [...v].length === 1);
+    src += parts.length > 1 ? `[${parts.map((v) => v.replace(/[\]\\^-]/g, '\\$&')).join('')}]` : escapeRe(ch);
+  }
+  return src;
+}
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -56,10 +76,15 @@ export function pseudonymize(text: string, knownNames: string[]): { text: string
   out = out.replace(INTL_PHONE_RE, (m) => tokenFor('PHONE', m.replace(/\D/g, ''), m.trim()));
 
   const names = [...new Set(knownNames.map((n) => n.trim().replace(/\s+/g, ' ')).filter((n) => n.length >= 2))].sort((a, b) => b.length - a.length);
-  for (const name of names) {
-    const pattern = escapeRe(name).replace(/ /g, '\\s+');
-    const re = new RegExp(`(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`, 'giu');
-    out = out.replace(re, (m) => tokenFor('PERSON', name.toLocaleLowerCase('tr-TR'), name));
+  if (names.length) {
+    const canonical = new Map<string, string>();
+    for (const n of names) if (!canonical.has(nameKey(n))) canonical.set(nameKey(n), n);
+    const alternation = names.map(trInsensitivePattern).join('|');
+    const re = new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternation})(?![\\p{L}\\p{N}_])`, 'gu');
+    out = out.replace(re, (m) => {
+      const key = nameKey(m);
+      return tokenFor('PERSON', key, canonical.get(key) ?? m);
+    });
   }
   return { text: out, mapping };
 }

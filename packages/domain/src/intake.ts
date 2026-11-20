@@ -44,7 +44,8 @@ const LEGAL_WORDS = new Set(['as', 'a.s', 'a.ş', 'aş', 'ltd', 'şti', 'sti', '
 export function normalizeCustomerName(s: string): string {
   return s
     .toLocaleLowerCase('tr-TR')
-    .replace(/[.,;:()'"&/-]+/g, ' ')
+    .replace(/\./g, '')
+    .replace(/[,;:()'"&/-]+/g, ' ')
     .split(/\s+/)
     .filter((w) => w && !LEGAL_WORDS.has(w))
     .join(' ')

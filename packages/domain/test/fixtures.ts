@@ -51,12 +51,13 @@ export function supplier(over: Partial<Supplier> = {}): Supplier {
   };
 }
 
+const none = (): Extracted<never> => ({ value: null, confidence: 0 });
 const ex = <T>(value: T | null, confidence = 0.95): Extracted<T> => ({ value, confidence });
 export function extraction(over: Partial<RequestExtraction> = {}): RequestExtraction {
   return {
-    customerName: ex('Acme İlaç'), eventType: ex('toplantı'), startDate: ex('2027-03-12'), endDate: ex('2027-03-14'), dateFlexibility: ex(null, 0),
+    customerName: ex('Acme İlaç'), eventType: ex('toplantı'), startDate: ex('2027-03-12'), endDate: ex('2027-03-14'), dateFlexibility: none(),
     pax: ex(80), roomsSgl: ex(0), roomsDbl: ex(40), city: ex('İstanbul'), district: ex('Şişli'), hallLayout: ex('tiyatro'), fnb: ex('tam pansiyon'),
-    technical: ex(null, 0), transfer: ex(null, 0), budget: ex(null, 0), budgetCurrency: ex(null, 0), decisionDate: ex(null, 0), billingInfo: ex(null, 0),
+    technical: none(), transfer: none(), budget: none(), budgetCurrency: none(), decisionDate: none(), billingInfo: none(),
     language: 'tr', ...over,
   };
 }
