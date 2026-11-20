@@ -134,7 +134,7 @@ const TECH: [RegExp, string][] = [
   [/\b(isik sistemi|isiklandirma|lighting)/, 'ışık'],
   [/\b(flipchart|flip chart)/, 'flipchart'],
   [/\b(wi-?fi|internet)/, 'internet/wifi'],
-  [/\b(perde|screen)\b/, 'perde'],
+  [/(?<!led )\b(perde|projection screen|projeksiyon perdesi)\b/, 'perde'],
   [/\b(kayit|recording|canli yayin|streaming|hibrit|hybrid)\b/, 'kayıt/yayın'],
 ];
 
@@ -283,6 +283,12 @@ function sentenceAround(text: string, index: number, max = 90): string {
 export function heuristicExtractRequest(text: string, opts: { today: string; knownCustomers?: string[] }): RequestExtraction {
   const f = fold(text);
   const language = detectLanguage(text);
+  /** maps a snippet of the folded text back to the original spelling (fold() is length-preserving) */
+  const orig = (raw: string | null | undefined): string | undefined => {
+    if (!raw) return undefined;
+    const i = f.indexOf(raw);
+    return i < 0 ? raw : text.slice(i, i + raw.length);
+  };
 
   // --- dates
   const { event, decision } = classifyDates(text, f, opts.today);
@@ -323,7 +329,7 @@ export function heuristicExtractRequest(text: string, opts: { today: string; kno
   const distinctCities = [...new Set(cities.map((c) => c.item.name))];
   if (districts.length) {
     const d = districts[0].item;
-    district = ex(d.name, distinctDistricts.length > 1 ? 0.65 : 0.92, text.slice(districts[0].index, districts[0].index + d.name.length + 4));
+    district = ex(d.name, distinctDistricts.length > 1 ? 0.65 : 0.92, text.slice(districts[0].index).match(/^[\p{L}'’]+/u)?.[0]);
     const explicit = cities.find((c) => c.item.name === d.city);
     city = ex(d.city, explicit ? 0.95 : 0.85, explicit ? explicit.item.name : `${d.name} → ${d.city}`);
   } else if (cities.length) {
@@ -343,7 +349,7 @@ export function heuristicExtractRequest(text: string, opts: { today: string; kno
   if (cb) fnbParts.push(`${cb[1] ? `${numOrWord(cb[1]) ?? cb[1]} ` : ''}coffee break`);
   const fnb = fnbParts.length ? ex(fnbParts.join(', '), 0.85, fnbParts.join(', ')) : ex<string>(null, 0);
   const techHits = findAll(f, TECH);
-  const technical = techHits.length ? ex(techHits.map((t) => t.label).join(', '), 0.85, techHits.map((t) => t.raw).join(', ')) : ex<string>(null, 0);
+  const technical = techHits.length ? ex(techHits.map((t) => t.label).join(', '), 0.85, techHits.map((t) => orig(t.raw)).join(', ')) : ex<string>(null, 0);
   const tr = /(havalimani transfer\w*|havaalani transfer\w*|airport transfers?|transfer\w*|shuttle|servis aracı|trasfer|трансфер\S*)/.exec(f);
   const transfer = tr ? ex(sentenceAround(text, tr.index, 80), 0.85, sentenceAround(text, tr.index, 80)) : ex<string>(null, 0);
 
@@ -351,7 +357,7 @@ export function heuristicExtractRequest(text: string, opts: { today: string; kno
   const { budget, currency } = extractBudget(text, f);
   const customerName = extractCustomer(text, f, opts.knownCustomers ?? []);
   const types = findAll(f, EVENT_TYPES);
-  const eventType = types.length ? ex(types[0].label, types.length > 2 ? 0.75 : 0.88, types[0].raw) : ex<string>(null, 0);
+  const eventType = types.length ? ex(types[0].label, types.length > 2 ? 0.75 : 0.88, orig(types[0].raw)) : ex<string>(null, 0);
   const bill = /(fatura bilgi\w*|fatura adres\w*|fatura\s*:|vergi dairesi|vergi no|vkn|tax office|tax (?:id|no|number)|billing|invoice to|инн)/.exec(f);
   let billingInfo = ex<string>(null, 0);
   if (bill) {
@@ -362,7 +368,7 @@ export function heuristicExtractRequest(text: string, opts: { today: string; kno
   }
 
   return {
-    customerName, eventType, startDate, endDate, dateFlexibility: dateFlex, pax: ex(pax.value, pax.confidence, pax.raw ?? undefined),
+    customerName, eventType, startDate, endDate, dateFlexibility: dateFlex, pax: ex(pax.value, pax.confidence, orig(pax.raw)),
     roomsSgl, roomsDbl, city, district, hallLayout, fnb, technical, transfer, budget, budgetCurrency: currency,
     decisionDate, billingInfo, language,
   };

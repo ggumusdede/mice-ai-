@@ -76,7 +76,7 @@ function styleGreetingAndClosing(req: DraftRequest): { greeting: string; closing
   const lang = req.language;
   const name = req.recipientName?.trim();
   let greeting = name ? (lang === 'ru' ? `${T.hello.ru}, ${name}!` : `${T.hello[lang]} ${name},`) : (lang === 'ru' ? `${T.hello.ru}!` : `${T.hello[lang]},`);
-  let closing = T.closing[lang];
+  let closing: string = T.closing[lang];
   const ex = req.styleExamples?.length ? req.styleExamples[req.styleExamples.length - 1].after : null;
   if (ex) {
     const lines = ex.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);

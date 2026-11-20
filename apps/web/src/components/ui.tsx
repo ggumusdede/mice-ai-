@@ -146,19 +146,19 @@ export function Field({ label, hint, error, children, className, warn }: FieldPr
   );
 }
 
-export function TextInput({ label, hint, warn, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode; hint?: ReactNode; warn?: boolean }) {
-  return <Field label={label} hint={hint} warn={warn}>{(id) => <input id={id} className="input" {...rest} />}</Field>;
+export function TextInput({ label, hint, warn, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode; hint?: ReactNode; warn?: boolean }) {
+  return <Field label={label} hint={hint} warn={warn} className={className}>{(id) => <input id={id} {...rest} className="input" />}</Field>;
 }
 
-export function TextArea({ label, hint, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label: ReactNode; hint?: ReactNode }) {
-  return <Field label={label} hint={hint}>{(id) => <textarea id={id} className="input textarea" {...rest} />}</Field>;
+export function TextArea({ label, hint, className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label: ReactNode; hint?: ReactNode }) {
+  return <Field label={label} hint={hint} className={className}>{(id) => <textarea id={id} {...rest} className="input textarea" />}</Field>;
 }
 
-export function Select({ label, hint, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & { label: ReactNode; hint?: ReactNode }) {
+export function Select({ label, hint, children, className, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & { label: ReactNode; hint?: ReactNode }) {
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} className={className}>
       {(id) => (
-        <select id={id} className="input select" {...rest}>
+        <select id={id} {...rest} className="input select">
           {children}
         </select>
       )}

@@ -7,7 +7,11 @@ import type {
   ContractFields, Language, OfferLine, RequestExtraction, Currency, AiActionType,
 } from '@mice/shared';
 
-export interface AiResult<T> { data: T; confidence: number; model: string; action: AiActionType; tokens?: { input: number; output: number } }
+export interface AiResult<T> {
+  data: T; confidence: number; model: string; action: AiActionType;
+  /** input = uncached input tokens; cacheRead/cacheWrite (additive) = prompt-cache read/creation tokens */
+  tokens?: { input: number; output: number; cacheRead?: number; cacheWrite?: number };
+}
 
 export interface FileInput { filename: string; mimeType: string; base64: string }
 
@@ -66,3 +70,9 @@ export interface AiService {
 
 export { createAiService } from './factory.js';
 export { MockAiService } from './mock.js';
+export { ClaudeAiService, DEFAULT_MODEL, DEFAULT_FAST_MODEL, type AnthropicLike, type ClaudeAiServiceOptions } from './claude.js';
+export { AiError, type AiErrorCode } from './errors.js';
+export { assertAiMayPerform, aiMayPerform, draftActionFor, AiAuthorityError } from './authority.js';
+export { Pseudonymizer, maskPii, restorePii, collectNamesFromFacts, type PseudonymMapping } from './pii.js';
+export { budgetIsPerPerson, requestExtractionConfidence, offerConfidence, contractConfidence, invoiceConfidence } from './heuristics.js';
+export { NEGOTIATION_ARGUMENTS, type NegotiationArgument, sanitizeDraftFacts } from './drafts.js';
