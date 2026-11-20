@@ -6,6 +6,7 @@ import { dateRange, dateTime, num } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, Callout, Card, Checkbox, CopyLink, EmptyState, InlineError, Pill, Select, TextInput } from '../../components/ui';
 import { useProject } from './ProjectContext';
+import { unitLabel } from '../../components/OfferLinesEditor';
 import { supplierName, useSuppliers } from './useSuppliers';
 
 export function ItemsTab() {
@@ -138,7 +139,7 @@ function ItemRfqCard({ item }: { item: ServiceItemDetail }) {
   return (
     <Card
       title={<>{t.serviceKind[item.kind]} · {item.description}</>}
-      actions={<span className="muted small">{dateRange(item.dateFrom, item.dateTo)} · {item.quantity} {item.unit}</span>}
+      actions={<span className="muted small">{dateRange(item.dateFrom, item.dateTo)} · {item.quantity} {unitLabel(item.unit)}</span>}
     >
       {item.rfqs.length ? (
         <div className="table-wrap">

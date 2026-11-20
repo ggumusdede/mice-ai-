@@ -16,7 +16,7 @@ const LABELS: Record<string, string> = {
   to: 'Alıcı', subject: 'Konu', body: 'Mesaj', diff: 'Farklar', suppliers: 'Tedarikçiler', userName: 'Kişi', reason: 'Gerekçe',
   advantage: 'Avantaj', pax: 'Kişi', startDate: 'Başlangıç', endDate: 'Bitiş', options: 'Seçenekler', title: 'Başlık',
   confidence: 'Güven', field: 'Alan', label: 'Alan', contractValue: 'Sözleşme', quoteValue: 'Teklif', message: 'Açıklama',
-  severity: 'Önem', status: 'Durum', overrideReason: 'Aralık dışı gerekçesi', fullName: 'Ad soyad', duplicates: 'Olası mükerrer', supplierNames: 'Tedarikçiler', deadlineHours: 'Yanıt süresi (saat)', projectExtrasTry: 'Projede ekstra toplamı (TL)', description: 'Açıklama', name: 'Ad', score: 'Skor',
+  severity: 'Önem', status: 'Durum', currency: 'Para birimi', totalAmount: 'Toplam tutar', diffInfo: 'Farklar', supplierPrepaymentRate: 'Tedarikçi ön ödeme', customerDepositRate: 'Müşteri kaporası', note: 'Not', itemId: 'Kalem', lowFields: 'Emin olunmayan alanlar', fieldConfidence: 'Alan güvenleri', extractionConfidence: 'Okuma güveni', lowConfidence: 'Düşük güven', round: 'Tur', arguments: 'Argümanlar', quoteVersion: 'Teklif sürümü', overrideReason: 'Aralık dışı gerekçesi', fullName: 'Ad soyad', duplicates: 'Olası mükerrer', supplierNames: 'Tedarikçiler', deadlineHours: 'Yanıt süresi (saat)', projectExtrasTry: 'Projede ekstra toplamı (TL)', description: 'Açıklama', name: 'Ad', score: 'Skor',
 };
 
 /** Common enum values that show up inside decision details. */

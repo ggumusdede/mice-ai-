@@ -76,6 +76,8 @@ function ItemOffers({ item }: { item: ServiceItemDetail }) {
             <tbody>
               {current.map((o) => {
                 const low = o.confidence !== null && o.confidence < THRESHOLD && !o.verifiedBy;
+                // the API also opens a review when single fields are uncertain (fieldConfidence is not exposed) → any unverified AI reading can be verified
+                const unverifiedAi = o.confidence !== null && o.confidence < 1 && !o.verifiedBy;
                 const isSel = item.selectedOfferId === o.id;
                 return (
                   <tr key={o.id} className={low ? 'is-warn' : isSel ? 'is-selected' : undefined}>
@@ -86,7 +88,7 @@ function ItemOffers({ item }: { item: ServiceItemDetail }) {
                     <td className="nowrap">{date(o.optionUntil)}</td>
                     <td>{o.verifiedBy ? <Pill tone="success" icon="check">{t.offers.verified}</Pill> : <ConfidenceTag value={o.confidence} threshold={THRESHOLD} />}</td>
                     <td className="num nowrap">
-                      {low ? <Button size="sm" variant="secondary" icon="alert" onClick={() => setVerifying(o)}>{t.common.verify}</Button> : null}
+                      {unverifiedAi ? <Button size="sm" variant={low ? 'secondary' : 'ghost'} icon={low ? 'alert' : 'check'} onClick={() => setVerifying(o)}>{t.common.verify}</Button> : null}
                       {isSel ? <Pill tone="accent" icon="check">{t.offers.selected}</Pill> : <Button size="sm" variant="ghost" onClick={() => void select(o)}>{t.offers.selectOffer}</Button>}
                     </td>
                   </tr>

@@ -3,6 +3,7 @@ import { useT } from '../../i18n';
 import { eur, pct, signedPct } from '../../lib/format';
 import { Card, EmptyState, MarginMarkup, Pill, PriceClassPill } from '../../components/ui';
 import { useProject } from './ProjectContext';
+import { unitLabel } from '../../components/OfferLinesEditor';
 import { supplierName, useSuppliers } from './useSuppliers';
 
 export function OverviewTab() {
@@ -34,7 +35,7 @@ export function OverviewTab() {
                 {items.map((i) => (
                   <tr key={i.id}>
                     <td>{t.serviceKind[i.kind]}{i.valueAdd ? <div><Pill tone="purple">Katma değer</Pill></div> : null}</td>
-                    <td>{i.description}<div className="muted small">{i.quantity} {i.unit}{i.nights ? ` · ${i.nights} gece` : ''}</div></td>
+                    <td>{i.description}<div className="muted small">{i.quantity} {unitLabel(i.unit)}{i.nights ? ` · ${i.nights} gece` : ''}</div></td>
                     <td>{i.selectedSupplierName ?? <span className="muted">—</span>}</td>
                     <td className="num">{i.offers.filter((o) => !o.supersededBy).length}</td>
                     <td className="num">{eur(i.costEur)}</td>

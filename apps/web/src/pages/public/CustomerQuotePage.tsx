@@ -4,6 +4,7 @@ import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
 import { date, money } from '../../lib/format';
+import { unitLabel } from '../../components/OfferLinesEditor';
 import { PublicLayout } from '../../components/PublicLayout';
 import { Button, Callout, InlineError, Loading, TextArea, TextInput } from '../../components/ui';
 import { InvalidLink } from './InvalidLink';
@@ -49,7 +50,7 @@ export function CustomerQuotePage() {
               <ul className="qopt__lines">
                 {o.lines.map((l, i) => (
                   <li key={i}>
-                    <span>{l.description}<span className="muted small"> · {l.quantity} {l.unit}</span></span>
+                    <span>{l.description}<span className="muted small"> · {l.quantity} {unitLabel(l.unit)}</span></span>
                     <span className="nowrap">{money(l.total, v.currency)}</span>
                   </li>
                 ))}

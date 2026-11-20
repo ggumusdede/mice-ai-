@@ -24,9 +24,10 @@ export function linesTotal(lines: OfferLine[]): number {
 }
 
 const UNITS = ['room_night', 'pax_day', 'pax', 'vehicle', 'lump_sum', 'hour', 'piece'];
-const UNIT_LABEL: Record<string, string> = {
-  room_night: 'oda/gece', pax_day: 'kişi/gün', pax: 'kişi', vehicle: 'araç', lump_sum: 'götürü', hour: 'saat', piece: 'adet',
+export const UNIT_LABEL: Record<string, string> = {
+  room_night: 'oda/gece', pax_day: 'kişi/gün', pax: 'kişi', vehicle: 'araç', lump_sum: 'götürü', hour: 'saat', piece: 'adet', day: 'gün',
 };
+export const unitLabel = (u: string) => UNIT_LABEL[u] ?? u;
 const BOARDS = ['RO', 'BB', 'HB', 'FB', 'AI'];
 
 /** Structured offer lines per item kind (supplier form, manual entry, low-confidence verification). */

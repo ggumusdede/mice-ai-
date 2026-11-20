@@ -239,6 +239,12 @@ const VERIFIABLE: (keyof SupplierOffer)[] = [
   'currency', 'lines', 'optionUntil', 'guaranteePax', 'attritionTerms', 'paymentTerms', 'prepaymentRate', 'cancellationTerms', 'overtimeTerms', 'notes',
 ];
 
+/** Key-order independent JSON (jsonb reorders object keys, the client sends its own order) — unchanged ≠ correction. */
+function canonicalJson(v: unknown): string {
+  return JSON.stringify(v ?? null, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).filter(([, y]) => y !== undefined).sort(([a], [b]) => a.localeCompare(b))) : x);
+}
+
 /** Human verification of an AI reading. Corrections create a NEW version (never overwrite) and are logged as learning data. */
 export async function verifyOffer(ctx: Ctx, offerId: string, patch: Partial<SupplierOffer>): Promise<SupplierOffer> {
   const user = requireUser(ctx);
@@ -248,7 +254,7 @@ export async function verifyOffer(ctx: Ctx, offerId: string, patch: Partial<Supp
   const changes: Record<string, { before: unknown; after: unknown }> = {};
   for (const k of VERIFIABLE) {
     if (patch[k] === undefined) continue;
-    if (JSON.stringify(patch[k]) !== JSON.stringify(current[k])) changes[k] = { before: current[k], after: patch[k] };
+    if (canonicalJson(patch[k]) !== canonicalJson(current[k])) changes[k] = { before: current[k], after: patch[k] };
   }
   let result: Row;
   if (Object.keys(changes).length) {

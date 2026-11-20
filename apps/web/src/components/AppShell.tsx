@@ -26,7 +26,7 @@ export function AppShell() {
     { to: '/', label: t.nav.inbox, icon: 'inbox', end: true },
     { to: '/projeler', label: t.nav.projects, icon: 'folder', roles: ['admin', 'clerk_sales', 'clerk_ops', 'finance', 'signatory'] },
     { to: '/saha', label: t.nav.field, icon: 'field' },
-    { to: '/rapor', label: t.nav.report, icon: 'chart', roles: ['admin', 'clerk_sales', 'clerk_ops', 'finance', 'signatory'] },
+    { to: '/rapor', label: t.nav.report, icon: 'chart', roles: ['admin'] }, // GET /api/reports/weekly is admin-only
     { to: '/yonetim', label: t.nav.admin, icon: 'settings', roles: ['admin'] },
   ];
   const visible = nav.filter((n) => !n.roles || (user && n.roles.includes(user.role)));

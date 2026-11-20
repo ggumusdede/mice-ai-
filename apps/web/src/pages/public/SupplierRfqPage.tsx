@@ -6,7 +6,7 @@ import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
 import { dateRange, dateTime, money } from '../../lib/format';
 import { PublicLayout } from '../../components/PublicLayout';
-import { emptyLine, linesTotal, OfferLinesEditor } from '../../components/OfferLinesEditor';
+import { emptyLine, linesTotal, OfferLinesEditor, unitLabel } from '../../components/OfferLinesEditor';
 import { Button, Callout, Card, FilePicker, InlineError, Loading, Select, TextInput } from '../../components/ui';
 import { InvalidLink } from './InvalidLink';
 
@@ -63,7 +63,7 @@ export function SupplierRfqPage() {
         <h2 className="card__title">{t.serviceKind[v.item.kind]} — {v.item.description}</h2>
         <dl className="kv">
           <div className="kv__row"><dt>{t.common.date}</dt><dd>{dateRange(v.item.dateFrom, v.item.dateTo)}</dd></div>
-          <div className="kv__row"><dt>{t.common.quantity}</dt><dd>{v.item.quantity} {v.item.unit}{v.item.nights ? ` · ${v.item.nights} gece` : ''}</dd></div>
+          <div className="kv__row"><dt>{t.common.quantity}</dt><dd>{v.item.quantity} {unitLabel(v.item.unit)}{v.item.nights ? ` · ${v.item.nights} gece` : ''}</dd></div>
           {specs.map(([k, x]) => <div key={k} className="kv__row"><dt>{t.extractionField[k] ?? k}</dt><dd>{String(x)}</dd></div>)}
           <div className="kv__row"><dt>{t.publicPages.deadline}</dt><dd><strong>{dateTime(v.deadlineAt)}</strong></dd></div>
         </dl>

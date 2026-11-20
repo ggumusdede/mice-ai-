@@ -96,6 +96,8 @@ async function adminDecide(admin, text, { action = 'approve', shotName } = {}) {
   await sheet.waitFor();
   if (shotName) await shot(admin, shotName);
   if (action === 'approve') {
+    const reason = sheet.locator('#approve-reason');
+    if (await reason.count()) await reason.fill('Stratejik müşteri — ilk iş, hacim potansiyeli yüksek');
     const dev = sheet.getByRole('button', { name: 'Geliştirici doğrulaması ile onayla' });
     if (await dev.count()) await dev.click();
     else await sheet.locator('.sheet-actions > button').first().click();
@@ -310,6 +312,8 @@ try {
       console.log(`   quote v${q.version} status=${q.status} blocks=${JSON.stringify(q.blockReasons)}`);
       return q;
     };
+    // force a below-target margin on option 2 so the server-side validation blocks it
+    for (const input of await builder.locator('.qb__opt').nth(1).locator('.inline-field--num input').all()) await input.fill('2');
     let q = await build();
     await shot(clerk, 'project-quote-desktop', true);
     if (q.status === 'blocked') {
@@ -386,7 +390,7 @@ try {
 
   await step('Inbox empty → "Her şey yolunda"', async () => {
     // clear anything still open for this project (e.g. outbound drafts)
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 40; i++) {
       await admin.goto(`${BASE}/`);
       await admin.waitForSelector('.dcard:not(.dcard--skeleton), .allgood');
       if (await admin.locator('.allgood').count()) break;
@@ -413,9 +417,12 @@ try {
     await field.waitForLoadState('networkidle');
     await shot(field, 'field-panel');
     await field.context().close();
-    await clerk.goto(`${BASE}/rapor`);
-    await clerk.waitForLoadState('networkidle');
-    await shot(clerk, 'weekly-report');
+    const boss = await newPage(browser, 'admin-report');
+    await login(boss, 'admin@demo.test');
+    await boss.goto(`${BASE}/rapor`);
+    await boss.waitForLoadState('networkidle');
+    await shot(boss, 'weekly-report', true);
+    await boss.context().close();
   });
 } catch (e) {
   problems.push(`[${currentStep}] FAILED: ${e.message.split('\n')[0]}`);
