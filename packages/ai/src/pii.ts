@@ -17,10 +17,10 @@ const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const IBAN_RE = /\bTR\s?\d{2}(?:\s?[\dA-Z]{4}){5}\s?[\dA-Z]{2}\b|\b[A-Z]{2}\d{2}(?:\s?[\dA-Z]{4}){3,7}(?:\s?[\dA-Z]{1,3})?\b/g;
 const PHONE_RES: RegExp[] = [
   /\+\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{2,4}(?:[\s.-]?\d{2})?/g, // international
-  /(?<![\d.,])\(?0?5\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?![\d.,])/g, // TR mobile 05xx xxx xx xx
-  /(?<![\d.,])\(?0\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?![\d.,])/g, // TR landline 0212 xxx xx xx
+  /(?<!\d|\d[.,])\(?0?5\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?!\d|[.,]\d)/g, // TR mobile 05xx xxx xx xx
+  /(?<!\d|\d[.,])\(?0\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?!\d|[.,]\d)/g, // TR landline 0212 xxx xx xx
 ];
-const NATID_RE = /(?<![\d.,])[1-9]\d{10}(?![\d.,])/g;
+const NATID_RE = /(?<!\d|\d[.,])[1-9]\d{10}(?!\d|[.,]\d)/g;
 const UP = 'A-ZÇĞİÖŞÜА-ЯЁ';
 const LO = 'a-zçğıöşüа-яё';
 const NAME = `[${UP}][${LO}]+(?:\\s+[${UP}][${LO}]+){0,2}`;

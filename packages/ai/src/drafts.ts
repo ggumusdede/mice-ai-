@@ -104,10 +104,10 @@ function eventLine(f: Record<string, unknown>, lang: Language): string {
 }
 
 const ARG_TEXT: Record<NegotiationArgument, Record<Language, string>> = {
-  volume: { tr: 'Grubun büyüklüğünü ve toplam hacmi düşünürsek', en: 'Given the group size and total volume', ru: 'Учитывая размер группы и общий объём' },
-  relationship: { tr: 'uzun süredir birlikte çalışıyoruz', en: 'we have worked together for a long time', ru: 'мы давно и успешно сотрудничаем' },
-  flexible_dates: { tr: 'tarihlerde esneklik sağlayabiliriz', en: 'we can be flexible on dates', ru: 'мы можем быть гибкими по датам' },
-  payment_ease: { tr: 'ödemeyi hızlı planlayabiliriz', en: 'we can arrange payment quickly', ru: 'можем быстро организовать оплату' },
+  volume: { tr: 'Grup büyüklüğü ve toplam hacim düşünüldüğünde fiyatta iyileştirme bekliyoruz.', en: 'Given the group size and total volume, we hope for a better rate.', ru: 'Учитывая размер группы и общий объём, рассчитываем на лучшую цену.' },
+  relationship: { tr: 'Uzun süredir birlikte çalışıyoruz.', en: 'We have worked together for a long time.', ru: 'Мы давно и успешно сотрудничаем.' },
+  flexible_dates: { tr: 'Tarihlerde esneklik sağlayabiliriz.', en: 'We can be flexible on dates.', ru: 'Можем быть гибкими по датам.' },
+  payment_ease: { tr: 'Ödemeyi hızlı planlayabiliriz.', en: 'We can arrange payment quickly.', ru: 'Можем быстро организовать оплату.' },
 };
 
 /** Deterministic, short template draft. */
@@ -161,7 +161,7 @@ export function templateDraft(req: DraftRequest): Draft {
       const ask = target
         ? L(`${target} seviyesine inebilirseniz hemen ilerleyebiliriz.`, `If you can meet ${target}, we can move ahead right away.`, `Если сможете предложить ${target}, сразу двигаемся дальше.`)
         : L('Fiyatta bir iyileştirme yapabilir misiniz?', 'Could you improve the rate?', 'Сможете ли улучшить цену?');
-      if (reasons.length) body.push(`${reasons.join(lang === 'tr' ? ', ' : '; ')}. ${ask}`);
+      if (reasons.length) body.push(`${reasons.join(' ')} ${ask}`);
       else body.push(ask);
       break;
     }

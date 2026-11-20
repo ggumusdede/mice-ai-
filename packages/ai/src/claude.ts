@@ -35,6 +35,8 @@ export const DEFAULT_FAST_MODEL = 'claude-haiku-5-5';
 /** Models that accept the server-side refusal fallback (`fallbacks: "default"`). Haiku has none. */
 const FALLBACK_MODELS = /^claude-(sonnet-5-5|opus-5-5|opus-5|fable-5-[12]|mythos-5-[12])$/;
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+/** xlsx/docx/xls/zip: binary, must be converted (e.g. sheet → CSV) by the caller */
+const BINARY_OFFICE = /openxmlformats|ms-excel|msword|ms-office|zip|octet-stream|vnd\.oasis/;
 
 type Effort = 'low' | 'medium' | 'high';
 type CreateParams = Anthropic.Beta.MessageCreateParamsNonStreaming;
@@ -178,7 +180,7 @@ export class ClaudeAiService implements AiService {
       }
       return [{ type: 'image', source: { type: 'base64', media_type: media, data: file.base64.replace(/\s+/g, '') } }];
     }
-    if (mt.startsWith('text/') || /json|csv|xml|rfc822|message/.test(mt)) {
+    if (!BINARY_OFFICE.test(mt) && (mt.startsWith('text/') || /json|csv|xml|rfc822|message/.test(mt))) {
       const text = Buffer.from(file.base64, 'base64').toString('utf8');
       return [{ type: 'text', text: `<file name="${file.filename}" type="${mt}">\n${pii.mask(text)}\n</file>` }];
     }

@@ -88,54 +88,54 @@ function findPlace<T extends { name: string; stems: string[]; cap?: boolean }>(t
 
 // =============================================================================================== request
 const EVENT_TYPES: [RegExp, string][] = [
-  [/\b(kongre|congress|конгресс)/, 'kongre'],
-  [/\b(konferans|conference|summit|zirve|конференц)/, 'konferans'],
-  [/\b(lansman|launch|tanitim etkinli)/, 'lansman'],
-  [/\b(gala)\b/, 'gala'],
-  [/\b(tesvik|incentive|odul gezisi|motivasyon gezisi|инсентив)/, 'teşvik gezisi'],
-  [/\b(bayi toplantisi|dealer meeting|bayi)/, 'bayi toplantısı'],
-  [/\b(egitim|training|seminer|seminar|workshop|calistay|тренинг|семинар)/, 'eğitim/seminer'],
-  [/\b(offsite|off-site|kickoff|kick-off|strateji toplantisi|yonetim kurulu|board meeting)/, 'toplantı (offsite)'],
-  [/\b(toplanti|meeting|встреч|совещани)/, 'toplantı'],
-  [/\b(dugun|wedding|nisan toreni)/, 'düğün'],
-  [/\b(fuar|exhibition|expo|выставк)/, 'fuar'],
-  [/\b(yemek|dinner|reception|resepsiyon|kokteyl|cocktail)\b/, 'yemek/davet'],
+  [/(?<![a-zа-яё0-9])(kongre|congress|конгресс)/, 'kongre'],
+  [/(?<![a-zа-яё0-9])(konferans|conference|summit|zirve|конференц)/, 'konferans'],
+  [/(?<![a-zа-яё0-9])(lansman|launch|tanitim etkinli)/, 'lansman'],
+  [/(?<![a-zа-яё0-9])(gala)\b/, 'gala'],
+  [/(?<![a-zа-яё0-9])(tesvik|incentive|odul gezisi|motivasyon gezisi|инсентив)/, 'teşvik gezisi'],
+  [/(?<![a-zа-яё0-9])(bayi toplantisi|dealer meeting|bayi)/, 'bayi toplantısı'],
+  [/(?<![a-zа-яё0-9])(egitim|training|seminer|seminar|workshop|calistay|тренинг|семинар)/, 'eğitim/seminer'],
+  [/(?<![a-zа-яё0-9])(offsite|off-site|kickoff|kick-off|strateji toplantisi|yonetim kurulu|board meeting)/, 'toplantı (offsite)'],
+  [/(?<![a-zа-яё0-9])(toplanti|meeting|встреч|совещани)/, 'toplantı'],
+  [/(?<![a-zа-яё0-9])(dugun|wedding|nisan toreni)/, 'düğün'],
+  [/(?<![a-zа-яё0-9])(fuar|exhibition|expo|выставк)/, 'fuar'],
+  [/(?<![a-zа-яё0-9])(yemek|dinner|reception|resepsiyon|kokteyl|cocktail)\b/, 'yemek/davet'],
 ];
 
 const LAYOUTS: [RegExp, string][] = [
-  [/\b(tiyatro|theat(?:er|re)|театр)/, 'tiyatro'],
-  [/\b(sinif|classroom|class-room|class room|школ|класс)/, 'sınıf'],
-  [/\b(u[ -]?(?:duzen|duzeni|masa|sekl|tipi|shape|shaped|форм)|u-?seklinde|п-образ)/, 'U'],
-  [/\b(banket|banquet|yuvarlak masa|round table|cabaret|kabare|банкет)/, 'banket'],
-  [/\b(kokteyl duzen|cocktail (?:style|setup|layout)|ayakta|standing|фуршет)/, 'kokteyl'],
-  [/\b(boardroom|board room|toplanti masasi|oval masa|переговорн)/, 'boardroom'],
-  [/\b(kokteyl|cocktail)/, 'kokteyl'],
+  [/(?<![a-zа-яё0-9])(tiyatro|theat(?:er|re)|театр)/, 'tiyatro'],
+  [/(?<![a-zа-яё0-9])(sinif|classroom|class-room|class room|школ|класс)/, 'sınıf'],
+  [/(?<![a-zа-яё0-9])(u[ -]?(?:duzen|duzeni|masa|sekl|tipi|shape|shaped|форм)|u-?seklinde|п-образ)/, 'U'],
+  [/(?<![a-zа-яё0-9])(banket|banquet|yuvarlak masa|round table|cabaret|kabare|банкет)/, 'banket'],
+  [/(?<![a-zа-яё0-9])(kokteyl duzen|cocktail (?:style|setup|layout)|ayakta|standing|фуршет)/, 'kokteyl'],
+  [/(?<![a-zа-яё0-9])(boardroom|board room|toplanti masasi|oval masa|переговорн)/, 'boardroom'],
+  [/(?<![a-zа-яё0-9])(kokteyl|cocktail)/, 'kokteyl'],
 ];
 
 const FNB: [RegExp, string][] = [
-  [/\b(kahvalti|breakfast|завтрак)/, 'kahvaltı'],
-  [/\b(ogle yemeg\w*|ogle|lunch|обед)/, 'öğle yemeği'],
-  [/\b(aksam yemeg\w*|dinner|ужин)/, 'akşam yemeği'],
-  [/\b(gala yemeg\w*|gala dinner)/, 'gala yemeği'],
-  [/\b(kokteyl|cocktail|reception|resepsiyon|фуршет)/, 'kokteyl'],
-  [/\b(tam pansiyon|full board)\b/, 'tam pansiyon'],
-  [/\b(yarim pansiyon|half board)\b/, 'yarım pansiyon'],
-  [/\b(her sey dahil|all inclusive)\b/, 'her şey dahil'],
+  [/(?<![a-zа-яё0-9])(kahvalti|breakfast|завтрак)/, 'kahvaltı'],
+  [/(?<![a-zа-яё0-9])(ogle yemeg\w*|ogle|lunch|обед)/, 'öğle yemeği'],
+  [/(?<![a-zа-яё0-9])(aksam yemeg\w*|dinner|ужин)/, 'akşam yemeği'],
+  [/(?<![a-zа-яё0-9])(gala yemeg\w*|gala dinner)/, 'gala yemeği'],
+  [/(?<![a-zа-яё0-9])(kokteyl|cocktail|reception|resepsiyon|фуршет)/, 'kokteyl'],
+  [/(?<![a-zа-яё0-9])(tam pansiyon|full board)\b/, 'tam pansiyon'],
+  [/(?<![a-zа-яё0-9])(yarim pansiyon|half board)\b/, 'yarım pansiyon'],
+  [/(?<![a-zа-яё0-9])(her sey dahil|all inclusive)\b/, 'her şey dahil'],
 ];
 
 const TECH: [RegExp, string][] = [
-  [/\b(projeksiyon|projektor|projector|beamer|проектор)/, 'projeksiyon'],
-  [/\b(ses sistemi|sound system|seslendirme|pa system|звук)/, 'ses sistemi'],
-  [/\b(mikrofon|microphone|микрофон)/, 'mikrofon'],
-  [/\b(led ekran|led screen|led wall|led duvar)/, 'LED ekran'],
-  [/\b(sahne|stage|сцена)/, 'sahne'],
-  [/\b(simultane|simultaneous|tercuman|interpret|синхрон)/, 'simultane çeviri'],
-  [/\b(kursu|podium|lectern)/, 'kürsü'],
-  [/\b(isik sistemi|isiklandirma|lighting)/, 'ışık'],
-  [/\b(flipchart|flip chart)/, 'flipchart'],
-  [/\b(wi-?fi|internet)/, 'internet/wifi'],
+  [/(?<![a-zа-яё0-9])(projeksiyon|projektor|projector|beamer|проектор)/, 'projeksiyon'],
+  [/(?<![a-zа-яё0-9])(ses sistemi|sound system|seslendirme|pa system|звук)/, 'ses sistemi'],
+  [/(?<![a-zа-яё0-9])(mikrofon|microphone|микрофон)/, 'mikrofon'],
+  [/(?<![a-zа-яё0-9])(led ekran|led screen|led wall|led duvar)/, 'LED ekran'],
+  [/(?<![a-zа-яё0-9])(sahne|stage|сцена)/, 'sahne'],
+  [/(?<![a-zа-яё0-9])(simultane|simultaneous|tercuman|interpret|синхрон)/, 'simultane çeviri'],
+  [/(?<![a-zа-яё0-9])(kursu|podium|lectern)/, 'kürsü'],
+  [/(?<![a-zа-яё0-9])(isik sistemi|isiklandirma|lighting)/, 'ışık'],
+  [/(?<![a-zа-яё0-9])(flipchart|flip chart)/, 'flipchart'],
+  [/(?<![a-zа-яё0-9])(wi-?fi|internet)/, 'internet/wifi'],
   [/(?<!led )\b(perde|projection screen|projeksiyon perdesi)\b/, 'perde'],
-  [/\b(kayit|recording|canli yayin|streaming|hibrit|hybrid)\b/, 'kayıt/yayın'],
+  [/(?<![a-zа-яё0-9])(kayit|recording|canli yayin|streaming|hibrit|hybrid)\b/, 'kayıt/yayın'],
 ];
 
 function findAll(f: string, list: [RegExp, string][]): { label: string; index: number; raw: string }[] {
@@ -153,8 +153,13 @@ const COMPANY_RE = new RegExp(`((?:[\\p{Lu}\\d][\\p{L}\\d&'’.-]*\\s+){0,4}[\\p
 const CLOSINGS = /(saygilarimizla|saygilarimla|saygilar|iyi calismalar|tesekkurler|best regards|kind regards|regards|sincerely|с уважением)/;
 
 function cleanValue(v: string): string {
-  return v.split(/\.\s+(?=[A-ZÇĞİÖŞÜ])/)[0].replace(/[\s.,;:]+$/, '').replace(/^[\s:–-]+/, '').trim();
+  const first = v.split(/(?<!\b(?:A|Ş|Ltd|Şti|Inc|Co))\.\s+(?=[A-ZÇĞİÖŞÜ])/u)[0].replace(/^[\s:–-]+/, '').trim();
+  // keep the final dot of legal-form abbreviations ("A.Ş.", "Ltd. Şti.")
+  if (/(A\.\s?Ş\.|Şti\.|Ltd\.|Inc\.|Co\.|Corp\.)$/u.test(first)) return first.replace(/[\s,;:]+$/, '');
+  return first.replace(/[\s.,;:]+$/, '');
 }
+const JOB_TITLE = /\s+((satış|satis|sales|rezervasyon|reservation|etkinlik|event|banket|banquet|mice|grup|group|genel)\s+)?(müdürü|müdür|mudur|muduru|manager|koordinatörü|koordinator|coordinator|sorumlusu|departmanı|department|ekibi|team|direktörü|director|temsilcisi|executive)\b.*$/iu;
+const VENUE_OLARAK = /((?:[\p{Lu}][\p{L}&'’.-]*\s+){0,4}(?:Otel|Oteli|Hotel|Resort|Palace|Suites|Kongre Merkezi|Convention Center)(?:\s+[\p{Lu}][\p{L}]*){0,2})\s+(?:olarak|as)\b/u;
 
 /** Extracts labelled values: "Firma: X", "Company: X". Returns first match. */
 export function labelled(text: string, labels: string[]): { value: string; index: number } | null {
@@ -210,7 +215,7 @@ function extractDuration(f: string): { days: number | null; nights: number | nul
 }
 
 export function extractPax(f: string): { value: number | null; confidence: number; raw: string | null } {
-  const re = /(?:(yaklasik|yaklasik olarak|civari|around|approx\.?|approximately|about|~|ca\.?|max\.?|maksimum|en fazla|около)\s*)?\b(\d{1,5})\s*(?:-|–|ile)?\s*(\d{1,5})?\s*(?:kisilik|kisi(?!\s*bas)|pax|katilimci|misafir|delege|people|persons|person|guests|participants|attendees|delegates|человек|участник\S*|гост\S*)(?:\s*(civari|civarinda|kadar))?/g;
+  const re = /(?:(yaklasik|yaklasik olarak|civari|around|approx\.?|approximately|about|~|ca\.?|max\.?|maksimum|en fazla|около)[ \t]*)?\b(\d{1,5})[ \t]*(?:-|–|ile)?[ \t]*(\d{1,5})?[ \t]*(?:kisilik|kisi(?!\s*bas)|pax|katilimci|misafir|delege|people|persons|person|guests|participants|attendees|delegates|человек|участник\S*|гост\S*)(?:\s*(civari|civarinda|kadar))?/g;
   const hits: { n: number; approx: boolean; raw: string }[] = [];
   for (const m of f.matchAll(re)) {
     const n = Number(m[3] ?? m[2]);
@@ -319,6 +324,8 @@ export function heuristicExtractRequest(text: string, opts: { today: string; kno
   const pax = extractPax(f);
   const roomsSgl = extractRooms(f, 'sgl');
   const roomsDbl = extractRooms(f, 'dbl');
+  if (roomsSgl.source) roomsSgl.source = orig(roomsSgl.source);
+  if (roomsDbl.source) roomsDbl.source = orig(roomsDbl.source);
 
   // --- location
   const districts = findPlace(text, f, DISTRICTS);
@@ -416,7 +423,7 @@ export function classifyKind(fLine: string): ServiceKind {
 
 const DEFAULT_VAT: Record<ServiceKind, number> = { accommodation: 10, hall: 20, fnb: 10, transfer: 20, technical: 20, activity: 20, ticket: 20, other: 20 };
 
-const TERM_LINE = /(iptal|cancel|odeme|payment|opsiyon|option|on odeme|deposit|kapora|depozito|attrition|garanti|guarantee|vade|ceza|penalty|no.?show)/;
+const TERM_LINE = /(iptal|cancel|odeme|payment|opsiyon|option|on odeme|deposit|kapora|depozito|attrition|garanti|guarantee|vade|ceza|penalty|no.?show|fazla mesai|overtime|ek saat|extra hour)/;
 const TOTAL_LINE = /^(\W*)(genel toplam|ara toplam|toplam|total|grand total|sub-?total|итого)/;
 
 interface LineParse { line: OfferLine; confidence: number }
@@ -426,12 +433,17 @@ function vatOf(f: string): boolean | null {
   if (/(kdv\s*(haric|hariçtir|haricdir|ayrica|ilave)|\+\s*kdv|vat\s*excl\w*|excl\w*\.?\s*vat|excluding vat|plus vat|\+\s*vat|без ндс)/.test(f)) return false;
   return null;
 }
+function accTaxIncluded(f: string): boolean | null {
+  if (/(konaklama vergisi|accommodation tax)\s*(dahil|dâhil|included|incl)/.test(f)) return true;
+  if (/(konaklama vergisi|accommodation tax)\s*(haric|ayrica|ilave|excluded|excl|not incl)|\+\s*(konaklama vergisi|accommodation tax)/.test(f)) return false;
+  return null;
+}
 function vatRateOf(f: string): number | null {
   const m = /%\s*(\d{1,2})\s*(?:kdv|vat)|(?:kdv|vat)\s*(?:orani)?\s*[:(]?\s*%\s*(\d{1,2})|(\d{1,2})\s*%\s*(?:kdv|vat)/.exec(f);
   return m ? Number(m[1] ?? m[2] ?? m[3]) : null;
 }
 
-function parsePriceLine(raw: string, ctx: { docVat: boolean | null; docVatRate: number | null; docPax: number | null; docNights: number | null }): LineParse | null {
+function parsePriceLine(raw: string, ctx: { docVat: boolean | null; docVatRate: number | null; docPax: number | null; docNights: number | null; docAccTax?: boolean | null }): LineParse | null {
   const f = fold(raw);
   if (TOTAL_LINE.test(f)) return null;
   const money = findMoney(raw);
@@ -501,9 +513,8 @@ function parsePriceLine(raw: string, ctx: { docVat: boolean | null; docVatRate: 
   if (roomType) line.roomType = roomType;
   if (board) line.board = board;
   if (kind === 'accommodation') {
-    const fAll = f;
-    if (/konaklama vergisi\s*(dahil|dâhil|included)/.test(fAll)) line.accommodationTaxIncluded = true;
-    else if (/konaklama vergisi\s*(haric|ayrica|ilave|excluded)|\+\s*konaklama vergisi/.test(fAll)) line.accommodationTaxIncluded = false;
+    const at = accTaxIncluded(f) ?? ctx.docAccTax ?? null;
+    if (at !== null) line.accommodationTaxIncluded = at;
   }
   return { line, confidence: Math.max(0.3, round2(conf)) };
 }
@@ -515,8 +526,10 @@ function linesMatching(lines: string[], re: RegExp): string[] {
 function supplierNameFrom(text: string, lines: string[]): { value: string | null; c: number } {
   const lab = labelled(text, ['Otel', 'Hotel', 'Tesis', 'Tedarikçi', 'Tedarikci', 'Supplier', 'Gönderen', 'Gonderen', 'From', 'Firma', 'Satıcı', 'Satici', 'Отель', 'Поставщик']);
   if (lab && !/@/.test(lab.value)) return { value: lab.value, c: 0.85 };
+  const ol = VENUE_OLARAK.exec(text);
+  if (ol) return { value: ol[1].trim(), c: 0.8 };
   const venue = lines.find((l) => l.length < 70 && !findMoney(l).length && /\b(otel|hotel|resort|palace|suites|convention|kongre merkezi|turizm|tourism|a\.?s\.?|ltd|sti|transfer hizmetleri|catering|organizasyon)\b/.test(fold(l)));
-  if (venue) return { value: cleanValue(venue.replace(/^(saygılarımızla|regards)[,\s]*/i, '')), c: 0.65 };
+  if (venue) return { value: cleanValue(venue.replace(/^(saygılarımızla|regards)[,\s]*/i, '').replace(JOB_TITLE, '')), c: 0.65 };
   const close = CLOSINGS.exec(fold(text));
   if (close) {
     const tail = text.slice(close.index).split(/\r?\n/).slice(1, 5).map((l) => l.trim()).filter(Boolean);
@@ -530,7 +543,7 @@ interface CommonTerms {
   currency: Currency | null; currencyC: number;
   optionUntil: string | null; guaranteePax: number | null; attritionTerms: string | null; paymentTerms: string | null;
   prepaymentRate: number | null; cancellationTerms: string | null; overtimeTerms: string | null; notes: string | null;
-  docVat: boolean | null; docPax: number | null; docNights: number | null;
+  docVat: boolean | null; docAccTax: boolean | null; docPax: number | null; docNights: number | null;
 }
 
 function commonTerms(text: string, today: string): CommonTerms {
@@ -559,7 +572,7 @@ function commonTerms(text: string, today: string): CommonTerms {
   const nm = /\b(\d{1,2})\s*(gece|nights?)\b/.exec(f);
   return {
     currency, currencyC, optionUntil, guaranteePax, attritionTerms, paymentTerms, prepaymentRate, cancellationTerms,
-    overtimeTerms, notes, docVat: vatOf(f), docPax: pm.value ?? guaranteePax, docNights: nm ? Number(nm[1]) : null,
+    overtimeTerms, notes, docVat: vatOf(f), docAccTax: accTaxIncluded(f), docPax: pm.value ?? guaranteePax, docNights: nm ? Number(nm[1]) : null,
   };
 }
 
@@ -570,7 +583,7 @@ export function heuristicParseOffer(text: string, today: string, itemKind?: stri
   const docVatRate = /(fiyatlar|tum fiyat|all prices)/.test(f) ? vatRateOf(f) : null;
   const parsed: LineParse[] = [];
   for (const l of lines) {
-    const p = parsePriceLine(l, { docVat: t.docVat, docVatRate, docPax: t.docPax, docNights: t.docNights });
+    const p = parsePriceLine(l, { docVat: t.docVat, docVatRate, docPax: t.docPax, docNights: t.docNights, docAccTax: t.docAccTax });
     if (p) {
       if (itemKind && p.line.kind === 'other' && (KIND_LIST as string[]).includes(itemKind)) p.line.kind = itemKind as ServiceKind;
       parsed.push(p);
@@ -615,7 +628,7 @@ export function heuristicParseContract(text: string, today: string): { fields: C
   const f = fold(text);
   const t = commonTerms(text, today);
   const docVatRate = vatRateOf(f);
-  const parsed = lines.map((l) => parsePriceLine(l, { docVat: t.docVat, docVatRate, docPax: t.docPax, docNights: t.docNights })).filter((p): p is LineParse => !!p);
+  const parsed = lines.map((l) => parsePriceLine(l, { docVat: t.docVat, docVatRate, docPax: t.docPax, docNights: t.docNights, docAccTax: t.docAccTax })).filter((p): p is LineParse => !!p);
   const supplierLab = labelled(text, ['Otel', 'Hotel', 'Tesis', 'Konaklama Tesisi', 'Tedarikçi', 'Tedarikci', 'Supplier', 'Satıcı', 'Hizmet Veren', 'Отель']);
   const supplier = supplierLab ? { value: supplierLab.value, c: 0.88 } : supplierNameFrom(text, lines);
   const customerLab = labelled(text, ['Müşteri', 'Musteri', 'Kurum', 'Firma', 'Grup Adı', 'Grup', 'Group Name', 'Group', 'Client', 'Customer', 'Etkinlik Sahibi', 'Заказчик']);
@@ -630,7 +643,7 @@ export function heuristicParseContract(text: string, today: string): { fields: C
     const ev = event.find((d) => !TERM_LINE.test(f.slice(Math.max(0, d.index - 40), d.index)));
     if (ev) { startDate = ev.start; endDate = endDate ?? ev.end; }
   }
-  const paxM = /\b(\d{1,5})\s*(kisi|pax|katilimci|people|persons)(?!\s*bas)/.exec(f.replace(/garanti\w*[^\d\n]{0,25}\d+/g, ' '));
+  const paxM = extractPax(f.replace(/(garanti\w*|guarantee\w*|minimum)[^\d\n]{0,25}\d+/g, (m) => ' '.repeat(m.length)));
   const rooms = parsed.filter((p) => p.line.kind === 'accommodation').map((p) => ({
     type: p.line.roomType ?? p.line.description, count: p.line.quantity, nights: p.line.nights ?? 1, unitPrice: p.line.unitPrice,
   }));
@@ -639,7 +652,7 @@ export function heuristicParseContract(text: string, today: string): { fields: C
   const hallLine = lines.find((l) => /(salon|hall|toplanti odasi|meeting room)/.test(fold(l)));
   const totalLine = lines.find((l) => /(genel toplam|toplam tutar|sozlesme bedeli|total amount|grand total|^\W*toplam|^\W*total)/.test(fold(l)) && findMoney(l).length);
   const totalAmount = totalLine ? findMoney(totalLine).at(-1)!.amount : null;
-  const billing = linesMatching(lines, /(fatura|vergi dairesi|\bvkn\b|tax office|tax (id|no)|billing)/);
+  const billing = linesMatching(lines, /(fatura (bilgi|adres|unvan|kesil)|fatura\s*:|vergi dairesi|\bvkn\b|tax office|tax (id|no)|billing|invoice to)/);
   let accTaxSep: boolean | null = null;
   if (/konaklama vergisi\s*(haric|ayrica|ilave|ayrıca)|\+\s*konaklama vergisi|accommodation tax\s*(excl|not incl)/.test(f)) accTaxSep = true;
   else if (/konaklama vergisi\s*(dahil|dâhil)|accommodation tax\s*incl/.test(f)) accTaxSep = false;
@@ -649,7 +662,7 @@ export function heuristicParseContract(text: string, today: string): { fields: C
     customerName: customerLab?.value ?? null,
     billingInfo: billing.length ? billing.join(' ').slice(0, 300) : null,
     startDate, endDate,
-    pax: paxM ? Number(paxM[1]) : null,
+    pax: paxM.value,
     guaranteePax: t.guaranteePax,
     rooms, menu: menuLine ? menuLine.slice(0, 300) : null, hall: hallLine ? hallLine.slice(0, 200) : null, unitPrices,
     vatSeparated: t.docVat === null ? null : !t.docVat,
@@ -664,7 +677,7 @@ export function heuristicParseContract(text: string, today: string): { fields: C
   };
   const fieldConfidence: Record<string, number> = {
     supplierName: supplier.c, customerName: customerLab ? 0.85 : 0, startDate: startDate ? (ci ? 0.9 : 0.8) : 0, endDate: endDate ? (co ? 0.9 : 0.8) : 0,
-    pax: paxM ? 0.85 : 0, lines: parsed.length ? round2(mean(parsed.map((p) => p.confidence))) : 0, currency: t.currencyC,
+    pax: paxM.value !== null ? Math.min(0.9, paxM.confidence) : 0, lines: parsed.length ? round2(mean(parsed.map((p) => p.confidence))) : 0, currency: t.currencyC,
     totalAmount: totalAmount !== null ? 0.85 : 0, paymentTerms: t.paymentTerms ? 0.8 : 0, cancellationTerms: t.cancellationTerms ? 0.8 : 0,
     vat: t.docVat !== null ? 0.9 : 0,
   };

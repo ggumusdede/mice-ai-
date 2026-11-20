@@ -20,7 +20,8 @@ function inputText(input: { text?: string; file?: FileInput }): { text: string; 
   if (input.text && input.text.trim()) return { text: input.text, unreadable: false };
   if (input.file) {
     const mt = input.file.mimeType.toLowerCase();
-    if (mt.startsWith('text/') || /json|csv|xml|rfc822|message/.test(mt) || /\.(txt|csv|eml|html?|json|xml)$/i.test(input.file.filename)) {
+    const binaryOffice = /openxmlformats|ms-excel|msword|zip|octet-stream|vnd\.oasis/.test(mt);
+    if (!binaryOffice && (mt.startsWith('text/') || /json|csv|xml|rfc822|message/.test(mt) || /\.(txt|csv|eml|html?|json|xml)$/i.test(input.file.filename))) {
       return { text: Buffer.from(input.file.base64, 'base64').toString('utf8'), unreadable: false };
     }
     return { text: '', unreadable: true };
@@ -29,14 +30,14 @@ function inputText(input: { text?: string; file?: FileInput }): { text: string; 
 }
 
 // ---------------------------------------------------------------- ask() helpers
-const STOP = new Set(['bu', 'su', 'ne', 'mi', 'mu', 'icin', 'ile', 've', 'de', 'da', 'bir', 'kac', 'hangi', 'nedir', 'var', 'yok', 'mi?', 'the', 'is', 'are', 'what', 'which', 'how', 'many', 'much', 'for', 'and', 'did', 'does', 'was', 'were', 'of', 'in', 'on', 'to', 'we', 'our', 'with', 'this', 'that', 'projede', 'proje', 'project', 'bize', 'biz', 'en', 'son', 'gecen', 'sene', 'yil']);
+const STOP = new Set(['bu', 'su', 'ne', 'mi', 'mu', 'icin', 'ile', 've', 'de', 'da', 'bir', 'kac', 'hangi', 'nedir', 'var', 'yok', 'mi?', 'the', 'is', 'are', 'what', 'which', 'how', 'many', 'much', 'for', 'and', 'did', 'does', 'was', 'were', 'of', 'in', 'on', 'to', 'we', 'our', 'with', 'this', 'that', 'projede', 'proje', 'project', 'bize', 'biz', 'en', 'son', 'gecen', 'sene', 'yil', 'kim', 'firma', 'firmasi', 'isim', 'adi', 'zaman', 'who', 'name']);
 const SYNONYMS: Record<string, string[]> = {
   otel: ['hotel', 'venue', 'tesis', 'supplier', 'tedarikci', 'mekan'],
   fiyat: ['price', 'rate', 'cost', 'ucret', 'tutar', 'amount', 'unitprice', 'maliyet'],
   kisi: ['pax', 'people', 'katilimci', 'guest'],
   tarih: ['date', 'start', 'end', 'startdate', 'enddate', 'gun'],
   marj: ['margin', 'kar', 'profit', 'markup'],
-  musteri: ['customer', 'client', 'firma'],
+  musteri: ['customer', 'client'],
   odeme: ['payment', 'paid', 'vade', 'due'],
   opsiyon: ['option', 'optionuntil'],
   oda: ['room', 'rooms', 'sgl', 'dbl', 'accommodation', 'konaklama'],
