@@ -33,7 +33,7 @@ export const tr = {
     allGoodTitle: 'Her şey yolunda', allGoodBody: 'Sizden karar bekleyen iş yok. Yeni bir şey geldiğinde burada göreceksiniz.',
     pullToRefresh: 'Yenilemek için çekin', releaseToRefresh: 'Bırakın, yenileniyor', refreshing: 'Yenileniyor…',
     urgent: 'Acil', aiNote: 'Yapay zekâ notu', detail: 'Detay', delegationMarker: 'Vekil olarak onaylıyorsunuz',
-    rejectReasonLabel: 'Ret gerekçesi', rejectReasonPlaceholder: 'Neden reddediyorsunuz? (öğrenme verisi olarak kaydedilir)',
+    rejectReasonLabel: 'Ret gerekçesi', approveReasonLabel: 'Onay gerekçesi (zorunlu)', approveReasonPlaceholder: 'Neden hedef marjın altında açıyorsunuz? (rapora yazılır)', rejectReasonPlaceholder: 'Neden reddediyorsunuz? (öğrenme verisi olarak kaydedilir)',
     editTitle: 'Taslağı düzelt', editHint: 'Düzeltmeleriniz öğrenme verisi olarak kaydedilir.', sendEdits: 'Düzeltilmiş hâliyle onayla',
     biometricRequired: 'Bu onay biyometrik doğrulama gerektirir (para / sözleşme).',
     webauthnUnavailable: 'Bu cihazda Face ID / WebAuthn kullanılamıyor.',

@@ -217,17 +217,23 @@ export function DecisionSheet({ decision: d, onClose, onDecided }: { decision: D
     }
   };
 
+  // §17: a below-target margin can only be opened with a written reason (server: REASON_REQUIRED)
+  const needsApproveReason = d.kind === 'margin_override';
+  const [approveReason, setApproveReason] = useState('');
+  const approveInput = (base: Omit<DecisionInput, 'device' | 'biometric'>) => (needsApproveReason ? { ...base, reason: approveReason.trim() } : base);
+  const approveBlocked = needsApproveReason && !approveReason.trim();
+
   const approveMode: 'webauthn' | 'dev' | 'none' = d.requiresBiometric ? (canWebauthn ? 'webauthn' : 'dev') : 'none';
   const hasDraft = d.draft && Object.keys(d.draft).length > 0;
 
   const footer =
     mode === 'view' ? (
       <div className="sheet-actions">
-        <Button size="lg" className="btn--block" icon={d.requiresBiometric ? 'faceid' : 'check'} busy={busy} onClick={() => void decide({ action: 'approve' }, approveMode)}>
+        <Button size="lg" className="btn--block" icon={d.requiresBiometric ? 'faceid' : 'check'} busy={busy} disabled={approveBlocked} onClick={() => void decide(approveInput({ action: 'approve' }), approveMode)}>
           {d.primaryActionLabel || t.common.approve}
         </Button>
         {showDevFallback && approveMode === 'webauthn' ? (
-          <Button variant="ghost" size="sm" icon="shield" disabled={busy} onClick={() => void decide({ action: 'approve' }, 'dev')}>
+          <Button variant="ghost" size="sm" icon="shield" disabled={busy || approveBlocked} onClick={() => void decide(approveInput({ action: 'approve' }), 'dev')}>
             {t.inbox.devFallback}
           </Button>
         ) : null}
@@ -242,11 +248,11 @@ export function DecisionSheet({ decision: d, onClose, onDecided }: { decision: D
       </div>
     ) : mode === 'edit' ? (
       <div className="sheet-actions">
-        <Button size="lg" className="btn--block" icon={d.requiresBiometric ? 'faceid' : 'check'} busy={busy} onClick={() => void decide({ action: 'edit', edits: draft }, approveMode)}>
+        <Button size="lg" className="btn--block" icon={d.requiresBiometric ? 'faceid' : 'check'} busy={busy} disabled={approveBlocked} onClick={() => void decide(approveInput({ action: 'edit', edits: draft }), approveMode)}>
           {t.inbox.sendEdits}
         </Button>
         {showDevFallback && approveMode === 'webauthn' ? (
-          <Button variant="ghost" size="sm" icon="shield" disabled={busy} onClick={() => void decide({ action: 'edit', edits: draft }, 'dev')}>
+          <Button variant="ghost" size="sm" icon="shield" disabled={busy || approveBlocked} onClick={() => void decide(approveInput({ action: 'edit', edits: draft }), 'dev')}>
             {t.inbox.devFallback}
           </Button>
         ) : null}
@@ -292,6 +298,12 @@ export function DecisionSheet({ decision: d, onClose, onDecided }: { decision: D
                 <h3 className="section-title">{t.inbox.detail}</h3>
                 <DetailView data={d.detail} />
               </section>
+            ) : null}
+            {needsApproveReason ? (
+              <div className="field">
+                <label className="field__label" htmlFor="approve-reason">{t.inbox.approveReasonLabel}</label>
+                <textarea id="approve-reason" className="input textarea" rows={3} placeholder={t.inbox.approveReasonPlaceholder} value={approveReason} onChange={(e) => setApproveReason(e.target.value)} />
+              </div>
             ) : null}
             {d.requiresBiometric ? (
               <Callout tone="accent" icon="faceid">
