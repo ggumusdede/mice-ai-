@@ -84,10 +84,11 @@ export function OverviewTab() {
                         <td className="num">{e.benchmark.type === 'channel' ? eur(e.benchmark.value) : <span className="muted">{t.comparison.benchmarkType[e.benchmark.type]}</span>}</td>
                         <td className={`num ${e.advantage !== null && e.advantage > 0 ? 'text-success' : e.advantage !== null && e.advantage < 0 ? 'text-danger' : ''}`}>{signedPct(e.advantage)}</td>
                         <td>{e.suggestedMarkup !== null ? <span className="mm"><span><span className="mm__k">{t.profit.markupShort}</span> {pct(e.suggestedMarkup)}</span><span><span className="mm__k">{t.profit.marginShort}</span> {pct(e.suggestedMarkup / (1 + e.suggestedMarkup))}</span></span> : '—'}</td>
-                        <td>{e.risks.length || e.normalized.hiddenCosts.length ? (
+                        <td className="col-notes">{e.risks.length || e.normalized.hiddenCosts.length ? (
                           <ul className="bullets small">
-                            {e.risks.map((r, k) => <li key={`r${k}`}>{r}</li>)}
                             {e.normalized.hiddenCosts.map((h, k) => <li key={`h${k}`} className={h.severity === 'critical' ? 'text-danger' : h.severity === 'warning' ? 'text-warning' : ''}>{h.description}</li>)}
+                            {/* risks repeat the hidden-cost descriptions; show only the extra ones */}
+                            {[...new Set(e.risks)].filter((r) => !e.normalized.hiddenCosts.some((h) => h.description === r)).map((r, k) => <li key={`r${k}`}>{r}</li>)}
                           </ul>
                         ) : <span className="muted">—</span>}</td>
                         <td><PriceClassPill value={e.priceClass} /></td>

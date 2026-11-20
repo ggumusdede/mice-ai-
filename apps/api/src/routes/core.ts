@@ -21,6 +21,7 @@ import { getDocumentFile, latestDocumentFor, listDocuments, regenerateDocument }
 import { mapContract, mapSupplier, mapTask } from '../lib/mappers.js';
 import { AppError, badRequest, notFound } from '../errors.js';
 import { createDecision } from '../services/decisions.js';
+import { generateOperationsCalendar, itemChangeFlow } from '../services/operations.js';
 
 const auth = { preHandler: requireAuth };
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
@@ -135,7 +136,12 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   app.patch('/api/items/:id', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(itemInput.partial().extend({ status: z.enum(['open', 'cancelled']).optional() }), req.body);
-    return asUser(req, (ctx) => patchItem(ctx, id, body));
+    return asUser(req, async (ctx) => {
+      const before = (await ctx.db.query('SELECT * FROM service_items WHERE id = $1', [id])).rows[0];
+      const item = await patchItem(ctx, id, body);
+      if (before) await itemChangeFlow(ctx, id, before); // phase B: §7 Adım 6 change flow (contracted items)
+      return item;
+    });
   });
   app.post('/api/items/:id/select-offer', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -301,7 +307,11 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/contracts/:id/sign', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(z.object({ signedBy: z.string().uuid(), scanFileName: z.string().optional() }), req.body);
-    return asUser(req, (ctx) => signContract(ctx, id, body));
+    return asUser(req, async (ctx) => {
+      const c = await signContract(ctx, id, body);
+      await generateOperationsCalendar(ctx, c.id); // phase B: §7 Adım 6 operations calendar from the signed contract
+      return c;
+    });
   });
   app.post('/api/contracts/:id/amend', auth, async (req) => {
     const { id } = parse(idParam, req.params);

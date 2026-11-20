@@ -85,6 +85,7 @@ function ItemRfqCard({ item }: { item: ServiceItemDetail }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Rfq[]>([]);
+  const [links, setLinks] = useState<Record<string, string>>({});
   const [newSup, setNewSup] = useState<{ name: string; city: string; district: string; email: string } | null>(null);
   const min = DEFAULT_RULES.rfqMinSuppliers;
   const max = DEFAULT_RULES.rfqMaxSuppliers;
@@ -117,6 +118,7 @@ function ItemRfqCard({ item }: { item: ServiceItemDetail }) {
         supplierIds: [...selected], deadlineHours, overrideReason: outside ? overrideReason.trim() : undefined,
       });
       setCreated(r);
+      setShortlist(null);
       toast(t.items.rfqCreated);
       await reload();
     } catch (e) {
@@ -150,7 +152,17 @@ function ItemRfqCard({ item }: { item: ServiceItemDetail }) {
                   <td><Pill tone={r.status === 'responded' ? 'success' : r.status === 'cancelled' ? 'neutral' : r.status === 'pending_approval' ? 'warning' : 'accent'}>{t.rfqStatus[r.status]}</Pill></td>
                   <td className="nowrap">{dateTime(r.deadlineAt)}</td>
                   <td className="small">{r.overrideReason ?? '—'}</td>
-                  <td className="num">
+                  <td className="num nowrap">
+                    {r.status === 'sent' || r.status === 'responded' ? (
+                      <Button size="sm" variant="ghost" icon="link" onClick={async () => {
+                        try {
+                          const l = await api.rfqs.link(r.id);
+                          if (l.supplierLink) setLinks((m) => ({ ...m, [r.id]: l.supplierLink! }));
+                        } catch (e) {
+                          toast(errorMessage(e), 'danger');
+                        }
+                      }}>{t.items.supplierLink}</Button>
+                    ) : null}
                     {r.status !== 'cancelled' && r.status !== 'closed' ? (
                       <Button size="sm" variant="ghost" onClick={async () => {
                         const reason = window.prompt(t.items.cancelReason);
@@ -171,11 +183,14 @@ function ItemRfqCard({ item }: { item: ServiceItemDetail }) {
         </div>
       ) : null}
 
-      {created.some((r) => r.supplierLink) ? (
+      {created.some((r) => r.supplierLink) || Object.keys(links).length ? (
         <Callout tone="success" icon="link" title={t.items.supplierLink}>
           <ul className="list">
-            {created.filter((r) => r.supplierLink).map((r) => (
+            {created.filter((r) => r.supplierLink && !links[r.id]).map((r) => (
               <li key={r.id} className="list__row"><span>{supplierName(byId, r.supplierId)}</span><CopyLink url={r.supplierLink!} /></li>
+            ))}
+            {Object.entries(links).map(([rfqId, url]) => (
+              <li key={rfqId} className="list__row"><span>{supplierName(byId, item.rfqs.find((x) => x.id === rfqId)?.supplierId)}</span><CopyLink url={url} /></li>
             ))}
           </ul>
         </Callout>

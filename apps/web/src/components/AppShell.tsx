@@ -43,6 +43,12 @@ export function AppShell() {
             <div className="sidebar__tenant">{me?.tenant.name || t.app.agency}</div>
           </div>
         </div>
+        {user && ['admin', 'clerk_sales', 'clerk_ops'].includes(user.role) ? (
+          <NavLink to="/projeler/yeni" className="btn btn--primary sidebar__cta">
+            <Icon name="plus" size={18} />
+            <span>{t.nav.newRequest}</span>
+          </NavLink>
+        ) : null}
         <nav className="sidebar__nav">
           {visible.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `sidebar__link ${isActive ? 'is-active' : ''}`}>

@@ -117,7 +117,7 @@ export function OfferLinesEditor({
         );
       })}
       {!readOnly ? (
-        <Button variant="ghost" icon="plus" onClick={() => onChange([...lines, emptyLine(lockKind ?? lines[lines.length - 1]?.kind ?? 'other')])}>
+        <Button variant="ghost" icon="plus" onClick={() => onChange([...lines, emptyLine(lockKind ?? lines[lines.length - 1]?.kind ?? 'other', lines[lines.length - 1]?.nights ? { nights: lines[lines.length - 1].nights } : {})])}>
           {t.offers.addLine}
         </Button>
       ) : null}

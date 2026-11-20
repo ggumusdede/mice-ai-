@@ -66,7 +66,16 @@ export async function createDecision(ctx: Ctx, spec: DecisionSpec): Promise<Deci
     ],
   );
   if (spec.aiActionId) await ctx.db.query('UPDATE ai_actions SET decision_id = $2 WHERE id = $1', [spec.aiActionId, rows[0].id]);
-  return mapDecision(rows[0]);
+  const decision = mapDecision(rows[0]);
+  if (!auto) for (const h of createdHooks) await h(ctx, decision);
+  return decision;
+}
+
+/** Phase B extension point: called after every open decision card is created (push notifications, §15). */
+export type DecisionCreatedHook = (ctx: Ctx, decision: Decision) => Promise<void>;
+const createdHooks: DecisionCreatedHook[] = [];
+export function onDecisionCreated(fn: DecisionCreatedHook): void {
+  if (!createdHooks.includes(fn)) createdHooks.push(fn);
 }
 
 // ------------------------------------------------------------------ effects registry
@@ -83,6 +92,11 @@ const effects = new Map<DecisionKind, DecisionEffect>();
 
 export function registerDecisionEffect(kind: DecisionKind, fn: DecisionEffect): void {
   effects.set(kind, fn);
+}
+
+/** The currently registered effect of a kind (lets phase B wrap a phase-A effect). */
+export function getDecisionEffect(kind: DecisionKind): DecisionEffect | undefined {
+  return effects.get(kind);
 }
 
 export async function runDecisionEffect(ctx: Ctx, decision: Row, input: EffectInput): Promise<string[]> {

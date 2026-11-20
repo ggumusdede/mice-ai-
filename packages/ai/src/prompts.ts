@@ -43,7 +43,7 @@ export const SYSTEM_PARSE_OFFER = `${PREAMBLE}
 TASK: read a supplier offer (hotel / venue / transfer / technical / F&B supplier). The input may be an e-mail body, a PDF, a photo/scan, or a spreadsheet exported as CSV. Output only the JSON object defined by the schema.
 
 Rules:
-- One line per priced item exactly as quoted: description (supplier's wording, short), kind (${SERVICE_KINDS.join(', ')}), quantity, unit ("oda", "kişi", "gün", "adet", "araç", ...), nights (accommodation only), unitPrice in the offer currency, vatIncluded, vatRate (percent, e.g. 10 or 20), accommodationTaxIncluded (accommodation only), roomType (SGL/DBL/TWIN/...), board (BB/HB/FB/AI).
+- One line per priced item exactly as quoted: description (supplier's wording, short), kind (${SERVICE_KINDS.join(', ')}), quantity, unit ("oda", "kişi", "gün", "adet", "araç", ...), nights (accommodation only), unitPrice in the offer currency, vatIncluded, vatRate (as a FRACTION, e.g. 0.1 for %10 or 0.2 for %20), accommodationTaxIncluded (accommodation only), roomType (SGL/DBL/TWIN/...), board (BB/HB/FB/AI).
 - Example: "Oda (DBL, BB): 120 EUR x 25 oda x 2 gece" → kind accommodation, quantity 25, unit "oda", nights 2, unitPrice 120, roomType DBL, board BB.
 - Per-person prices ("kişi başı") use unit "kişi"; if the head count is not on the line, use the participant count stated elsewhere in the offer and lower that line's confidence.
 - Do not output subtotal / total rows as lines. Do not convert currencies. Do not compute discounts that are not written.

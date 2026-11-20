@@ -14,6 +14,28 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { Button, Callout, DecisionBadgePill, ErrorBox, InlineError, Pill, Spinner } from '../components/ui';
 
+/** Decision effects come back as machine codes (`project_assigned:<uuid>`, `rfq_sent:<id>`); show them in Turkish. */
+const EFFECT_LABELS: Record<string, string> = {
+  project_assigned: 'Proje atandı', assignment_rejected: 'Atama reddedildi', rfq_sent: 'RFQ gönderildi', rfqs_cancelled: 'RFQ’lar iptal edildi',
+  quote_approved: 'Teklif onaylandı', quote_rejected: 'Teklif reddedildi', quote_returned_for_edit: 'Teklif düzeltmeye döndü',
+  margin_override_applied: 'Marj istisnası uygulandı', margin_override_recorded: 'Marj istisnası kaydedildi', margin_override_rejected: 'Marj istisnası reddedildi',
+  quote_still_blocked: 'Teklif hâlâ bloklu', supplier_accredited: 'Tedarikçi akredite edildi', accreditation_rejected: 'Akreditasyon reddedildi',
+  draft_approved: 'Taslak onaylandı', draft_sent: 'Mesaj gönderildi', draft_discarded: 'Taslak iptal edildi', revision_request_sent: 'Revizyon talebi gönderildi',
+  diff_dismissed: 'Fark kapatıldı', contract_approved: 'Sözleşme onaylandı', contract_returned: 'Sözleşme taslağa döndü', contract_locked: 'Sözleşme kilitlendi',
+  contract_approval_requested: 'Sözleşme onayı istendi', condition_risk_not_accepted: 'Koşul riski kabul edilmedi', condition_risk_accepted: 'Koşul riski kabul edildi', contract_not_pending: 'Sözleşme onay beklemiyor', acknowledged: 'Not alındı',
+  automation_promoted: 'Otomasyona alındı', automation_promotion_proposed: 'Otomasyon önerildi', automation_demoted: 'Otomasyondan çıkarıldı',
+  promotion_declined: 'Otomasyon önerisi reddedildi', sample_reviewed: 'Örneklem incelendi', audit_sample_created: 'Örneklem denetimi açıldı',
+  checklist_question_activated: 'Soru kontrol listesine eklendi', checklist_question_rejected: 'Soru reddedildi', rule_changed: 'Kural güncellendi',
+  rule_suggestion_rejected: 'Kural önerisi reddedildi', offer_verified: 'Okuma doğrulandı', reading_rejected: 'Okuma reddedildi',
+};
+export function effectLabel(code: string): string {
+  const [key, arg] = code.split(':', 2);
+  const label = EFFECT_LABELS[key];
+  if (!label) return code.replace(/_/g, ' ');
+  // ids carry no meaning for the user; keep short non-id arguments (rule key, action type)
+  return arg && !/^[0-9a-f-]{20,}$/i.test(arg) ? `${label} (${arg})` : label;
+}
+
 const BADGE_ORDER = { critical: 0, within_rules: 1, suggestion: 2 } as const;
 
 export function sortDecisions(list: Decision[]): Decision[] {
@@ -186,7 +208,7 @@ export function DecisionSheet({ decision: d, onClose, onDecided }: { decision: D
         }
       } else if (biometric === 'dev') bio = { method: 'dev' };
       const r = await api.decisions.decide(d.id, { ...input, device: deviceLabel(), biometric: bio });
-      toast(r.effects?.length ? `${t.inbox.decided} · ${r.effects.join(' · ')}` : t.inbox.decided);
+      toast(r.effects?.length ? `${t.inbox.decided} · ${[...new Set(r.effects.map(effectLabel))].join(' · ')}` : t.inbox.decided);
       onDecided(d.id);
     } catch (e) {
       setError(errorMessage(e));

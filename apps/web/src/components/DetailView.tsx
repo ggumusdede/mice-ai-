@@ -16,7 +16,12 @@ const LABELS: Record<string, string> = {
   to: 'Alıcı', subject: 'Konu', body: 'Mesaj', diff: 'Farklar', suppliers: 'Tedarikçiler', userName: 'Kişi', reason: 'Gerekçe',
   advantage: 'Avantaj', pax: 'Kişi', startDate: 'Başlangıç', endDate: 'Bitiş', options: 'Seçenekler', title: 'Başlık',
   confidence: 'Güven', field: 'Alan', label: 'Alan', contractValue: 'Sözleşme', quoteValue: 'Teklif', message: 'Açıklama',
-  severity: 'Önem', projectExtrasTry: 'Projede ekstra toplamı (TL)', description: 'Açıklama', name: 'Ad', score: 'Skor',
+  severity: 'Önem', status: 'Durum', overrideReason: 'Aralık dışı gerekçesi', fullName: 'Ad soyad', duplicates: 'Olası mükerrer', supplierNames: 'Tedarikçiler', deadlineHours: 'Yanıt süresi (saat)', projectExtrasTry: 'Projede ekstra toplamı (TL)', description: 'Açıklama', name: 'Ad', score: 'Skor',
+};
+
+/** Common enum values that show up inside decision details. */
+const VALUE_LABELS: Record<string, string> = {
+  accredited: 'Akredite', candidate: 'Aday', passive: 'Pasif', error: 'Hata', warning: 'Uyarı', info: 'Bilgi', critical: 'Kritik',
 };
 
 export function labelFor(key: string): string {
@@ -33,6 +38,7 @@ export function formatValue(key: string, v: unknown): ReactNode {
     return num(v);
   }
   if (typeof v === 'string') {
+    if (VALUE_LABELS[v]) return VALUE_LABELS[v];
     if (ISO_DATE.test(v)) return date(v, v.length > 10 ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' } : undefined);
     return <span className="pre-line">{v}</span>;
   }
@@ -45,7 +51,9 @@ export function formatValue(key: string, v: unknown): ReactNode {
         </ul>
       );
     }
-    const cols = Array.from(new Set(v.flatMap((x) => (x && typeof x === 'object' ? Object.keys(x) : [])))).slice(0, 6);
+    const cols = Array.from(new Set(v.flatMap((x) => (x && typeof x === 'object' ? Object.keys(x) : []))))
+      .filter((c) => !(/(^id|Id)$/.test(c) && v.every((x) => isUuidish((x as Record<string, unknown>)?.[c]))))
+      .slice(0, 6);
     return (
       <div className="table-wrap">
         <table className="table table--compact">
@@ -65,9 +73,17 @@ export function formatValue(key: string, v: unknown): ReactNode {
   return String(v);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuidish(v: unknown): boolean {
+  if (typeof v === 'string') return UUID.test(v);
+  if (Array.isArray(v)) return v.length > 0 && v.every((x) => typeof x === 'string' && UUID.test(x));
+  return v === null;
+}
+
 /** Generic, readable rendering of Decision.detail (Record<string, unknown>). */
 export function DetailView({ data, nested = false }: { data: Record<string, unknown>; nested?: boolean }) {
-  const entries = Object.entries(data ?? {});
+  // internal UUID references (userId, supplierIds, …) mean nothing to the decider
+  const entries = Object.entries(data ?? {}).filter(([k, v]) => !(/(^id|Id|Ids)$/.test(k) && isUuidish(v)));
   if (!entries.length) return null;
   return (
     <dl className={`kv ${nested ? 'kv--nested' : ''}`}>

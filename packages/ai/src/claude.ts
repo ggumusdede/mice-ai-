@@ -244,7 +244,7 @@ export class ClaudeAiService implements AiService {
       lineConf.push(clamp01(o.confidence));
       const l: OfferLine = {
         description: vStr(o.description) ?? '', kind: vKind(o.kind), quantity: vNum(o.quantity) ?? 1, unit: vStr(o.unit) ?? 'adet',
-        unitPrice: vNum(o.unitPrice) ?? 0, vatIncluded: vBool(o.vatIncluded) ?? false, vatRate: vNum(o.vatRate) ?? 0,
+        unitPrice: vNum(o.unitPrice) ?? 0, vatIncluded: vBool(o.vatIncluded) ?? false, vatRate: vRate(o.vatRate) ?? 0,
       };
       const nights = vInt(o.nights); if (nights !== null) l.nights = nights;
       const ati = vBool(o.accommodationTaxIncluded); if (ati !== null) l.accommodationTaxIncluded = ati;

@@ -14,6 +14,7 @@ import { acceptConditionRisk, approveContract } from './contracts.js';
 import { verifyOffer } from './offers.js';
 import { setRule } from './rules.js';
 import { forbidden } from '../errors.js';
+import { registerPhaseB } from './phase-b-registry.js';
 
 let registered = false;
 
@@ -145,6 +146,8 @@ export function registerAll(): void {
     return [`offer_verified:${o.id}`];
   });
 
-  // phase-B kinds: decision recorded; effects to be registered by the operations/finance services
   void recordAutomationOutcome;
+  // phase B: payment_approval, field_extra, low_confidence_review (bank match), unbilled_payment_escalation,
+  // low_supplier_score, closing_overdue effects + customer_invoice_draft generator + notification hook
+  registerPhaseB();
 }

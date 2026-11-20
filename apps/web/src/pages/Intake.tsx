@@ -17,6 +17,8 @@ const FIELD_MAP: Record<string, keyof Project> = {
   fnb: 'fnbNeeds', technical: 'technicalNeeds', transfer: 'transferNeeds', budget: 'budget', budgetCurrency: 'budgetCurrency',
   decisionDate: 'decisionDate', billingInfo: 'billingInfo',
 };
+const FIELD_ORDER = Object.keys(FIELD_MAP);
+const fieldOrder = (k: string) => (FIELD_ORDER.indexOf(k) + FIELD_ORDER.length + 1) % (FIELD_ORDER.length + 1);
 const NUMERIC = new Set(['pax', 'roomsSgl', 'roomsDbl', 'budget']);
 const DATE = new Set(['startDate', 'endDate', 'decisionDate']);
 const THRESHOLD = 0.8;
@@ -126,6 +128,7 @@ function IntakeResult({ r, onProject }: { r: IntakeResponse; onProject: (p: Proj
           <div className="extract-grid">
             {Object.entries(ex)
               .filter(([k]) => k !== 'language')
+              .sort(([a], [b]) => fieldOrder(a) - fieldOrder(b))
               .map(([k, v]) => (
                 <ExtractedField key={k} name={k} value={v as Extracted<unknown>} projectId={r.project.id} onProject={onProject} />
               ))}

@@ -96,7 +96,7 @@ function QuoteBuilder() {
       const q = await api.projects.buildQuote(detail.project.id, body);
       setResult(q);
       await reload();
-      toast(`${t.quoteStatus[q.status]}`);
+      toast(t.quoteStatus[q.status], q.status === 'blocked' ? 'danger' : q.status === 'pending_approval' ? 'neutral' : undefined);
     } catch (e) {
       setError(errorMessage(e));
     } finally {

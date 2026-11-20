@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { Contract, ContractDiffItem } from '@mice/shared';
+import { useEffect, useState } from 'react';
+import type { Contract, ContractDiffItem, User } from '@mice/shared';
 import { api, errorMessage } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n';
@@ -101,7 +101,17 @@ function ContractCard({ c }: { c: Contract }) {
   const { byId } = useSuppliers();
   const [panel, setPanel] = useState<'none' | 'parse' | 'sign' | 'amend'>('none');
   const [text, setText] = useState('');
-  const [signedBy, setSignedBy] = useState(user?.fullName ?? '');
+  // signedBy is the signatory's user id (admin or canSign), not a free-text name
+  const [signedBy, setSignedBy] = useState('');
+  const [signatories, setSignatories] = useState<User[]>([]);
+  useEffect(() => {
+    if (panel !== 'sign' || signatories.length) return;
+    api.users.list().then((us) => {
+      const s = us.filter((u) => u.active !== false && (u.role === 'admin' || u.canSign));
+      setSignatories(s);
+      setSignedBy((cur) => cur || (s.find((u) => u.id === user?.id) ?? s[0])?.id || '');
+    }).catch((e) => setError(errorMessage(e)));
+  }, [panel, signatories.length, user?.id]);
   const [scan, setScan] = useState<File | null>(null);
   const [amendText, setAmendText] = useState('');
   const [amendReason, setAmendReason] = useState('');
@@ -192,14 +202,16 @@ function ContractCard({ c }: { c: Contract }) {
 
       {panel === 'sign' ? (
         <div className="subcard form-grid">
-          <TextInput label={t.contracts.signedBy} value={signedBy} onChange={(e) => setSignedBy(e.target.value)} required />
+          <Select label={t.contracts.signedBy} value={signedBy} onChange={(e) => setSignedBy(e.target.value)} required>
+            {signatories.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+          </Select>
           <div className="field">
             <span className="field__label">{t.contracts.scanFile}</span>
             <FilePicker label={t.contracts.scanFile} accept=".pdf,.png,.jpg,.jpeg" onFile={setScan} />
           </div>
           <div className="span-full row-end">
             <Button variant="ghost" onClick={() => setPanel('none')}>{t.common.cancel}</Button>
-            <Button icon="check" busy={busy} disabled={!signedBy.trim() || !scan} onClick={() => void run(() => api.contracts.sign(c.id, { signedBy: signedBy.trim(), scanFileName: scan?.name }))}>{t.contracts.sign}</Button>
+            <Button icon="check" busy={busy} disabled={!signedBy || !scan} onClick={() => void run(() => api.contracts.sign(c.id, { signedBy, scanFileName: scan?.name }))}>{t.contracts.sign}</Button>
           </div>
         </div>
       ) : null}

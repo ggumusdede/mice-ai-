@@ -89,7 +89,7 @@ describe('ClaudeAiService request construction', () => {
     expect(content.at(-1)).toMatchObject({ type: 'text' });
     expect(calls[0].max_tokens).toBeGreaterThanOrEqual(8000);
     expect(r.data.prepaymentRate).toBe(0.3); // percent normalised to fraction
-    expect(r.data.lines[0]).toMatchObject({ kind: 'accommodation', quantity: 25, nights: 2, roomType: 'DBL' });
+    expect(r.data.lines[0]).toMatchObject({ kind: 'accommodation', quantity: 25, nights: 2, roomType: 'DBL', vatRate: 0.1 }); // VAT percent → fraction
     expect(r.data.fieldConfidence.lines).toBe(0.9); // capped by line confidences
     expect(r.action).toBe('document_reading');
 

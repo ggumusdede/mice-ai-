@@ -421,7 +421,8 @@ export function classifyKind(fLine: string): ServiceKind {
   return 'other';
 }
 
-const DEFAULT_VAT: Record<ServiceKind, number> = { accommodation: 10, hall: 20, fnb: 10, transfer: 20, technical: 20, activity: 20, ticket: 20, other: 20 };
+/** VAT rates are FRACTIONS (0.1 = %10), matching @mice/domain and the API. */
+const DEFAULT_VAT: Record<ServiceKind, number> = { accommodation: 0.1, hall: 0.2, fnb: 0.1, transfer: 0.2, technical: 0.2, activity: 0.2, ticket: 0.2, other: 0.2 };
 
 const TERM_LINE = /(iptal|cancel|odeme|payment|opsiyon|option|on odeme|deposit|kapora|depozito|attrition|garanti|guarantee|vade|ceza|penalty|no.?show|fazla mesai|overtime|ek saat|extra hour)/;
 const TOTAL_LINE = /^(\W*)(genel toplam|ara toplam|toplam|total|grand total|sub-?total|итого)/;
@@ -440,7 +441,7 @@ function accTaxIncluded(f: string): boolean | null {
 }
 function vatRateOf(f: string): number | null {
   const m = /%\s*(\d{1,2})\s*(?:kdv|vat)|(?:kdv|vat)\s*(?:orani)?\s*[:(]?\s*%\s*(\d{1,2})|(\d{1,2})\s*%\s*(?:kdv|vat)/.exec(f);
-  return m ? Number(m[1] ?? m[2] ?? m[3]) : null;
+  return m ? Number(m[1] ?? m[2] ?? m[3]) / 100 : null;
 }
 
 function parsePriceLine(raw: string, ctx: { docVat: boolean | null; docVatRate: number | null; docPax: number | null; docNights: number | null; docAccTax?: boolean | null }): LineParse | null {

@@ -10,7 +10,7 @@ bash scripts/db-start.sh            # from repo root: local Postgres 16 on :5432
 npm run migrate -w apps/api         # apply src/db/migrations/*.sql (tracked in schema_migrations)
 npm run seed -w apps/api            # demo tenant "Demo MICE Acenta" (idempotent); add `-- --reset` to drop & recreate
 npm run dev -w apps/api             # http://localhost:3001  (GET /api/health)
-npm run worker -w apps/api          # follow-up worker (setInterval); `-- --once` for a single pass
+npm run worker -w apps/api          # follow-ups + phase B jobs (anonymization, digests, event end, daily summaries); `-- --once`
 npm test -w apps/api                # vitest against mice_test (schema dropped + migrated in globalSetup)
 npx tsc --noEmit -p apps/api
 ```
@@ -61,6 +61,9 @@ Change the `mice_app` password in production: `ALTER ROLE mice_app PASSWORD '…
 - AI actors (`app.actor_type='ai'`) can never accredit a supplier or record a signature.
 
 Phase B: create new tables in a new migration and call `SELECT apply_standard_policies('table')` (RLS + no-delete + audit + grants).
+`004_phase_b.sql` adds `notifications`, `style_summaries`, field-extra admin/customer-approval columns, payment
+approval/paid columns and two more DB guards: **a finance entry can only become `approved`/`paid` with a human actor**
+(`finance_money_guard`, §6 money_movement) and **an AI actor can never write `rules`** (`rules_change_guard`).
 
 ## Code map
 
@@ -68,6 +71,13 @@ Phase B: create new tables in a new migration and call `SELECT apply_standard_po
 - `src/routes/index.ts` — **route registration index** (add phase B modules here). `core.ts` (staff, steps 0–5),
   `public.ts` (token routes, rate-limited), `reference.ts` (rules/users/customers/checklist/automation/audit read),
   `auth.ts` (login, me, WebAuthn).
+- Phase B: `routes/operations.ts` (Adım 6 guests/rooming, field extras/issues, daily summary + Adım 7 finance),
+  `routes/admin.ts` (Adım 8 closing, weekly report, rules/users/delegations/checklist), `routes/public-b.ts` (rooming,
+  consent withdrawal, extra approval, survey — own rate-limited scope). Services: `guests.ts` (pgcrypto PII, consent,
+  anonymization), `operations.ts` (ops calendar on signature, field extras, change flow, daily summary, event-ended marker),
+  `finance.ts` (invoices, payment requests, bank import/matching, Mikro export, commissions), `closing.ts` (closing check,
+  close, survey, customer invoice draft generator), `reports.ts` (weekly report, user stats), `notifications.ts`
+  (NotificationService), `phase-b-registry.ts` (decision effects), `src/jobs.ts` (worker pre/post jobs).
 - `src/services/*` — business services. Extension points: `registerDecisionEffect(kind, fn)` (`decisions.ts`, wired in
   `registry.ts`), `registerDocumentGenerator(kind, …)` (`documents.ts`), `aiGate()` (`automation.ts`) for every
   suggest-type AI action, `EmailProvider` (`email.ts`, outbox/console implementation — no SMTP).
@@ -84,4 +94,85 @@ Phase B: create new tables in a new migration and call `SELECT apply_standard_po
 - `POST /api/public/quotes/:token/accept` returns `{ok:true, firm}`; `/revision` returns `{ok, targetStep, diff}`;
   `POST /api/public/rfq/:token/files` parses the uploaded file into a new offer version.
 - `POST /api/contracts/:id/parse` updates the draft contract in place (version+1; history in audit_log).
-- OfferLine `vatRate` is a fraction (0.1) in the API/domain; percent values (10) coming from `@mice/ai` are normalized.
+- OfferLine `vatRate` is a fraction (0.1) in the API/domain (and from `@mice/ai`); percent values (10) from manual/portal input are normalized.
+
+## Phase B (steps 6–8, reports, admin)
+
+**Operations (Adım 6)**
+- Contract signature (`POST /api/contracts/:id/sign`) → `generateOperationsCalendar`: `operationsCalendar()` tasks filtered by
+  the contract's item kinds (rooming list / attrition / final pax for accommodation, menu for F&B/hall, tech brief for
+  hall/technical, transfer list for transfer, payment dues, one event-day checklist per project), due 10:00 local, assigned to
+  the responsible role (project owner if they hold the role, else the first active user of that role). Idempotent `origin_key`.
+- Guests: PII (`full_name/email/phone`) encrypted with `pgp_sym_encrypt(…, GUEST_DATA_KEY)`; only roles with
+  `roleCan('view_guest_pii')` (admin, clerk_ops, field) get decrypted values — for other roles **nothing is decrypted**, names
+  come back as `"Misafir N (ROOM) — ***"` and e-mail/phone `null`. Public rooming form: per-guest `consentReuse` (unticked by
+  default) → `consent_events('given')`, `retention_until = retentionUntil(event end, guestDataRetentionDays)`. Consenting guests
+  with an e-mail receive a personal withdrawal link (`/api/public/consent/<token>/withdraw`: GET = confirmation page, POST =
+  withdraw). Worker job anonymizes (`shouldAnonymize`) → PII columns NULL, `anonymized_at`, `consent_events('anonymized')`.
+  The audit log never contains PII (`audit_redact`).
+- Field extras: `fieldExtraNeedsAdmin` with tenant limits (5.000 / 15.000 TL, inclusive). Above → `field_extra` decision
+  (admin/delegate, Face ID). Always: one-time customer link `/e/<token>`, sent as SMS (outbox `channel='sms'`, link redacted)
+  from the field lead when a phone is known (else returned as `approvalLink` for WhatsApp sharing). Customer approval records
+  name, time and amount. Reflect: `reflected:false` requires a reason (API + DB check).
+- Change flow: amendments (phase A) and `PATCH /api/items/:id` on a contracted project compute `changeImpact`, create a
+  supplier notification draft (requires approval) + task, and a critical `condition_risk` card when the margin falls below target.
+- Daily summary: deterministic 3 lines (tasks / issues / extras of the day) rendered through `ai.draftMessage('daily_summary')`;
+  during events the worker creates a customer draft (human sends) and a routine admin notification after 18:00.
+- Notifications (§15): `NotificationService` (`deliver`) with a console implementation; every notification row is stored in
+  `notifications`. Critical (urgent / critical decision cards, high-severity field issues, approved payments) → immediate;
+  routine → `deliver_after` = next 08:30 / 18:00 slot; worker folds due ones into one digest per user. Hook:
+  `onDecisionCreated` in `decisions.ts`. Replace with `setNotificationService()`.
+
+**Finance (Adım 7)** — the system never moves money.
+- Supplier invoices: JSON or multipart (`file` + string fields, `serviceItemIds` comma separated); files/text read by
+  `ai.parseInvoice`. `amount` = NET (matrah, VAT excluded), `vatAmount` separate. Linked to the supplier's signed contract and its
+  items; cumulative invoiced EUR vs contract payables (tolerance max(1 EUR, 0.5 %)) → `alarms[]` + `invoice_mismatch` task +
+  admin notification. Duplicate invoice no per supplier → 409. Separately billed supplier commissions (`suppliers.commission`)
+  create a `commission` entry (reconcile: `POST /api/finance/commissions/:id/reconcile`).
+- Payment requests: finance (`create_payment_request`) → entry `pending_approval` + `payment_approval` decision (Face ID,
+  admin or active delegate, each payment separately). Effect → `approved` only; AI/auto execution refused in the effect, in
+  `NEVER_AUTO_KINDS` and by the DB guard. A human records the bank payment: `POST /api/finance/entries/:id/mark-paid`.
+- Bank statements: CSV (`parseBankCsv`) or XLSX (exceljs → CSV → same parser); row hash makes re-imports idempotent.
+  `matchBankTransaction` ≥ `aiConfidenceThreshold` → automatic match; ≥ 0.3 → `low_confidence_payment_match` via `aiGate`
+  (`low_confidence_review` card, `entityType='bank_transaction'`, finance decides; Düzelt `{entryId}`); else unmatched. Outgoing
+  unmatched payments get `payer_user_id` = importer → daily reminder task + push, escalation to admin after
+  `unbilledPaymentEscalationDays` (worker). Manual match closes reminders and records the correction for learning.
+- Customer invoice draft: document `customer_invoice_draft` (accepted option in quote currency + customer-approved AND reflected
+  extras, VAT + accommodation tax, PDF). The issued invoice number from Mikro is recorded with `POST /api/finance/customer-invoices`.
+- Mikro export `GET /api/finance/export/mikro?from=&to=` (xlsx). **Assumptions** (to confirm with the accountant): one row per
+  invoice; columns Evrak Tipi, Cari Kod, Cari Ünvan, Belge No, Tarih (GG.AA.YYYY), Vade, Tutar (matrah), KDV, Toplam, Döviz, Kur,
+  Açıklama; cari kod `120.<customer shortCode>` (alıcılar), `320.<SUPPLIER SLUG≤12>` (satıcılar), `120.K.<supplier>` for commission
+  invoices; filter on invoice date (`meta.issueDate`).
+- `ProjectDetail.profit.realized` = supplier invoices vs customer invoices (EUR), margin and markup separately.
+
+**Closing (Adım 8)**
+- `GET /api/projects/:id/closing-check` (`closingCheck`): every supplier with a signed contract invoiced, customer invoice
+  recorded, collections (customer invoices — else receivables — matched/paid), no paid payable without an invoice, commissions
+  reconciled. Plan vs actual deviations: unreflected extras, total extras, FX difference (invoice vs contract-time rate), change /
+  amendment cost delta, actual − planned cost.
+- `POST /api/projects/:id/close` (admin/finance): 409 `CLOSING_BLOCKED` (details = the check) unless ok; lost projects close
+  without the finance checklist (lost reason is enforced by the outcome). Won projects: realized prices → `price_history`
+  (`realized`, selected offer lines scaled by invoiced/contracted), supplier scores (`supplierScore`; < `lowSupplierScore` →
+  `low_supplier_score` card, Düzelt `{status:'passive'}` passivates), lessons → `ai.suggestChecklistQuestions` →
+  `checklist_question` cards via `aiGate`, survey token (response adds `surveyUrl: '/survey/<token>'`, `effects`).
+- Worker: `event_ended_at` is set the day after `end_date` (step → 7) so the existing 30-day `closing_overdue` alarm fires.
+
+**Reports & admin**
+- `GET /api/reports/weekly?weekStart=` (admin): quote time = business minutes `received_at → quote_sent_at` minus the
+  project's `customer_wait_minutes` (median, hours; on-target vs each project's target), customer wait hours separately,
+  target overrides; correction rate = edited AI-suggestion decisions + edited-then-sent AI drafts, 8-week trend (oldest first);
+  won/lost from audit-log outcome transitions + lost reasons; automation events; unreflected field extras (EUR); open
+  rule/automation/checklist suggestions; monthly style summary (`ai.summarizeStyle`, cached in `style_summaries`); RFQ overrides.
+- `PATCH /api/rules` (admin + human actor only; keys validated against `DEFAULT_RULES`; optional `reason`; versioned + audited),
+  `PATCH /api/users/:id` (admin; no self-demotion), `GET /api/users/:id/stats` (admin or self), `GET/POST /api/delegations`,
+  `POST /api/delegations/:id/end` (no DELETE), `PATCH /api/checklist/:id` (admin; expires the open suggestion card).
+
+**Additive routes / fields (not in api.ts)**: `POST /api/guests/:id/withdraw-consent`, `GET /api/field-extras/unreflected-totals`,
+`POST /api/finance/customer-invoices`, `POST /api/finance/entries/:id/mark-paid`, `POST /api/finance/commissions/:id/reconcile`,
+`GET /api/public/consent/:token/withdraw` (HTML confirmation); `POST /api/finance/bank-statements` also accepts JSON `{csv}` and
+returns `duplicates`; field extras accept `clientId` (offline idempotency) and return `adminStatus`, `customerApprovedAmountTry`
+(+ `approvalLink` on create); field issues accept `supplierId`; close returns `surveyUrl` + `effects`; guests POST accepts an array
+or `{guests}`.
+
+**VAT unit**: `@mice/ai` now returns OfferLine `vatRate` as a fraction (0.1). `normalizeLines()` stays as a guard because the
+manual offer form and the supplier portal still accept percent values (≤ 100).

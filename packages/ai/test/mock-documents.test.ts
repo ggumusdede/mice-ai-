@@ -14,9 +14,9 @@ describe('MockAiService.parseSupplierOffer', () => {
     expect(o.currency).toBe('EUR');
     expect(o.lines).toHaveLength(6); // total + overtime lines are not offer lines
     const dbl = o.lines[0];
-    expect(dbl).toMatchObject({ kind: 'accommodation', roomType: 'DBL', board: 'BB', unitPrice: 120, quantity: 25, nights: 2, unit: 'oda', vatIncluded: true, vatRate: 10, accommodationTaxIncluded: false });
+    expect(dbl).toMatchObject({ kind: 'accommodation', roomType: 'DBL', board: 'BB', unitPrice: 120, quantity: 25, nights: 2, unit: 'oda', vatIncluded: true, vatRate: 0.1, accommodationTaxIncluded: false });
     expect(o.lines[1]).toMatchObject({ roomType: 'SGL', unitPrice: 100, quantity: 30, nights: 2 });
-    expect(o.lines[2]).toMatchObject({ description: 'Salon kirası', kind: 'hall', unitPrice: 1500, quantity: 1, vatRate: 20 });
+    expect(o.lines[2]).toMatchObject({ description: 'Salon kirası', kind: 'hall', unitPrice: 1500, quantity: 1, vatRate: 0.2 });
     expect(o.lines[3]).toMatchObject({ description: 'Coffee break', kind: 'fnb', unit: 'kişi', unitPrice: 12, quantity: 80 });
     expect(o.lines[4]).toMatchObject({ kind: 'fnb', unitPrice: 35, quantity: 160 }); // 80 kişi x 2 gün
     expect(o.lines[5]).toMatchObject({ kind: 'transfer', unit: 'araç', quantity: 4, unitPrice: 60 });
@@ -39,8 +39,8 @@ describe('MockAiService.parseSupplierOffer', () => {
     const o = r.data;
     expect(o.currency).toBe('TRY');
     expect(o.lines).toHaveLength(2);
-    expect(o.lines[0]).toMatchObject({ kind: 'transfer', unitPrice: 3250, quantity: 6, vatIncluded: false, vatRate: 20 });
-    expect(o.lines[1]).toMatchObject({ kind: 'transfer', unitPrice: 18000, vatIncluded: false, vatRate: 20 });
+    expect(o.lines[0]).toMatchObject({ kind: 'transfer', unitPrice: 3250, quantity: 6, vatIncluded: false, vatRate: 0.2 });
+    expect(o.lines[1]).toMatchObject({ kind: 'transfer', unitPrice: 18000, vatIncluded: false, vatRate: 0.2 });
     expect(o.optionUntil).toBe('2027-01-10');
   });
 

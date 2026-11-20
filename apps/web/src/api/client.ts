@@ -93,8 +93,17 @@ async function parseError(res: Response): Promise<ApiClientError> {
   return new ApiClientError(res.status, code, message, details);
 }
 
+/** Short device label recorded in the audit log (kim / ne zaman / hangi cihaz); the API falls back to the user-agent. */
+function clientDevice(): string {
+  if (typeof navigator === 'undefined') return 'Web';
+  const ua = navigator.userAgent;
+  const dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Web';
+  const standalone = typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)').matches;
+  return `${dev} (${standalone ? 'PWA' : 'Web'})`;
+}
+
 export async function request<T>(method: Method, path: string, body?: unknown, opts: RequestOpts = {}): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-Device': clientDevice() };
   const auth = opts.auth ?? true;
   if (auth) {
     const t = getToken();
@@ -205,6 +214,8 @@ export const api = {
   },
   rfqs: {
     cancel: (id: string, reason: string) => post<Rfq>(`/rfqs/${enc(id)}/cancel`, { reason }),
+    /** rotates and returns a one-time supplier link (manual sharing, e.g. WhatsApp) */
+    link: (id: string) => post<Rfq>(`/rfqs/${enc(id)}/link`),
   },
   offers: {
     verify: (id: string, b: Partial<SupplierOffer>) => post<SupplierOffer>(`/offers/${enc(id)}/verify`, b),

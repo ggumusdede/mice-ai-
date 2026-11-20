@@ -15,6 +15,7 @@ import { aiDraft } from './services/drafts.js';
 import { aiGate } from './services/automation.js';
 import { logAiAction } from './services/ai-log.js';
 import { iso } from './lib/dates.js';
+import { runPostJobs, runPreJobs } from './jobs.js';
 
 /** §6 single external exception: pre-approved template, no AI-generated text, no new link. */
 export const RFQ_REMINDER_TEMPLATE: Record<string, (v: { contact: string; code: string; item: string; sender: string }) => { subject: string; body: string }> = {
@@ -143,9 +144,10 @@ async function execute(ctx: Ctx, a: FollowupAction, now: Date): Promise<string> 
 export async function runFollowupsForTenant(deps: AppDeps, tenantId: string, now: Date): Promise<string[]> {
   return withSystemCtx(deps, tenantId, { type: 'system', id: null }, async (ctx) => {
     const rules = await ctx.rules();
+    const done: string[] = await runPreJobs(ctx, now);
     const actions = dueFollowups(await buildState(ctx, now), rules, rules.businessHours);
-    const done: string[] = [];
     for (const a of actions) done.push(await execute(ctx, a, now));
+    done.push(...(await runPostJobs(ctx, now, actions)));
     return done;
   });
 }

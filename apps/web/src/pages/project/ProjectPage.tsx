@@ -3,7 +3,7 @@ import { NavLink, useParams } from 'react-router-dom';
 import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
-import { businessDuration, dateRange } from '../../lib/format';
+import { businessDuration, dateRange, staleReason } from '../../lib/format';
 import { StepProgress } from '../../components/StepProgress';
 import { Icon } from '../../components/Icon';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -79,7 +79,7 @@ export function ProjectPage() {
             alerts.map((a, i) => (
               <div key={`${a.code}-${i}`} className={`alert alert--${ALERT_TONE[a.level] ?? 'neutral'}`} role={a.level === 'critical' ? 'alert' : undefined}>
                 <Icon name={a.level === 'info' ? 'info' : 'alert'} size={16} />
-                <span>{a.message}</span>
+                <span>{a.code === 'DOCUMENT_STALE' ? alertStale(a.message, t.docKind as Record<string, string>) : a.message}</span>
               </div>
             ))
           ) : (
@@ -170,4 +170,11 @@ function OutcomeSheet({ kind, onClose }: { kind: 'won' | 'lost'; onClose: () => 
 export function ProjectNotFound() {
   const t = useT();
   return <EmptyState icon="folder" title={t.project.notFound} />;
+}
+
+/** `pnl belgesi eski: quote değişti: accepted_option_no` → `Kâr-zarar tablosu eski — Müşteri teklifi değişti (kabul edilen seçenek)` */
+function alertStale(message: string, docKind: Record<string, string>): string {
+  const m = /^(\w+) belgesi eski: (.*)$/.exec(message);
+  if (!m) return message;
+  return `${docKind[m[1]] ?? m[1]} güncel değil — ${staleReason(m[2])}`;
 }

@@ -51,7 +51,8 @@ export async function getOfferRow(ctx: Ctx, id: string, forUpdate = false): Prom
   return rows[0];
 }
 
-/** VAT rates are fractions everywhere in the domain (0.1 = %10). @mice/ai returns percent (10) → normalize at the boundary. */
+/** VAT rates are fractions everywhere in the domain (0.1 = %10). @mice/ai now returns fractions too; this stays as a guard for
+ *  manual / supplier-form input, which still accepts percent values (vatRate ≤ 100). */
 export function normalizeLines(lines: OfferLine[]): OfferLine[] {
   return (lines ?? []).map((l) => ({ ...l, vatRate: l.vatRate > 1 ? Math.round(l.vatRate * 100) / 10000 : l.vatRate }));
 }

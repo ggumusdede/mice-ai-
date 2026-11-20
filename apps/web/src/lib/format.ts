@@ -149,3 +149,21 @@ export function humanizeKey(key: string): string {
   const s = key.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
   return s.charAt(0).toLocaleUpperCase('tr-TR') + s.slice(1);
 }
+
+const STALE_SOURCE: Record<string, string> = {
+  quote: 'Müşteri teklifi', project: 'Proje', service_item: 'Hizmet kalemi', supplier_offer: 'Tedarikçi teklifi',
+  contract: 'Sözleşme', finance_entry: 'Finans kaydı', guest: 'Misafir listesi', field_extra: 'Saha ekstrası', customer: 'Müşteri',
+};
+const STALE_FIELD: Record<string, string> = {
+  accepted_option_no: 'kabul edilen seçenek', status: 'durum', pax: 'kişi sayısı', start_date: 'başlangıç', end_date: 'bitiş',
+  rooms_sgl: 'SGL oda', rooms_dbl: 'DBL oda', hall_layout: 'salon düzeni', fnb_needs: 'yiyecek-içecek', quantity: 'miktar',
+  nights: 'gece', lines: 'satırlar', options: 'seçenekler', currency: 'para birimi', billing_info: 'fatura bilgisi',
+};
+/** DB staleness reasons look like `quote değişti: accepted_option_no, status` (format used by the propagation trigger). */
+export function staleReason(reason: string | null | undefined): string {
+  if (!reason) return '';
+  const m = /^(\w+) değişti: (.*)$/.exec(reason.trim());
+  if (!m) return reason;
+  const fields = m[2].split(/,\s*/).filter(Boolean).map((f) => STALE_FIELD[f] ?? f.replace(/_/g, ' '));
+  return `${STALE_SOURCE[m[1]] ?? m[1].replace(/_/g, ' ')} değişti${fields.length ? ` (${fields.join(', ')})` : ''}`;
+}

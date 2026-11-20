@@ -67,7 +67,7 @@ function ItemComparison({ item }: { item: ServiceItemDetail }) {
                     <h4>{t.comparison.hiddenCosts}</h4>
                     <ul className="bullets small">
                       {ev.normalized.hiddenCosts.map((h, i) => <li key={`h${i}`} className={h.severity === 'critical' ? 'text-danger' : h.severity === 'warning' ? 'text-warning' : ''}>{h.description}</li>)}
-                      {ev.risks.map((r, i) => <li key={`r${i}`}>{r}</li>)}
+                      {[...new Set(ev.risks)].filter((r) => !ev.normalized.hiddenCosts.some((h) => h.description === r)).map((r, i) => <li key={`r${i}`}>{r}</li>)}
                     </ul>
                   </div>
                 ) : null}

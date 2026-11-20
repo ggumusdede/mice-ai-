@@ -64,7 +64,7 @@ export function SupplierRfqPage() {
         <dl className="kv">
           <div className="kv__row"><dt>{t.common.date}</dt><dd>{dateRange(v.item.dateFrom, v.item.dateTo)}</dd></div>
           <div className="kv__row"><dt>{t.common.quantity}</dt><dd>{v.item.quantity} {v.item.unit}{v.item.nights ? ` · ${v.item.nights} gece` : ''}</dd></div>
-          {specs.map(([k, x]) => <div key={k} className="kv__row"><dt>{k}</dt><dd>{String(x)}</dd></div>)}
+          {specs.map(([k, x]) => <div key={k} className="kv__row"><dt>{t.extractionField[k] ?? k}</dt><dd>{String(x)}</dd></div>)}
           <div className="kv__row"><dt>{t.publicPages.deadline}</dt><dd><strong>{dateTime(v.deadlineAt)}</strong></dd></div>
         </dl>
         <p className="muted small">{t.publicPages.rfqIntro}</p>
