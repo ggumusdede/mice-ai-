@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Role } from '@mice/shared';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n';
@@ -122,7 +122,7 @@ function initials(name?: string | null) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toLocaleUpperCase('tr-TR')).join('');
 }
 
-export function PageHeader({ title, subtitle, actions, large = true }: { title: React.ReactNode; subtitle?: React.ReactNode; actions?: React.ReactNode; large?: boolean }) {
+export function PageHeader({ title, subtitle, actions, large = true }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; large?: boolean }) {
   return (
     <header className={`page-head ${large ? 'page-head--large' : ''}`}>
       <div>

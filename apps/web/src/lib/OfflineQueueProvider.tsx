@@ -61,7 +61,9 @@ export function OfflineQueueProvider({ children, store }: { children: ReactNode;
   }, [refresh]);
 
   useEffect(() => {
-    void refresh().then(() => navigator.onLine && flush());
+    void refresh().then(() => {
+      if (navigator.onLine) void flush();
+    });
   }, [refresh, flush]);
 
   useEffect(() => {
