@@ -22,7 +22,7 @@ export const tr = {
   },
   nav: {
     inbox: 'Karar kutusu', projects: 'Projeler', field: 'Saha', report: 'Rapor', admin: 'Yönetim',
-    newRequest: 'Yeni talep', settings: 'Ayarlar',
+    newRequest: 'Yeni talep', settings: 'Ayarlar', finance: 'Finans', more: 'Diğer sayfalar',
   },
   login: {
     title: 'Giriş yap', subtitle: 'Kararlarınız sizi bekliyor.', email: 'E-posta', password: 'Şifre',
@@ -137,6 +137,9 @@ export const tr = {
     timer: 'Teklif süresi', timerOf: (e: string, tgt: string) => `${e} / hedef ${tgt}`, customerWait: 'Müşteri bekleme',
     won: 'Kazanıldı', lost: 'Kaybedildi', lostReason: 'Kayıp nedeni (zorunlu)', markOutcome: 'Sonuç kaydet',
     noItems: 'Henüz hizmet kalemi yok.', addItem: 'Kalem ekle', owner: 'Sorumlu', notFound: 'Proje bulunamadı',
+    info: 'Proje bilgileri', billingInfo: 'Fatura bilgisi', venue: 'Mekân', venueHint: 'Konaklama / salon teklifi seçilince otomatik dolar; proje kodunun mekân kısmı güncellenir.',
+    billingMissing: 'Fatura bilgisi eksik — sözleşme ve müşteri faturası için gerekli.', billingPlaceholder: 'Ünvan, vergi dairesi / no, adres',
+    codeHint: 'PRJ numarası sabit kalır; eski kod denetim kaydında.', generateDoc: 'Belge üret', docGenerated: (k: string, v: number) => `${k} v${v} üretildi`,
   },
   items: {
     kind: 'Tür', description: 'Açıklama', dateFrom: 'Başlangıç', dateTo: 'Bitiş', quantity: 'Miktar', unit: 'Birim',
@@ -191,6 +194,7 @@ export const tr = {
     reflected: 'Yansıtıldı', notReflected: 'Yansıtılmadı', needsAdmin: 'Yönetici onayı gerekli', withinLimit: 'Limit içinde',
     dailySummary: 'Günlük özet', complete: 'Tamamla', noTasks: 'Görev yok.', noGuests: 'Misafir kaydı yok.',
     noExtras: 'Ekstra harcama yok.', room: 'Oda', arrival: 'Giriş', departure: 'Çıkış', overdue: 'Gecikmiş',
+    roomingExcel: 'Excel (standart şablon)', piiMasked: 'Kişisel veriler rolünüz için maskelenir (KVKK).',
   },
   finance: {
     entries: 'Finans kayıtları', supplierInvoice: 'Tedarikçi faturası', invoiceNo: 'Fatura no', issueDate: 'Fatura tarihi',
@@ -198,11 +202,26 @@ export const tr = {
     customerInvoiceDraft: 'Müşteri faturası taslağı üret', alarms: 'Alarmlar', noEntries: 'Kayıt yok.',
     paymentRequested: 'Ödeme talebi oluşturuldu; onay yöneticide.', kind: 'Tür', reference: 'Referans',
     uploadInvoice: 'Fatura dosyası (e-fatura / PDF)',
+    markPaid: 'Ödendi olarak işaretle', paymentRef: 'Banka işlem referansı', markedPaid: 'Ödeme kaydedildi (bankada insan tarafından yapıldı).',
+    paidAt: 'Ödeme tarihi', commissions: 'Komisyonlar', reconcile: 'Mutabakat yap', reconciled: 'Mutabakat tamam',
+    commissionInvoiceNo: 'Komisyon fatura no', noCommissions: 'Komisyon kaydı yok.',
+    customerInvoice: 'Müşteri faturası (Mikro’da kesilen)', customerInvoiceHint: 'Muhasebe faturayı Mikro’da keser; buraya fatura numarasını ve tutarı kaydedin.',
+    recordInvoice: 'Fatura numarasını kaydet', invoiceRecorded: 'Müşteri faturası kaydedildi.',
+    pageTitle: 'Finans', pageSubtitle: 'Banka ekstresi, eşleştirme, ödemeler, komisyonlar ve Mikro aktarımı. Sistem para hareket ettirmez.',
+    bank: 'Banka ekstresi', uploadStatement: 'Ekstre yükle (CSV / XLSX)', statementHint: 'Yüksek güvenli eşleşmeler otomatik; düşük güvenli olanlar karar kutusuna öneri olarak düşer.',
+    importSummary: 'İçe aktarma özeti', imported: 'Okunan', matched: 'Eşleşti', suggested: 'Öneri', unmatched: 'Eşleşmedi', duplicates: 'Mükerrer',
+    transactions: 'Banka hareketleri', noTransactions: 'Banka hareketi yok.', counterparty: 'Karşı taraf', match: 'Eşleştir', matchTo: 'Finans kaydı',
+    txStatus: { unmatched: 'Eşleşmedi', suggested: 'Öneri', matched: 'Eşleşti', ignored: 'Yok sayıldı' } as Record<string, string>,
+    approvedPayments: 'Onaylı ödemeler — bankadan ödeyip işaretleyin', noApproved: 'Bekleyen onaylı ödeme yok.',
+    mikro: 'Mikro aktarımı', mikroHint: 'Fatura tarihine göre Excel (Mikro “Excel’den fatura aktarımı”; sütunlar muhasebeciyle doğrulanacak).',
+    mikroDownload: 'Excel indir', from: 'Başlangıç', to: 'Bitiş', unreflected: 'Yansıtılmayan fiyat farkları (saha ekstraları)',
+    byProject: 'Projeye göre', byCustomer: 'Müşteriye göre', noUnreflected: 'Yansıtılmayan fark yok.', project: 'Proje', customer: 'Müşteri',
   },
   closing: {
     checklist: 'Kapanış kontrolü', planVsActual: 'Plan vs gerçekleşen', planned: 'Plan', actual: 'Gerçekleşen',
     deviations: 'Sapma nedenleri', lessons: 'Bu projede neyi geç öğrendik?', lessonsHint: 'Cevaplar talep kontrol listesine soru önerisi olur.',
     close: 'Projeyi kapat', closed: 'Proje kapatıldı', notReady: 'Kapanış koşulları tamamlanmadı.',
+    surveyLink: 'Müşteri anketi linki (3 soru)', suggestions: (n: number) => `${n} kontrol listesi önerisi karar kutusuna düştü.`,
   },
   field: {
     title: 'Saha paneli', todayProjects: 'Bugünkü projeler', noProjects: 'Bugün sahada proje yok.',
@@ -214,7 +233,7 @@ export const tr = {
     withinLimits: 'Limit içinde — kararı siz verirsiniz', needsAdmin: 'Limit aşıldı — yönetici / vekil onayı gerekecek',
     projectTotal: 'Bu projede ekstra toplamı', offlineQueue: (n: number) => `${n} kayıt gönderilmeyi bekliyor`,
     offline: 'Çevrimdışı', online: 'Çevrimiçi', syncNow: 'Şimdi gönder', synced: 'Tüm kayıtlar gönderildi',
-    selectProject: 'Proje seçin',
+    selectProject: 'Proje seçin', upcoming: 'Yaklaşan (7 gün)', noUpcoming: 'Önümüzdeki 7 günde etkinlik yok.',
   },
   report: {
     title: 'Haftalık gelişim raporu', week: 'Hafta', quoteTime: 'Talep → teklif süresi', median: 'Medyan',

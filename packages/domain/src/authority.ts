@@ -32,7 +32,10 @@ export function canDecide(user: Pick<User, 'id' | 'role'>, decision: { kind: Dec
   };
 }
 
-const BIOMETRIC: ReadonlySet<DecisionKind> = new Set<DecisionKind>(['payment_approval', 'contract_approval', 'field_extra']);
+/** §15 "Para ve sözleşme onaylarında biyometrik doğrulama zorunlu": payments, contracts, field extras (money spent on site) and
+ *  customer quotes — a sent quote is a priced commitment to the customer, so its approval and a below-target margin override are
+ *  money approvals too. */
+const BIOMETRIC: ReadonlySet<DecisionKind> = new Set<DecisionKind>(['payment_approval', 'contract_approval', 'field_extra', 'quote_approval', 'margin_override']);
 /** Money and contract approvals require biometric (Face ID) step-up (§15). */
 export function requiresBiometric(kind: DecisionKind): boolean {
   return BIOMETRIC.has(kind);

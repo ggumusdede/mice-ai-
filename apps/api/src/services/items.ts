@@ -3,7 +3,7 @@ import type { ServiceItem, ServiceItemInput, SupplierRanking } from '@mice/share
 import type { Ctx } from '../context.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { mapServiceItem, type Row } from '../lib/mappers.js';
-import { getProjectRow } from './projects.js';
+import { getProjectRow, patchProject } from './projects.js';
 import { rankForProject } from './suppliers.js';
 
 export async function getItemRow(ctx: Ctx, id: string, forUpdate = false): Promise<Row> {
@@ -58,7 +58,27 @@ export async function selectOffer(ctx: Ctx, id: string, offerId: string): Promis
   if (!o) throw notFound('Bu kaleme ait teklif');
   if (o.superseded_by) throw conflict('Bu teklif sürümü eskidi; güncel sürümü seçin', 'OFFER_SUPERSEDED');
   const { rows } = await ctx.db.query(`UPDATE service_items SET selected_offer_id = $2, status = 'selected' WHERE id = $1 RETURNING *`, [id, offerId]);
+  if (VENUE_KINDS.includes(rows[0].kind)) await syncProjectVenue(ctx, rows[0].project_id);
   return mapServiceItem(rows[0]);
+}
+
+const VENUE_KINDS = ['accommodation', 'hall'];
+
+/**
+ * §5 project code `PRJ-####-MÜŞTERİ-TARİH-KİŞİ-MEKÂN`: the venue segment follows the selected accommodation offer (else the
+ * selected hall offer). Sets projects.venue_name through patchProject, which regenerates the code with formatProjectCode — the
+ * PRJ-#### sequence never changes and the previous code stays in the audit log (projects UPDATE before/after).
+ */
+export async function syncProjectVenue(ctx: Ctx, projectId: string): Promise<string | null> {
+  const p = await getProjectRow(ctx, projectId);
+  const { rows } = await ctx.db.query(
+    `SELECT s.name, si.kind FROM service_items si JOIN supplier_offers o ON o.id = si.selected_offer_id JOIN suppliers s ON s.id = o.supplier_id
+      WHERE si.project_id = $1 AND si.status <> 'cancelled' AND si.kind = ANY($2)
+      ORDER BY CASE si.kind WHEN 'accommodation' THEN 0 ELSE 1 END, si.sort, si.created_at LIMIT 1`, [projectId, VENUE_KINDS]);
+  const venue = rows[0]?.name ?? null;
+  if (!venue || venue === p.venue_name) return p.venue_name;
+  await patchProject(ctx, projectId, { venueName: venue });
+  return venue;
 }
 
 export async function shortlistForItem(ctx: Ctx, id: string): Promise<SupplierRanking[]> {

@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { CURRENCIES } from '@mice/shared';
 import { asUser, idParam, list, parse, readMultipart, requireAuth } from './_helpers.js';
-import { badRequest } from '../errors.js';
+import { badRequest, conflict } from '../errors.js';
 import { createRoomingLink, listGuests, staffAddGuests, withdrawConsent } from '../services/guests.js';
 import {
   createFieldExtra, createFieldIssue, dailySummary, listFieldExtras, listFieldIssues, reflectFieldExtra, unreflectedTotals,
@@ -13,6 +13,8 @@ import {
   recordCustomerInvoice, recordSupplierInvoice, reconcileCommission,
 } from '../services/finance.js';
 import { generateDocument } from '../services/documents.js';
+import { roomingListXlsx } from '../services/documents-b.js';
+import { loadQuotes } from '../services/quotes.js';
 import { getProjectRow } from '../services/projects.js';
 import { mapDocument } from '../lib/mappers.js';
 
@@ -39,6 +41,32 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/projects/:id/rooming-link', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     return asUser(req, (ctx) => createRoomingLink(ctx, id), ['admin', 'clerk_ops', 'clerk_sales']);
+  });
+  // (additive) standard rooming list Excel template, rendered live — PII decrypted only for roles with view_guest_pii (§17.9)
+  app.get('/api/projects/:id/rooming-list.xlsx', auth, async (req, reply) => {
+    const { id } = parse(idParam, req.params);
+    const file = await asUser(req, (ctx) => roomingListXlsx(ctx, id));
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(file.fileName)}"`);
+    reply.header('X-Row-Count', String(file.rows));
+    reply.header('X-PII-Masked', file.masked ? '1' : '0');
+    return reply.send(file.data);
+  });
+  // (additive) generate a project document from data: program, rooming_list (counts only), pnl (planned + realized)
+  app.post('/api/projects/:id/documents', auth, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const { kind } = parse(z.object({ kind: z.enum(['program', 'rooming_list', 'pnl']) }), req.body);
+    return asUser(req, async (ctx) => {
+      await getProjectRow(ctx, id);
+      let entityId: string | null = null;
+      if (kind === 'pnl') {
+        const quotes = await loadQuotes(ctx, { projectId: id });
+        const q = quotes.find((x) => x.status === 'accepted') ?? quotes.find((x) => x.status !== 'superseded');
+        if (!q) throw conflict('Kâr-zarar tablosu için müşteri teklifi gerekli', 'NO_QUOTE');
+        entityId = q.id;
+      }
+      return mapDocument(await generateDocument(ctx, kind, id, entityId));
+    }, ['admin', 'clerk_sales', 'clerk_ops', 'finance']);
   });
   // (additive) staff-recorded consent withdrawal (guest asked by phone / e-mail)
   app.post('/api/guests/:id/withdraw-consent', auth, async (req) => {

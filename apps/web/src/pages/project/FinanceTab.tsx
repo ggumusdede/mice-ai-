@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import type { FinanceEntry } from '@mice/shared';
 import { CURRENCIES, type SupplierInvoiceInput } from '@mice/shared';
 import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
@@ -7,6 +8,7 @@ import { date, eur, money } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, Callout, Card, Checkbox, ErrorBox, FilePicker, InlineError, Loading, Pill, Select, TextInput, type Tone } from '../../components/ui';
 import { useProject } from './ProjectContext';
+import { MarkPaidAction, ReconcileAction } from '../../components/FinanceActions';
 import { supplierName, useSuppliers } from './useSuppliers';
 
 const STATUS_TONE: Record<string, Tone> = { open: 'accent', pending_approval: 'warning', approved: 'success', paid: 'success', matched: 'success', cancelled: 'neutral' };
@@ -19,6 +21,11 @@ export function FinanceTab() {
   const res = useApi(() => api.finance.entries({ projectId: detail.project.id }), [detail.project.id]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
+  const { reload: reloadProject } = useProject();
+  const replace = (n: FinanceEntry) => {
+    res.setData((p) => (p ?? []).map((x) => (x.id === n.id ? n : x)));
+    void reloadProject();
+  };
 
   return (
     <div className="stack stack--lg">
@@ -82,6 +89,12 @@ export function FinanceTab() {
                           }
                         }}>{t.finance.paymentRequest}</Button>
                       ) : null}
+                      {(e.kind === 'payable' || e.kind === 'supplier_invoice') && e.status === 'approved' ? (
+                        <MarkPaidAction entry={e} onDone={(n) => { replace(n); toast(t.finance.markedPaid); }} />
+                      ) : null}
+                      {e.kind === 'commission' && e.status === 'open' ? (
+                        <ReconcileAction entry={e} onDone={(n) => { replace(n); toast(t.finance.reconciled); }} />
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -91,6 +104,7 @@ export function FinanceTab() {
         ) : null}
       </Card>
       <SupplierInvoiceForm onSaved={() => void res.reload()} />
+      <CustomerInvoiceForm onSaved={() => { void res.reload(); void reloadProject(); }} />
     </div>
   );
 }
@@ -164,6 +178,56 @@ function SupplierInvoiceForm({ onSaved }: { onSaved: () => void }) {
         <div className="span-full row-end">
           <InlineError message={error} />
           <Button type="submit" busy={busy} disabled={!f.supplierId || !f.invoiceNo}>{t.common.save}</Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/** The customer invoice is issued in Mikro by accounting (§17.8); its number and amount are recorded here. */
+function CustomerInvoiceForm({ onSaved }: { onSaved: () => void }) {
+  const t = useT();
+  const toast = useToast();
+  const { detail } = useProject();
+  const accepted = detail.quotes.find((q) => q.status === 'accepted' && q.acceptedOptionNo != null) ?? null;
+  const opt = accepted?.options.find((o) => o.optionNo === accepted.acceptedOptionNo) ?? null;
+  const suggested = opt && accepted ? Math.round(opt.totals.saleEur * accepted.fxRate * 100) / 100 : 0;
+  const [f, setF] = useState({ invoiceNo: '', amount: suggested, currency: accepted?.currency ?? 'EUR', vatAmount: '' as string, issueDate: new Date().toISOString().slice(0, 10), dueDate: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.finance.customerInvoice({
+        projectId: detail.project.id, invoiceNo: f.invoiceNo.trim(), amount: Number(f.amount), currency: f.currency,
+        ...(f.vatAmount ? { vatAmount: Number(f.vatAmount) } : {}), issueDate: f.issueDate, ...(f.dueDate ? { dueDate: f.dueDate } : {}),
+      });
+      toast(t.finance.invoiceRecorded);
+      setF({ ...f, invoiceNo: '' });
+      onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title={t.finance.customerInvoice}>
+      <p className="muted small">{t.finance.customerInvoiceHint}</p>
+      <form className="form-grid" onSubmit={submit} aria-label={t.finance.customerInvoice}>
+        <TextInput label={t.finance.invoiceNo} value={f.invoiceNo} onChange={(e) => setF({ ...f, invoiceNo: e.target.value })} required />
+        <TextInput label={`${t.common.amount} (matrah)`} type="number" min={0} step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} required />
+        <Select label={t.common.currency} value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value })}>
+          {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+        </Select>
+        <TextInput label={t.finance.vat} type="number" min={0} step="0.01" value={f.vatAmount} onChange={(e) => setF({ ...f, vatAmount: e.target.value })} />
+        <TextInput label={t.finance.issueDate} type="date" value={f.issueDate} onChange={(e) => setF({ ...f, issueDate: e.target.value })} required />
+        <TextInput label={t.finance.dueDate} type="date" value={f.dueDate} onChange={(e) => setF({ ...f, dueDate: e.target.value })} />
+        <div className="span-full row-end">
+          <InlineError message={error} />
+          <Button type="submit" busy={busy} disabled={!f.invoiceNo.trim() || !(Number(f.amount) > 0)}>{t.finance.recordInvoice}</Button>
         </div>
       </form>
     </Card>

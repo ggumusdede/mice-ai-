@@ -62,9 +62,12 @@ describe('quote blocking rules', () => {
     expect(dec).toBeTruthy();
     expect((await clerk.get('/api/decisions')).body.items.find((d: any) => d.id === dec.id)).toBeUndefined();
     expect((await clerk.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', reason: 'x' })).status).toBe(403);
-    const noReason = await admin.post(`/api/decisions/${dec.id}/decide`, { action: 'approve' });
+    expect(dec.requiresBiometric).toBe(true); // §15 money approval
+    const noReason = await admin.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', biometric: { method: 'dev' } });
     expect(noReason.body.error.code).toBe('REASON_REQUIRED');
-    const ok = await admin.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', reason: 'Stratejik müşteri, ilk iş' });
+    const noBio = await admin.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', reason: 'Stratejik müşteri, ilk iş' });
+    expect(noBio.body.error.code).toBe('BIOMETRIC_REQUIRED');
+    const ok = await admin.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', reason: 'Stratejik müşteri, ilk iş', biometric: { method: 'dev' } });
     expect(ok.body.effects).toContain('quote_approved');
     const quote = await clerk.get(`/api/quotes/${r.body.id}`);
     expect(quote.body.status).toBe('approved');
@@ -88,13 +91,14 @@ describe('approval gate (§4 personal authority, §17.1 delegation, §15 inbox)'
     expect((await clerk.post(`/api/quotes/${r.body.id}/send`)).body.error.code).toBe('QUOTE_NOT_APPROVED');
     const dec = (await admin.get('/api/decisions')).body.items.find((d: any) => d.kind === 'quote_approval' && d.entityId === r.body.id);
     expect(dec.badge).toBe('within_rules');
-    expect(dec.requiresBiometric).toBe(false);
+    expect(dec.requiresBiometric).toBe(true); // §15: a customer quote is a money commitment
     // ops user cannot decide; with an active delegation they can (marked viaDelegation)
     expect((await ops.post(`/api/decisions/${dec.id}/decide`, { action: 'approve' })).status).toBe(403);
     await ownerSql(`INSERT INTO delegations (tenant_id, admin_id, delegate_id, starts_at, ends_at) VALUES ($1,$2,$3,$4,$5)`,
       [t.tenantId, t.users.admin.id, t.users.ops.id, '2026-11-19T00:00:00Z', '2026-11-30T00:00:00Z']);
     expect((await ops.get('/api/decisions')).body.items.find((d: any) => d.id === dec.id)).toBeTruthy();
-    const res = await ops.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', device: 'iPhone 15' });
+    expect((await ops.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', device: 'iPhone 15' })).body.error.code).toBe('BIOMETRIC_REQUIRED');
+    const res = await ops.post(`/api/decisions/${dec.id}/decide`, { action: 'approve', device: 'iPhone 15', biometric: { method: 'dev' } });
     expect(res.status).toBe(200);
     expect(res.body.decision.viaDelegation).toBe(true);
     expect(res.body.decision.decidedDevice).toBe('iPhone 15');

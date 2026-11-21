@@ -1,6 +1,7 @@
 // Block 6 — documents are generated from data, versioned, with recorded dependencies (§3.1, §3.5).
 // When an entity a document read from changes, DB triggers mark it 'stale'; stale documents cannot be sent until regenerated.
-// Extension point (phase B): registerDocumentGenerator('program' | 'rooming_list' | 'customer_invoice_draft' | ..., fn).
+// Extension point: registerDocumentGenerator(kind, …). quote + pnl: quotes.ts; customer_invoice_draft: closing.ts;
+// program + rooming_list: documents-b.ts.
 import type { DocumentKind, GeneratedDocument } from '@mice/shared';
 import type { Ctx } from '../context.js';
 import { conflict, notFound } from '../errors.js';
@@ -8,7 +9,9 @@ import { mapDocument, type Row } from '../lib/mappers.js';
 
 export interface GeneratedDoc {
   content: Record<string, unknown>;
+  /** rendered file (PDF unless `mimeType` says otherwise) */
   pdf?: Buffer;
+  mimeType?: string;
   fileName?: string;
   /** entities read while rendering (precise staleness) */
   deps: { type: string; id: string; version?: number | null }[];
@@ -33,7 +36,7 @@ export async function generateDocument(ctx: Ctx, kind: DocumentKind, projectId: 
     `INSERT INTO documents (tenant_id, project_id, kind, version, status, entity_type, entity_id, content, file_name, mime_type, file_data, generated_by, generated_at)
      VALUES (app_tenant_id(), $1,$2,$3,'current',$4,$5,$6,$7,$8,$9,$10,$11) RETURNING ${DOC_COLS}`,
     [projectId, kind, version, entityId ? g.entityType : null, entityId, JSON.stringify(out.content), out.fileName ?? null,
-      out.pdf ? 'application/pdf' : null, out.pdf ?? null, ctx.user?.id ?? null, ctx.now()],
+      out.pdf ? out.mimeType ?? 'application/pdf' : null, out.pdf ?? null, ctx.user?.id ?? null, ctx.now()],
   )).rows[0];
   for (const d of out.deps) {
     await ctx.db.query(

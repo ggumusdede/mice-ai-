@@ -118,7 +118,12 @@ describe('authority & delegation (§17.1)', () => {
   it('biometric for money and contract approvals', () => {
     expect(requiresBiometric('payment_approval')).toBe(true);
     expect(requiresBiometric('contract_approval')).toBe(true);
-    expect(requiresBiometric('quote_approval')).toBe(false);
+    expect(requiresBiometric('field_extra')).toBe(true);
+    // a customer quote is a money commitment (§15) — approval and margin override need Face ID too
+    expect(requiresBiometric('quote_approval')).toBe(true);
+    expect(requiresBiometric('margin_override')).toBe(true);
+    expect(requiresBiometric('rfq_send')).toBe(false);
+    expect(requiresBiometric('assignment')).toBe(false);
     expect(requiresBiometric('checklist_question')).toBe(false);
   });
   it('role capabilities', () => {

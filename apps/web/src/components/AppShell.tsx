@@ -26,10 +26,18 @@ export function AppShell() {
     { to: '/', label: t.nav.inbox, icon: 'inbox', end: true },
     { to: '/projeler', label: t.nav.projects, icon: 'folder', roles: ['admin', 'clerk_sales', 'clerk_ops', 'finance', 'signatory'] },
     { to: '/saha', label: t.nav.field, icon: 'field' },
+    { to: '/finans', label: t.nav.finance, icon: 'chart', roles: ['admin', 'finance'] },
     { to: '/rapor', label: t.nav.report, icon: 'chart', roles: ['admin'] }, // GET /api/reports/weekly is admin-only
     { to: '/yonetim', label: t.nav.admin, icon: 'settings', roles: ['admin'] },
   ];
   const visible = nav.filter((n) => !n.roles || (user && n.roles.includes(user.role)));
+  const canCreate = !!user && ['admin', 'clerk_sales', 'clerk_ops'].includes(user.role);
+  // mobile tab bar (§15 mobile-first): at most 4 tabs + profile; "Yeni talep" for sales / ops / admin; the rest in the profile sheet
+  const TAB_ORDER = ['/', '/projeler', '/saha', '/finans'];
+  const primary: NavItem[] = visible.filter((n) => TAB_ORDER.includes(n.to));
+  if (canCreate) primary.splice(Math.min(2, primary.length), 0, { to: '/projeler/yeni', label: t.nav.newRequest, icon: 'plus', end: true });
+  const tabs = primary.slice(0, 4);
+  const overflow = visible.filter((n) => !tabs.some((x) => x.to === n.to));
   const wide = /^\/projeler\/[^/]+/.test(loc.pathname) && loc.pathname !== '/projeler/yeni';
 
   return (
@@ -43,7 +51,7 @@ export function AppShell() {
             <div className="sidebar__tenant">{me?.tenant.name || t.app.agency}</div>
           </div>
         </div>
-        {user && ['admin', 'clerk_sales', 'clerk_ops'].includes(user.role) ? (
+        {canCreate ? (
           <NavLink to="/projeler/yeni" className="btn btn--primary sidebar__cta">
             <Icon name="plus" size={18} />
             <span>{t.nav.newRequest}</span>
@@ -79,9 +87,9 @@ export function AppShell() {
       </main>
 
       <nav className="tabbar" aria-label="Ana menü">
-        {visible.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `tabbar__link ${isActive ? 'is-active' : ''}`}>
-            <Icon name={n.icon} size={22} />
+        {tabs.map((n) => (
+          <NavLink key={n.to} to={n.to} end={n.end || n.to === '/projeler'} className={({ isActive }) => `tabbar__link ${n.to === '/projeler/yeni' ? 'tabbar__link--new' : ''} ${isActive ? 'is-active' : ''}`}>
+            {n.to === '/projeler/yeni' ? <span className="tabbar__plus" aria-hidden><Icon name="plus" size={20} /></span> : <Icon name={n.icon} size={22} />}
             <span>{n.label}</span>
           </NavLink>
         ))}
@@ -94,6 +102,17 @@ export function AppShell() {
       <BottomSheet open={profileOpen} onClose={() => setProfileOpen(false)} title={user?.fullName ?? ''}>
         <p className="muted">{user?.email} · {user ? t.role[user.role] : ''}</p>
         {isDelegate ? <Callout tone="purple" icon="shield">{t.inbox.delegationMarker}</Callout> : null}
+        {overflow.length ? (
+          <nav className="sheet-nav" aria-label={t.nav.more}>
+            {overflow.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setProfileOpen(false)} className={({ isActive }) => `sheet-nav__link ${isActive ? 'is-active' : ''}`}>
+                <Icon name={n.icon} size={20} />
+                <span>{n.label}</span>
+                <Icon name="chevron" size={16} />
+              </NavLink>
+            ))}
+          </nav>
+        ) : null}
         <div className="stack">
           {webauthnSupported() ? (
             <Button

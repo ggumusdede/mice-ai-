@@ -1,7 +1,8 @@
 // Typed HTTP client for the FIXED contract in @mice/shared (packages/shared/src/api.ts).
 // Base path /api, Bearer JWT, errors { error: { code, message, details? } }, lists { items: T[] }.
 import type {
-  ApiError, AskResponse, AuditEntry, AutomationCounter, BuildQuoteRequest, ChannelPriceInput, ChecklistQuestion,
+  ApiError, AskResponse, AuditEntry, AutomationCounter, BankStatementImportResult, BankTransaction, BuildQuoteRequest, CloseProjectResponse, CustomerInvoiceInput,
+  GenerateDocumentRequest, UnreflectedTotals, ChannelPriceInput, ChecklistQuestion,
   ClosingCheck, ComparisonResponse, Contract, CreateRfqsRequest, Customer, DailySummary, Decision, DecideResponse,
   DecisionInput, Delegation, DelegationInput, FieldExtra, FieldExtraInput, FieldIssue, FieldIssueInput, FinanceEntry,
   GeneratedDocument, Guest, IntakeRequest, IntakeResponse, List, LoginRequest, LoginResponse, ManualOfferInput,
@@ -199,7 +200,10 @@ export const api = {
     dailySummary: (id: string) => get<DailySummary>(`/projects/${enc(id)}/daily-summary`),
     customerInvoiceDraft: (id: string) => post<GeneratedDocument>(`/projects/${enc(id)}/customer-invoice-draft`),
     closingCheck: (id: string) => get<ClosingCheck>(`/projects/${enc(id)}/closing-check`),
-    close: (id: string, lessonsLearned?: string) => post<Project>(`/projects/${enc(id)}/close`, { lessonsLearned }),
+    close: (id: string, lessonsLearned?: string) => post<CloseProjectResponse>(`/projects/${enc(id)}/close`, { lessonsLearned }),
+    generateDocument: (id: string, kind: GenerateDocumentRequest['kind']) => post<GeneratedDocument>(`/projects/${enc(id)}/documents`, { kind }),
+    /** standard rooming list Excel (PII only for authorized roles — masked otherwise) */
+    roomingListXlsx: (id: string, code?: string) => openBinary(`/projects/${enc(id)}/rooming-list.xlsx`, `${code ?? 'proje'}-rooming-list.xlsx`),
   },
   items: {
     patch: (id: string, b: Partial<ServiceItemInput>) => patch<ServiceItem>(`/items/${enc(id)}`, b),
@@ -244,6 +248,7 @@ export const api = {
     complete: (id: string) => post<Task>(`/tasks/${enc(id)}/complete`),
   },
   fieldExtras: {
+    unreflectedTotals: () => get<UnreflectedTotals>('/field-extras/unreflected-totals'),
     reflect: (id: string, b: { reflected: boolean; reason?: string }) => post<FieldExtra>(`/field-extras/${enc(id)}/reflect`, b),
   },
   documents: {
@@ -255,6 +260,17 @@ export const api = {
     supplierInvoiceFile: (file: File, meta: Partial<Record<keyof SupplierInvoiceInput, string>>) =>
       post<{ entry: FinanceEntry; alarms: string[] }>('/finance/supplier-invoices', fileForm(file, meta as Record<string, string>)),
     paymentRequest: (entryId: string) => post<FinanceEntry>('/finance/payment-requests', { entryId }),
+    /** a human records the bank payment of an approved request (the system never pays, §6) */
+    markPaid: (entryId: string, b: { paidAt?: string; reference?: string } = {}) => post<FinanceEntry>(`/finance/entries/${enc(entryId)}/mark-paid`, b),
+    bankStatement: (file: File) => post<BankStatementImportResult>('/finance/bank-statements', fileForm(file)),
+    bankTransactions: (status?: BankTransaction['status']) => items(get<List<BankTransaction>>('/finance/bank-transactions', { status })),
+    matchBankTransaction: (id: string, entryId: string) => post<BankTransaction>(`/finance/bank-transactions/${enc(id)}/match`, { entryId }),
+    commissions: (projectId?: string) => items(get<List<FinanceEntry>>('/finance/commissions', { projectId })),
+    reconcileCommission: (id: string, b: { invoiceNo?: string; amount?: number }) => post<FinanceEntry>(`/finance/commissions/${enc(id)}/reconcile`, b),
+    customerInvoice: (b: CustomerInvoiceInput) => post<FinanceEntry>('/finance/customer-invoices', b),
+    /** Mikro Yazılım import Excel (authenticated binary download) */
+    mikroExport: (q: { from?: string; to?: string } = {}) =>
+      openBinary(`/finance/export/mikro${buildQuery(q)}`, `mikro-aktarim-${q.from ?? 'baslangic'}-${q.to ?? 'bugun'}.xlsx`),
   },
   rules: {
     get: () => get<RulesResponse>('/rules'),

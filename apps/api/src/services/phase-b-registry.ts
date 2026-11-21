@@ -5,6 +5,7 @@ import { getDecisionEffect, onDecisionCreated, registerDecisionEffect, type Deci
 import { notifyDecision } from './notifications.js';
 import { manualMatch, paymentDecisionEffect, paymentMatchEffect } from './finance.js';
 import { registerClosingDocuments } from './closing.js';
+import { registerPhaseBDocuments } from './documents-b.js';
 
 let done = false;
 
@@ -12,6 +13,7 @@ export function registerPhaseB(): void {
   if (done) return;
   done = true;
   registerClosingDocuments();
+  registerPhaseBDocuments();
   onDecisionCreated(notifyDecision);
 
   // §7 Adım 7: every payment individually, Face ID (requiresBiometric), admin or delegate; AI never (money_movement)

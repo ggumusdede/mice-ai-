@@ -22,7 +22,8 @@ import { createDecision, expireDecisionsFor } from './decisions.js';
 import { generateDocument, latestDocumentFor, registerDocumentGenerator } from './documents.js';
 import { aiDraft, sendDraft } from './drafts.js';
 import { logAiAction } from './ai-log.js';
-import { money, pct, renderPdf } from './pdf.js';
+import { money, pct, renderPdf, type PdfSpec } from './pdf.js';
+import type { RealizedPnl } from './documents-b.js';
 
 export interface BuildQuoteInput extends BuildQuoteRequest {
   /** (additive) explicit customer option date; blocked if later than any supplier option (§7 Adım 3) */
@@ -513,10 +514,13 @@ function registerQuoteDocuments(): void {
       })),
       finance: fin.map((f) => ({ kind: f.kind, status: f.status, totalEur: Number(f.total) })),
       contracts: contracts.map((c) => ({ id: c.id, status: c.status })),
+      // Adım 7/8: realized P&L once there are invoices (plan vs actual; margin and markup separately)
+      realized: quote.acceptedOptionNo != null ? await (await import('./documents-b.js')).realizedPnl(ctx, p.id) : null,
     };
+    const realized = content.realized;
     const pdf = await renderPdf({
       header: { agencyName: tenantName, title: `İç kâr-zarar — ${p.code}`, subtitle: 'GİZLİ — müşteriye gönderilmez', meta: [['Teklif', `v${quote.version}`], ['Tarih', isoDate(ctx.now())]] },
-      sections: content.options.map((o) => ({
+      sections: [...content.options.map((o) => ({
         kind: 'table' as const,
         table: {
           title: `Seçenek ${o.optionNo}: ${o.title}${quote.acceptedOptionNo === o.optionNo ? ' (kabul edildi)' : ''}`,
@@ -529,9 +533,40 @@ function registerQuoteDocuments(): void {
           ],
         },
       })),
+        ...(realized ? await realizedSections(realized) : []),
+      ],
     });
     return { content, pdf, fileName: `${p.code}-kar-zarar-v${quote.version}.pdf`, deps };
   });
+}
+
+async function realizedSections(r: RealizedPnl): Promise<PdfSpec['sections']> {
+  const { planVsActualRows } = await import('./documents-b.js');
+  const out: PdfSpec['sections'] = [{
+    kind: 'table',
+    table: {
+      title: 'Plan vs gerçekleşen (EUR)',
+      columns: [{ label: '', width: 175 }, { label: 'Plan', width: 110, align: 'right' }, { label: 'Gerçekleşen', width: 110, align: 'right' }, { label: 'Fark', width: 110, align: 'right' }],
+      rows: planVsActualRows(r),
+    },
+  }];
+  if (r.suppliers.length) {
+    out.push({
+      kind: 'table',
+      table: {
+        title: 'Tedarikçi: sözleşme vs fatura (EUR)',
+        columns: [{ label: 'Tedarikçi', width: 205 }, { label: 'Sözleşme', width: 100, align: 'right' }, { label: 'Fatura', width: 100, align: 'right' }, { label: 'Fark', width: 100, align: 'right' }],
+        rows: r.suppliers.map((s) => [s.supplier, money(s.contractEur, 'EUR'), money(s.invoicedEur, 'EUR'), money(s.differenceEur, 'EUR')]),
+      },
+    });
+  }
+  const lines = [
+    `Müşteri faturası: ${money(r.customerInvoicedEur, 'EUR')}`,
+    `Saha ekstraları: ${money(r.extras.totalEur, 'EUR')} (yansıtılan ${money(r.extras.reflectedEur, 'EUR')}, yansıtılmayan ${money(r.extras.unreflectedEur, 'EUR')})`,
+    ...r.deviations.map((d) => `${d.reason}: ${money(d.amountEur, 'EUR')}`),
+  ];
+  out.push({ kind: 'text', title: 'Sapma nedenleri', lines });
+  return out;
 }
 
 function vatBreakdown(o: QuoteOption, fx: number): { rate: number; amount: number }[] {

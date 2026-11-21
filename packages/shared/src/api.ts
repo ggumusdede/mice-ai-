@@ -253,3 +253,25 @@ export interface PublicSurveyView {
 }
 export interface PublicSurveySubmit { answers: Record<string, number | string> }
 export interface DailySummary { lines: string[] }
+
+// ---------- Phase B completion (ADDITIVE) ----------
+// POST /api/finance/bank-statements   multipart CSV/XLSX | body {csv} -> BankStatementImportResult
+// POST /api/finance/entries/:id/mark-paid   body {paidAt?, reference?} -> FinanceEntry  (a human records the bank payment of an APPROVED request)
+// POST /api/finance/commissions/:id/reconcile body {invoiceNo?, amount?} -> FinanceEntry (status matched)
+// POST /api/finance/customer-invoices  body CustomerInvoiceInput -> FinanceEntry  (invoice number issued in Mikro)
+// GET  /api/field-extras/unreflected-totals  (admin) -> UnreflectedTotals
+// POST /api/projects/:id/close  -> CloseProjectResponse (survey link for won projects)
+// POST /api/projects/:id/documents  body GenerateDocumentRequest -> GeneratedDocument (program | rooming_list | pnl incl. realized)
+// GET  /api/projects/:id/rooming-list.xlsx  -> standard rooming list Excel (PII decrypted only for view_guest_pii roles; header X-PII-Masked)
+// POST /api/guests/:id/withdraw-consent  -> {ok:true; anonymized:boolean}
+// PATCH /api/projects/:id  {venueName} (or selecting an accommodation / hall offer) regenerates the code's venue segment.
+export interface BankStatementImportResult { imported: number; matched: number; suggested: number; unmatched: number; duplicates: number }
+export interface CustomerInvoiceInput { projectId: ID; invoiceNo: string; amount: number; currency: string; vatAmount?: number; issueDate?: string; dueDate?: string }
+export interface UnreflectedTotals {
+  byProject: { projectId: ID; code: string; amountTry: number; amountEur: number; count: number }[];
+  byCustomer: { customerId: ID | null; customerName: string | null; amountTry: number; amountEur: number }[];
+  totalTry: number;
+  totalEur: number;
+}
+export type CloseProjectResponse = Project & { surveyUrl: string | null; effects: string[] };
+export interface GenerateDocumentRequest { kind: 'program' | 'rooming_list' | 'pnl' }
