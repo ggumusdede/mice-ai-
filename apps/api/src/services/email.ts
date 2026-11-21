@@ -15,6 +15,8 @@ export interface EmailMessage {
   /** values (e.g. one-time public link tokens) that must never be persisted — redacted in the outbox copy */
   secrets?: string[];
   autonomous?: boolean;
+  /** project the message belongs to (reply linking / threading in the SMTP provider; derived from draftId when absent) */
+  projectId?: string | null;
 }
 
 export interface EmailProvider {

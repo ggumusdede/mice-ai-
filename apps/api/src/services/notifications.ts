@@ -1,10 +1,11 @@
 // §15 Bildirim: critical notifications (option expiry, contract risk, urgent payment) are delivered immediately;
 // routine ones are batched into two digests per day (morning / evening, tenant business-hours timezone).
 // NotificationService is the abstraction; OutboxNotificationService stores every notification in `notifications`
-// (and logs to the console in development). A real push provider (APNs / FCM / Web Push) implements `deliver`.
+// (and logs to the console in development). WebPushNotificationService (push.ts, VAPID) implements `deliver` when keys are set.
 import type { Decision, Role } from '@mice/shared';
 import { localParts, zonedTimeToUtc } from '@mice/domain';
 import type { Ctx } from '../context.js';
+import type { Db } from '../db/pool.js';
 
 export type NotificationPriority = 'critical' | 'routine';
 
@@ -20,12 +21,16 @@ export interface NotificationInput {
   entityId?: string | null;
 }
 
-export interface PushMessage { tenantId: string; userId: string; title: string; body: string | null; priority: 'critical' | 'digest' }
+export interface PushMessage {
+  tenantId: string; userId: string; title: string; body: string | null; priority: 'critical' | 'digest';
+  /** page opened on notificationclick (default: the decision inbox) */
+  url?: string;
+}
 
 export interface NotificationService {
   readonly name: string;
-  /** physical delivery of one push message (critical or digest). */
-  deliver(msg: PushMessage): Promise<void>;
+  /** physical delivery of one push message (critical or digest). `db` is the caller's tenant transaction (RLS). Must not throw. */
+  deliver(msg: PushMessage, db?: Db): Promise<void>;
 }
 
 export class ConsoleNotificationService implements NotificationService {
@@ -84,7 +89,7 @@ export async function notify(ctx: Ctx, n: NotificationInput): Promise<number> {
       [userId, n.projectId ?? null, n.priority, n.title, n.body ?? null, n.entityType ?? null, n.entityId ?? null,
         critical ? 'sent' : 'pending', critical ? now : nextDigestSlot(now, tz), critical ? now : null],
     );
-    if (critical) await service.deliver({ tenantId: ctx.tenantId, userId, title: n.title, body: n.body ?? null, priority: 'critical' });
+    if (critical) await service.deliver({ tenantId: ctx.tenantId, userId, title: n.title, body: n.body ?? null, priority: 'critical', url: '/' }, ctx.db);
   }
   return users.length;
 }
@@ -102,7 +107,7 @@ export async function flushNotificationDigests(ctx: Ctx, now: Date): Promise<num
       `INSERT INTO notifications (tenant_id, user_id, priority, title, body, status, sent_at) VALUES (app_tenant_id(), $1, 'digest', $2, $3, 'sent', $4) RETURNING id`,
       [userId, title, body, now])).rows[0];
     await ctx.db.query(`UPDATE notifications SET status = 'batched', digest_id = $2, sent_at = $3 WHERE id = ANY($1)`, [list.map((r) => r.id), digest.id, now]);
-    await service.deliver({ tenantId: ctx.tenantId, userId, title, body, priority: 'digest' });
+    await service.deliver({ tenantId: ctx.tenantId, userId, title, body, priority: 'digest', url: '/' }, ctx.db);
   }
   return byUser.size;
 }
