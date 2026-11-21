@@ -24,4 +24,4 @@ if [ "$existing" != "0" ]; then echo "target database is not empty ($existing ta
 psql "$URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mice_app') THEN
   CREATE ROLE mice_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; END IF; END \$\$;"
 pg_restore --exit-on-error --no-owner --dbname="$URL" "$FILE"
-echo "[restore] done. Next: MIGRATION_DATABASE_URL=$URL APP_DB_PASSWORD=… npm run migrate:deploy -w apps/api  (sets the mice_app password, applies newer migrations)"
+echo "[restore] done. Next: MIGRATION_DATABASE_URL=<restored db, owner role> APP_DB_PASSWORD=… npm run migrate:deploy -w apps/api  (sets the mice_app password, applies newer migrations)"

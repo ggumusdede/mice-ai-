@@ -27,7 +27,7 @@ echo "[backup] dumping → $FILE"
 pg_dump --format=custom --compress=6 --no-owner --dbname="$URL" --file="$FILE.partial"
 mv "$FILE.partial" "$FILE"
 # sanity: the archive must list the core tables
-pg_restore --list "$FILE" | grep -q "TABLE public projects" || { echo "[backup] archive check failed" >&2; exit 1; }
+pg_restore --list "$FILE" | grep "TABLE public projects" >/dev/null || { echo "[backup] archive check failed" >&2; exit 1; }
 
 if [ -n "${BACKUP_GPG_RECIPIENT:-}" ]; then
   gpg --batch --yes --encrypt --recipient "$BACKUP_GPG_RECIPIENT" --output "$FILE.gpg" "$FILE"
