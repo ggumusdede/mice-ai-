@@ -167,8 +167,8 @@ export const api = {
   auth: {
     login: (b: LoginRequest) => post<LoginResponse>('/auth/login', b, { auth: false }),
     me: () => get<MeResponse>('/auth/me'),
-    webauthnRegisterOptions: () => post<Record<string, unknown>>('/auth/webauthn/register/options'),
-    webauthnRegisterVerify: (response: unknown) => post<{ verified: boolean }>('/auth/webauthn/register/verify', response),
+    webauthnRegisterOptions: (password: string) => post<Record<string, unknown>>('/auth/webauthn/register/options', { password }),
+    webauthnRegisterVerify: (response: unknown, deviceLabel?: string) => post<{ verified: boolean }>('/auth/webauthn/register/verify', { response, deviceLabel }),
     webauthnAuthOptions: (b?: { decisionId?: string }) => post<Record<string, unknown>>('/auth/webauthn/authenticate/options', b ?? {}),
   },
   decisions: {

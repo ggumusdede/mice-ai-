@@ -12,6 +12,8 @@ import type { Row } from '../lib/mappers.js';
 import { getProjectRow } from './projects.js';
 
 export const CONSENT_TEXT_VERSION = 'kvkk-rooming-v1';
+/** public rooming form: at most max(this, 2 × pax) guests per project */
+export const MAX_PUBLIC_GUESTS_MIN = 200;
 
 export interface GuestInput {
   fullName: string; email?: string | null; phone?: string | null; roomType?: string | null; arrival?: string | null; departure?: string | null;
@@ -139,6 +141,12 @@ export async function publicRoomingSubmit(ctx: Ctx, projectId: string, tokenHash
   const view = await publicRoomingView(ctx, projectId, tokenHash);
   if (view.readOnly) throw conflict('Rooming list formu kapandı (etkinlik başladı)', 'ROOMING_READ_ONLY');
   if (!body.guests.length) throw badRequest('En az bir misafir girin', undefined, 'NO_GUESTS');
+  // abuse bound (§18.10): a leaked / forwarded link must not turn into an unlimited e-mail relay from the agency's address
+  const p0 = await getProjectRow(ctx, projectId);
+  const cap = Math.max(MAX_PUBLIC_GUESTS_MIN, 2 * (Number(p0.pax) || 0));
+  if (view.submittedCount + body.guests.length > cap) {
+    throw badRequest(`Bu form için en fazla ${cap} misafir girilebilir; ekibimizle iletişime geçin`, { cap }, 'ROOMING_LIMIT');
+  }
   const ids = await insertGuests(ctx, projectId, body.guests, 'rooming_form');
   await ctx.db.query('UPDATE public_tokens SET last_used_at = $2, use_count = use_count + 1 WHERE token_hash = $1', [tokenHash, ctx.now()]);
   const p = await getProjectRow(ctx, projectId);
@@ -157,7 +165,8 @@ export async function publicRoomingSubmit(ctx: Ctx, projectId: string, tokenHash
       await ctx.deps.email.send(ctx.db, {
         tenantId: ctx.tenantId, from: sender, to: g.email, subject: `${view.agencyName}: kişisel veri izniniz`,
         body: `Merhaba ${g.fullName},\n\n${p.code} etkinliği için bilgilerinizin sonraki etkinliklerde kullanılmasına izin verdiniz. İzninizi dilediğiniz zaman geri alabilirsiniz:\n${url}\n\n${view.agencyName}`,
-        secrets: [token], autonomous: true,
+        // the guest's name is personal data: redacted in the stored outbox copy as well (KVKK — only the encrypted guests row holds it)
+        secrets: [token, g.fullName], autonomous: true,
       });
     }
   }
@@ -180,6 +189,12 @@ export async function withdrawConsent(ctx: Ctx, guestId: string, channel: string
 }
 
 export async function anonymizeGuest(ctx: Ctx, guestId: string, now: Date = ctx.now()): Promise<void> {
+  // delivered messages to this guest (consent notice) keep no address once the guest is anonymized; queued / failed rows are
+  // left for the delivery worker (they are purged by the provider when delivered or given up)
+  await ctx.db.query(
+    `UPDATE outbox o SET to_address = '[anonim]' FROM guests g
+      WHERE g.id = $1 AND g.email_enc IS NOT NULL AND o.status = 'sent' AND lower(o.to_address) = lower(pgp_sym_decrypt(g.email_enc, $2))`,
+    [guestId, ctx.deps.config.guestDataKey]);
   await ctx.db.query(
     `UPDATE guests SET full_name_enc = NULL, email_enc = NULL, phone_enc = NULL, anonymized_at = $2 WHERE id = $1 AND anonymized_at IS NULL`, [guestId, now]);
   await ctx.db.query(`INSERT INTO consent_events (tenant_id, guest_id, event, channel, at) VALUES (app_tenant_id(), $1, 'anonymized', 'system', $2)`, [guestId, now]);

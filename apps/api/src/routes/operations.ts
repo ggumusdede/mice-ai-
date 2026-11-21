@@ -156,7 +156,8 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
   });
   app.get('/api/finance/bank-transactions', auth, async (req) => {
     const q = parse(z.object({ status: z.enum(['unmatched', 'suggested', 'matched', 'ignored']).optional() }), req.query);
-    return asUser(req, async (ctx) => list(await listBankTransactions(ctx, q.status)));
+    // the agency's whole bank movement list (counterparties, amounts) is finance data — not for sales / field roles
+    return asUser(req, async (ctx) => list(await listBankTransactions(ctx, q.status)), ['admin', 'finance']);
   });
   app.post('/api/finance/bank-transactions/:id/match', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -180,7 +181,7 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
   });
   app.get('/api/finance/commissions', auth, async (req) => {
     const q = parse(z.object({ projectId: z.string().uuid().optional() }), req.query);
-    return asUser(req, async (ctx) => list(await listCommissions(ctx, q.projectId)));
+    return asUser(req, async (ctx) => list(await listCommissions(ctx, q.projectId)), ['admin', 'finance']);
   });
   // (additive) commission reconciliation
   app.post('/api/finance/commissions/:id/reconcile', auth, async (req) => {

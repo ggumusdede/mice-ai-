@@ -49,7 +49,9 @@ export async function withUserCtx<T>(
 ): Promise<T> {
   const actor: Actor = { type: 'user', id: auth.userId, device };
   return withTenant(auth.tenantId, actor, async (db) => {
-    const { rows } = await db.query('SELECT * FROM users WHERE id = $1', [auth.userId]);
+    // a suspended tenant's tokens stop working immediately (not only at the next login)
+    const { rows } = await db.query(
+      `SELECT u.* FROM users u JOIN tenants t ON t.id = u.tenant_id AND t.status = 'active' WHERE u.id = $1`, [auth.userId]);
     if (!rows[0] || !rows[0].active) throw unauthorized('Kullanıcı bulunamadı veya pasif');
     return fn(makeCtx(db, auth.tenantId, mapUser(rows[0]), actor, deps));
   });

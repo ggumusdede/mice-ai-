@@ -122,7 +122,9 @@ describe('offers', () => {
     const r = await admin.post('/api/auth/webauthn/authenticate/options', { decisionId: null });
     expect(r.status).toBe(200);
     expect(typeof r.body.challenge).toBe('string');
-    const reg = await admin.post('/api/auth/webauthn/register/options');
+    expect((await admin.post('/api/auth/webauthn/register/options')).status).toBe(400); // password re-auth required
+    expect((await admin.post('/api/auth/webauthn/register/options', { password: 'wrong' })).status).toBe(403);
+    const reg = await admin.post('/api/auth/webauthn/register/options', { password: 'demo1234' });
     expect(reg.body.rp.id).toBe('localhost');
   });
 

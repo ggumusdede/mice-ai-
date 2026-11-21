@@ -7,9 +7,14 @@ import { publicRoutes } from './public.js';
 import { operationsRoutes } from './operations.js';
 import { adminRoutes } from './admin.js';
 import { publicPhaseBRoutes } from './public-b.js';
+import { healthRoutes } from './health.js';
+import { pushRoutes } from './push.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/health', async () => ({ ok: true }));
+  // GET /api/health (liveness + db status), GET /api/ready (readiness)
+  await app.register(healthRoutes);
+  // Web Push subscriptions (§15)
+  await app.register(pushRoutes);
   await app.register(authRoutes);
   await app.register(coreRoutes);
   await app.register(referenceRoutes);

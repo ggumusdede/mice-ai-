@@ -36,11 +36,11 @@ export async function biometricAssertion(decisionId?: string): Promise<NonNullab
   return { method: 'webauthn', assertion };
 }
 
-/** Register this device's platform authenticator for the logged-in user. */
-export async function registerBiometric(): Promise<boolean> {
-  const opts = unwrap<RegOptions>(await api.auth.webauthnRegisterOptions());
+/** Register this device's platform authenticator for the logged-in user (the server re-checks the password first). */
+export async function registerBiometric(password: string): Promise<boolean> {
+  const opts = unwrap<RegOptions>(await api.auth.webauthnRegisterOptions(password));
   const response = await startRegistration({ optionsJSON: opts });
-  const r = await api.auth.webauthnRegisterVerify(response);
+  const r = await api.auth.webauthnRegisterVerify(response, deviceLabel());
   return !!r?.verified;
 }
 

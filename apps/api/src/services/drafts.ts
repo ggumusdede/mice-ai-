@@ -80,14 +80,28 @@ export async function listDrafts(ctx: Ctx, projectId?: string): Promise<MessageD
 }
 
 /** Human edit of a draft. The first AI version is kept as original_body → style learning (§16.4). */
-export async function editDraft(ctx: Ctx, id: string, patch: { body?: string; subject?: string | null; to?: string | null }): Promise<MessageDraft> {
+export async function editDraft(
+  ctx: Ctx, id: string, patch: { body?: string; subject?: string | null; to?: string | null },
+  /** internal: the edit IS the approving decision ("Düzelt") */ opts: { viaDecision?: boolean } = {},
+): Promise<MessageDraft> {
   const d = await getDraftRow(ctx, id);
   if (d.status === 'sent' || d.status === 'discarded') throw conflict('Gönderilmiş/atılmış taslak düzenlenemez', 'DRAFT_CLOSED');
+  assertNoHeaderBreak(patch.to, patch.subject);
+  // §3.3 / §6: what a human approved is what leaves. A draft waiting for approval is edited only through the decision
+  // ("Düzelt"); editing an approved draft (content or an already set recipient) voids the approval → it must be approved again.
+  const changes = (patch.body !== undefined && patch.body !== d.body) || (patch.subject !== undefined && (patch.subject ?? null) !== d.subject)
+    || (patch.to !== undefined && d.to_address != null && (patch.to ?? null) !== d.to_address);
+  if (!opts.viaDecision && d.requires_approval && d.status === 'pending_approval' && changes) {
+    throw conflict('Onay bekleyen taslak değiştirilemez; düzeltmeyi karar kartındaki "Düzelt" ile yapın', 'DRAFT_PENDING_APPROVAL');
+  }
+  const revoke = !opts.viaDecision && d.requires_approval && d.status === 'approved' && changes;
   const { rows } = await ctx.db.query(
     `UPDATE message_drafts SET original_body = COALESCE(original_body, body), body = COALESCE($2, body),
-       subject = CASE WHEN $3::boolean THEN $4 ELSE subject END, to_address = CASE WHEN $5::boolean THEN $6 ELSE to_address END
+       subject = CASE WHEN $3::boolean THEN $4 ELSE subject END, to_address = CASE WHEN $5::boolean THEN $6 ELSE to_address END,
+       status = CASE WHEN $7::boolean THEN 'draft' ELSE status END,
+       approved_by = CASE WHEN $7::boolean THEN NULL ELSE approved_by END, approved_at = CASE WHEN $7::boolean THEN NULL ELSE approved_at END
      WHERE id = $1 RETURNING *`,
-    [id, patch.body ?? null, patch.subject !== undefined, patch.subject ?? null, patch.to !== undefined, patch.to ?? null],
+    [id, patch.body ?? null, patch.subject !== undefined, patch.subject ?? null, patch.to !== undefined, patch.to ?? null, revoke],
   );
   if (d.ai_generated && patch.body !== undefined && patch.body !== d.body) {
     await recordCorrection(ctx, d.ai_action_id, { field: 'body', before: d.body, after: patch.body });
@@ -118,6 +132,7 @@ export async function sendDraft(ctx: Ctx, id: string, opts: SendOptions = {}): P
     }
   }
   if (!d.to_address) throw badRequest('Alıcı adresi yok', undefined, 'RECIPIENT_MISSING');
+  assertNoHeaderBreak(d.to_address, d.subject);
   const fromUserId = opts.fromUserId ?? ctx.user?.id ?? d.from_user_id;
   const sender = fromUserId ? (await ctx.db.query('SELECT email FROM users WHERE id = $1', [fromUserId])).rows[0] : null;
   if (!sender) throw badRequest('Gönderen kullanıcı bulunamadı', undefined, 'SENDER_MISSING');
@@ -134,10 +149,17 @@ export async function sendDraft(ctx: Ctx, id: string, opts: SendOptions = {}): P
   return mapDraft(rows[0]);
 }
 
+/** Recipient / subject end up in mail headers: CR/LF would allow header injection (Bcc:, extra recipients). */
+export function assertNoHeaderBreak(...values: (string | null | undefined)[]): void {
+  if (values.some((v) => typeof v === 'string' && /[\r\n]/.test(v))) {
+    throw badRequest('Alıcı / konu satır sonu içeremez', undefined, 'INVALID_HEADER_VALUE');
+  }
+}
+
 export async function approveDraft(ctx: Ctx, id: string, decidedBy: string | null, edits?: Record<string, unknown>): Promise<Row> {
   const d = await getDraftRow(ctx, id);
   if (edits && (typeof edits.body === 'string' || typeof edits.subject === 'string')) {
-    await editDraft(ctx, id, { body: typeof edits.body === 'string' ? edits.body : undefined, subject: typeof edits.subject === 'string' ? edits.subject : undefined });
+    await editDraft(ctx, id, { body: typeof edits.body === 'string' ? edits.body : undefined, subject: typeof edits.subject === 'string' ? edits.subject : undefined }, { viaDecision: true });
   }
   const { rows } = await ctx.db.query(
     `UPDATE message_drafts SET status = CASE WHEN status = 'sent' THEN status ELSE 'approved' END, approved_by = $2, approved_at = $3 WHERE id = $1 RETURNING *`,

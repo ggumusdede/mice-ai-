@@ -240,7 +240,9 @@ export async function publicSurveySubmit(ctx: Ctx, surveyId: string, body: Publi
     } else answers[q.id] = String(v).slice(0, 4000);
   }
   if (!Object.keys(answers).length) throw badRequest('En az bir soruyu yanıtlayın', undefined, 'EMPTY_SURVEY');
-  await ctx.db.query('UPDATE surveys SET answers = $2, answered_at = $3 WHERE id = $1', [surveyId, JSON.stringify(answers), ctx.now()]);
+  // conditional update: two concurrent submits cannot both win (replay / double-submit)
+  const upd = await ctx.db.query('UPDATE surveys SET answers = $2, answered_at = $3 WHERE id = $1 AND answered_at IS NULL', [surveyId, JSON.stringify(answers), ctx.now()]);
+  if (!upd.rowCount) throw conflict('Anket zaten yanıtlandı', 'ALREADY_SUBMITTED');
   return { ok: true };
 }
 

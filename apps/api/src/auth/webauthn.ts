@@ -1,5 +1,5 @@
 // §15 Face ID step-up via WebAuthn (platform authenticator). Money & contract decisions require it.
-// Dev fallback { method: 'dev' } is accepted only when NODE_ENV !== 'production' or ALLOW_DEV_BIOMETRIC=1.
+// Dev fallback { method: 'dev' } is accepted only when NODE_ENV is development / test or ALLOW_DEV_BIOMETRIC=1.
 import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse,
 } from '@simplewebauthn/server';

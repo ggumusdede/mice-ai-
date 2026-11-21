@@ -8,7 +8,10 @@ import { createAiService } from '@mice/ai';
 import { loadConfig } from './config.js';
 import { initPool, withoutTenant, closePool } from './db/pool.js';
 import { withSystemCtx, type AppDeps, type Ctx } from './context.js';
-import { OutboxEmailProvider } from './services/email.js';
+import { createDeliveryProvider } from './services/delivery.js';
+import { loadDeliveryConfig } from './delivery-config.js';
+import { setNotificationService } from './services/notifications.js';
+import { createNotificationService } from './services/push.js';
 import { registerAll } from './services/registry.js';
 import { createDecision } from './services/decisions.js';
 import { aiDraft } from './services/drafts.js';
@@ -61,7 +64,7 @@ async function execute(ctx: Ctx, a: FollowupAction, now: Date): Promise<string> 
       await ctx.db.query('UPDATE rfqs SET reminder_sent_at = $2 WHERE id = $1', [a.rfqId, now]);
       if (r.email && r.sender_email) {
         const tpl = (RFQ_REMINDER_TEMPLATE[r.language] ?? RFQ_REMINDER_TEMPLATE.tr)({ contact: r.contact_name ?? r.supplier_name, code: r.code, item: r.description, sender: r.sender_name });
-        await ctx.deps.email.send(ctx.db, { tenantId: ctx.tenantId, from: r.sender_email, to: r.email, subject: tpl.subject, body: tpl.body, autonomous: true });
+        await ctx.deps.email.send(ctx.db, { tenantId: ctx.tenantId, projectId: r.project_id, from: r.sender_email, to: r.email, subject: tpl.subject, body: tpl.body, autonomous: true });
         await logAiAction(ctx, { actionType: 'supplier_rfq_reminder', projectId: r.project_id, entityType: 'rfq', entityId: r.id, result: { confidence: 1, model: 'template', data: { template: r.language } } });
       }
       return 'supplier_reminder';
@@ -172,12 +175,29 @@ const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolv
 if (isMain) {
   const config = loadConfig();
   initPool(config.databaseUrl);
-  const deps: AppDeps = { config, ai: createAiService(process.env), email: new OutboxEmailProvider({ log: config.nodeEnv !== 'production' }), now: () => new Date(), rng: Math.random };
+  const delivery = loadDeliveryConfig();
+  setNotificationService(createNotificationService(delivery));
+  const deps: AppDeps = { config, ai: createAiService(process.env), email: createDeliveryProvider(delivery), now: () => new Date(), rng: Math.random };
   const once = process.argv.includes('--once');
-  const tick = () => runFollowupsOnce(deps).then((r) => console.log(`[worker] ${new Date().toISOString()}`, JSON.stringify(r))).catch((e) => console.error(e));
+  let running: Promise<void> | null = null;
+  const tick = () => (running = runFollowupsOnce(deps)
+    .then((r) => console.log(JSON.stringify({ level: 'info', time: new Date().toISOString(), msg: 'worker tick', result: r })))
+    .catch((e) => console.error(e))
+    .finally(() => { running = null; }));
   if (once) tick().finally(() => closePool());
   else {
     tick();
-    setInterval(tick, config.workerIntervalMs);
+    const timer = setInterval(() => { if (!running) tick(); }, config.workerIntervalMs);
+    // graceful shutdown: stop scheduling, let the current pass finish (each tenant is one transaction), close the pool
+    const stop = async () => {
+      clearInterval(timer);
+      const force = setTimeout(() => process.exit(1), Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 30_000));
+      force.unref();
+      if (running) await running;
+      await closePool();
+      process.exit(0);
+    };
+    process.on('SIGINT', () => void stop());
+    process.on('SIGTERM', () => void stop());
   }
 }

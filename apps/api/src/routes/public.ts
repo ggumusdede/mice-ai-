@@ -14,10 +14,17 @@ import { getRfqRow, publicRfqView, publicSubmitOffer } from '../services/rfqs.js
 import { parseOffer } from '../services/offers.js';
 import { publicAccept, publicQuoteView, publicRevision } from '../services/quotes.js';
 
-export async function withPublicToken<T>(app: FastifyInstance, kind: string, token: string, actorType: ActorType, fn: (ctx: Ctx, entityId: string) => Promise<T>): Promise<T> {
+/** Token → tenant + entity (by hash, SECURITY DEFINER). Throws 404 for an unknown / revoked token. */
+export async function resolvePublicToken(kind: string, token: string): Promise<{ tenant_id: string; entity_id: string }> {
   const hash = sha256Hex(token);
   const hit = await withoutTenant((db) => db.query('SELECT tenant_id, entity_id FROM resolve_public_token($1, $2)', [kind, hash]).then((r) => r.rows[0]));
   if (!hit) throw notFound('Bağlantı');
+  return hit;
+}
+
+export async function withPublicToken<T>(app: FastifyInstance, kind: string, token: string, actorType: ActorType, fn: (ctx: Ctx, entityId: string) => Promise<T>,
+  resolved?: { tenant_id: string; entity_id: string }): Promise<T> {
+  const hit = resolved ?? (await resolvePublicToken(kind, token));
   return withSystemCtx(app.deps, hit.tenant_id, { type: actorType, id: hit.entity_id }, (ctx) => fn(ctx, hit.entity_id));
 }
 
@@ -46,6 +53,8 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
   });
   app.post('/api/public/rfq/:token/files', async (req) => {
     const { token } = parse(tokenParam, req.params);
+    // validate the link BEFORE accepting up to 20 MB, and read the upload outside the DB transaction (pool connections)
+    const hit = await resolvePublicToken('rfq', token);
     const mp = await readMultipart(req);
     if (!mp?.file) throw badRequest('Dosya gerekli (multipart alan adı: file)', undefined, 'NO_INPUT');
     const file = mp.file;
@@ -55,7 +64,7 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       if (rfq.deadline_at && new Date(rfq.deadline_at) < ctx.now()) throw badRequest('Yanıt süresi doldu', undefined, 'RFQ_READ_ONLY');
       const offer = await parseOffer(ctx, rfq.service_item_id, { file, supplierId: rfq.supplier_id, rfqId: rfq.id, viaPublicLink: true });
       return { ok: true as const, fileName: file.filename, version: offer.version };
-    });
+    }, hit);
   });
 
   // ---------------- customer quote approval (§7 Adım 4)

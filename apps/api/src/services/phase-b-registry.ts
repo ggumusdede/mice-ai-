@@ -26,6 +26,11 @@ export function registerPhaseB(): void {
   registerDecisionEffect('field_extra', async (ctx, d, input) => {
     if (input.auto || !input.decidedBy) throw forbidden('Saha ekstra onayı yapay zekâ tarafından verilemez', 'AI_FORBIDDEN_ACTION');
     const status = input.action === 'reject' ? 'rejected' : 'approved';
+    if (status === 'approved' && ctx.user?.role !== 'admin') {
+      // §17.1: above the field lead's limit someone else decides — a delegated field lead cannot approve their own extra
+      const own = (await ctx.db.query('SELECT 1 FROM field_extras WHERE id = $1 AND entered_by = $2', [d.entity_id, input.decidedBy])).rowCount;
+      if (own) throw forbidden('Kendi girdiğiniz limit üstü ekstrayı onaylayamazsınız (dört göz ilkesi)', 'SELF_APPROVAL_FORBIDDEN');
+    }
     await ctx.db.query(`UPDATE field_extras SET admin_status = $2 WHERE id = $1`, [d.entity_id, status]);
     return [`field_extra_${status}`];
   });

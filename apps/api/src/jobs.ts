@@ -7,6 +7,7 @@ import { flushNotificationDigests, notify } from './services/notifications.js';
 import { dailySummary, markEndedEvents } from './services/operations.js';
 import { createDraft } from './services/drafts.js';
 import { notifyUnbilledPayment } from './services/finance.js';
+import { runOutboxJobs } from './services/delivery.js';
 
 /** Before the follow-up scheduler: state the scheduler depends on. */
 export async function runPreJobs(ctx: Ctx, now: Date): Promise<string[]> {
@@ -25,6 +26,8 @@ export async function runPostJobs(ctx: Ctx, now: Date, followupsDone: { type: st
   out.push(...(await dailySummaryDrafts(ctx, now)));
   const digests = await flushNotificationDigests(ctx, now);
   if (digests) out.push(`notification_digests:${digests}`);
+  // SMTP: deliver queued / retry failed e-mails, notify when given up
+  out.push(...(await runOutboxJobs(ctx, now)));
   return out;
 }
 

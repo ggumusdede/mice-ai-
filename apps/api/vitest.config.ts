@@ -14,6 +14,7 @@ export default defineConfig({
       PUBLIC_BASE_URL: '',
       GUEST_DATA_KEY: 'test-guest-key',
       PUBLIC_RATE_LIMIT: '1000',
+      LOGIN_RATE_LIMIT: '1000',
     },
   },
 });

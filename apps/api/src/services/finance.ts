@@ -20,6 +20,7 @@ import { getProjectRow } from './projects.js';
 import { notify } from './notifications.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+export const MAX_BANK_ROWS = 5000;
 
 function assertFinance(ctx: Ctx): void {
   const u = requireUser(ctx);
@@ -195,6 +196,10 @@ export async function paymentDecisionEffect(ctx: Ctx, entryId: string, action: '
     if (e.requested_by) await notify(ctx, { userIds: [e.requested_by], priority: 'routine', title: `Ödeme talebi reddedildi: ${e.invoice_no ?? e.reference ?? ''} ${e.amount} ${e.currency}`, projectId: e.project_id, entityType: 'finance_entry', entityId: entryId });
     return ['payment_rejected'];
   }
+  // §17.1 "Finance ödeme talebi oluşturur, onaylamaz": four-eyes — a delegate never approves a payment they requested
+  if (e.requested_by && e.requested_by === decidedBy && ctx.user?.role !== 'admin') {
+    throw forbidden('Kendi oluşturduğunuz ödeme talebini onaylayamazsınız (dört göz ilkesi)', 'SELF_APPROVAL_FORBIDDEN');
+  }
   if (e.status !== 'pending_approval') return [`payment_not_pending:${e.status}`];
   await ctx.db.query(`UPDATE finance_entries SET status = 'approved', approved_by = $2, approved_at = $3 WHERE id = $1`, [entryId, decidedBy, ctx.now()]);
   if (e.requested_by) await notify(ctx, { userIds: [e.requested_by], priority: 'critical', title: `Ödeme onaylandı — bankadan ödeyip "ödendi" işaretleyin: ${e.amount} ${e.currency}`, projectId: e.project_id, entityType: 'finance_entry', entityId: entryId });
@@ -266,6 +271,8 @@ export async function importBankStatement(ctx: Ctx, file: UploadedFile): Promise
   const rules = await ctx.rules();
   const rows = await bankFileToRows(file);
   if (!rows.length) throw badRequest('Ekstrede okunabilir hareket bulunamadı', undefined, 'EMPTY_STATEMENT');
+  // every row is matched inside ONE transaction: bound the work (DoS) — split larger statements by date range
+  if (rows.length > MAX_BANK_ROWS) throw badRequest(`Ekstre en fazla ${MAX_BANK_ROWS} hareket içerebilir (${rows.length}); dönemi bölün`, undefined, 'STATEMENT_TOO_LARGE');
   await logAiAction(ctx, { actionType: 'document_reading', result: { confidence: 1, model: 'parser', data: { rows: rows.length } }, inputSummary: { kind: 'bank_statement', fileName: file.filename } });
   const batch = randomUUID();
   const seen = new Map<string, number>();

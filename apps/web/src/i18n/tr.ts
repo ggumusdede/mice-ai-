@@ -39,7 +39,7 @@ export const tr = {
     webauthnUnavailable: 'Bu cihazda Face ID / WebAuthn kullanılamıyor.',
     devFallback: 'Geliştirici doğrulaması ile onayla', biometricFailed: 'Biyometrik doğrulama tamamlanamadı',
     decided: 'Karar kaydedildi', effects: 'Sonuçlar', registerFaceId: 'Face ID’yi bu cihaza kaydet',
-    faceIdRegistered: 'Face ID kaydedildi', project: 'Proje',
+    faceIdRegistered: 'Face ID kaydedildi', registerFaceIdPassword: 'Şifreniz (Face ID kaydı için)', project: 'Proje',
   },
   badge: {
     within_rules: 'Kural içinde', critical: 'Kritik', suggestion: 'Öneri',

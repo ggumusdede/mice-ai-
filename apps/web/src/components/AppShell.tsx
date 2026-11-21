@@ -21,6 +21,7 @@ export function AppShell() {
   const toast = useToast();
   const q = useOfflineQueue();
   const [regBusy, setRegBusy] = useState(false);
+  const [regPassword, setRegPassword] = useState('');
 
   const nav: NavItem[] = [
     { to: '/', label: t.nav.inbox, icon: 'inbox', end: true },
@@ -115,14 +116,27 @@ export function AppShell() {
         ) : null}
         <div className="stack">
           {webauthnSupported() ? (
+            <input
+              type="password"
+              className="input"
+              autoComplete="current-password"
+              placeholder={t.inbox.registerFaceIdPassword}
+              aria-label={t.inbox.registerFaceIdPassword}
+              value={regPassword}
+              onChange={(e) => setRegPassword(e.target.value)}
+            />
+          ) : null}
+          {webauthnSupported() ? (
             <Button
               variant="secondary"
               icon="faceid"
               busy={regBusy}
+              disabled={!regPassword}
               onClick={async () => {
                 setRegBusy(true);
                 try {
-                  if (await registerBiometric()) toast(t.inbox.faceIdRegistered);
+                  if (await registerBiometric(regPassword)) toast(t.inbox.faceIdRegistered);
+                  setRegPassword('');
                 } catch (e) {
                   toast(errorMessage(e), 'danger');
                 } finally {
