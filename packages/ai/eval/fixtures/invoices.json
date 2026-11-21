@@ -1,0 +1,122 @@
+[
+ {
+  "id": "inv-tr-01",
+  "docType": "invoice",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "ABC Turizm A.Ş.\ne-FATURA\nFatura No: ABC2027000000123\nFatura Tarihi: 20.03.2027\nSon Ödeme Tarihi: 05.04.2027\nKonaklama hizmeti (25 DBL x 2 gece): 6.000,00 EUR\nSalon kirası: 1.500,00 EUR\nMal Hizmet Toplam Tutarı: 7.500,00 EUR\nHesaplanan KDV (%10): 750,00 EUR\nVergiler Dahil Toplam Tutar: 8.250,00 EUR\nÖdenecek Tutar: 8.250,00 EUR"
+  },
+  "gold": {
+   "invoiceNo": "ABC2027000000123",
+   "supplierName": "ABC Turizm A.Ş.",
+   "issueDate": "2027-03-20",
+   "dueDate": "2027-04-05",
+   "currency": "EUR",
+   "netAmount": 7500,
+   "vatAmount": 750,
+   "totalAmount": 8250
+  },
+  "tags": [
+   "e-fatura-pdf-view"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "inv-tr-02",
+  "docType": "invoice",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Satıcı: Moda Sahil Otel İşletmeleri A.Ş.\nVKN: 1234567890\ne-Arşiv Fatura\nFatura No: MSO2027000001457\nFatura Tarihi: 16.03.2027\nVade Tarihi: 15.04.2027\nKonaklama (20 DBL x 2 gece): 5.600,00 EUR\nToplantı salonu: 2.400,00 EUR\nMatrah: 8.000,00 EUR\nKDV: 1.040,00 EUR\nGenel Toplam: 9.040,00 EUR"
+  },
+  "gold": {
+   "invoiceNo": "MSO2027000001457",
+   "supplierName": "Moda Sahil Otel İşletmeleri A.Ş.",
+   "issueDate": "2027-03-16",
+   "dueDate": "2027-04-15",
+   "currency": "EUR",
+   "netAmount": 8000,
+   "vatAmount": 1040,
+   "totalAmount": 9040
+  },
+  "tags": [
+   "e-arsiv"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "inv-tr-03",
+  "docType": "invoice",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Prime Transfer Ltd. Şti.\nFATURA\nFatura No: PTR2027/000321\nTarih: 25.03.2027\nHavalimanı transferi 6 araç: 19.500,00 TL\nKDV Hariç Toplam: 19.500,00 TL\nHesaplanan KDV (%20): 3.900,00 TL\nÖdenecek Tutar: 23.400,00 TL"
+  },
+  "gold": {
+   "invoiceNo": "PTR2027/000321",
+   "supplierName": "Prime Transfer Ltd. Şti.",
+   "issueDate": "2027-03-25",
+   "dueDate": null,
+   "currency": "TRY",
+   "netAmount": 19500,
+   "vatAmount": 3900,
+   "totalAmount": 23400
+  },
+  "tags": [
+   "try"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "inv-en-01",
+  "docType": "invoice",
+  "language": "en",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "INVOICE\nSeller: Bosphorus Palace Hotel\nInvoice No: BPH-2027-0912\nInvoice Date: 18.09.2027\nDue Date: 18.10.2027\nAccommodation 25 SGL x 3 nights: EUR 13,500.00\nMeeting room 3 days: EUR 3,000.00\nSubtotal: EUR 16,500.00\nVAT: EUR 1,950.00\nTotal due: EUR 18,450.00"
+  },
+  "gold": {
+   "invoiceNo": "BPH-2027-0912",
+   "supplierName": "Bosphorus Palace Hotel",
+   "issueDate": "2027-09-18",
+   "dueDate": "2027-10-18",
+   "currency": "EUR",
+   "netAmount": 16500,
+   "vatAmount": 1950,
+   "totalAmount": 18450
+  },
+  "tags": [
+   "foreign"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "inv-ru-01",
+  "docType": "invoice",
+  "language": "ru",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Счет № GR-2027-044\nПоставщик: Отель Галата Резиденс\nДата счета: 05.02.2027\nСрок оплаты: 20.02.2027\nПроживание: 5 680,00 EUR\nИтого без НДС: 5 680,00 EUR\nНДС: 568,00 EUR\nИтого к оплате: 6 248,00 EUR"
+  },
+  "gold": {
+   "invoiceNo": "GR-2027-044",
+   "supplierName": "Отель Галата Резиденс",
+   "issueDate": "2027-02-05",
+   "dueDate": "2027-02-20",
+   "currency": "EUR",
+   "netAmount": 5680,
+   "vatAmount": 568,
+   "totalAmount": 6248
+  },
+  "tags": [
+   "foreign"
+  ],
+  "origin": "synthetic"
+ }
+]

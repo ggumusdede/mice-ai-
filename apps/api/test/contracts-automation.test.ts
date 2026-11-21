@@ -137,6 +137,12 @@ describe('automation (§16)', () => {
     await admin.post(`/api/decisions/${promo.id}/decide`, { action: 'approve' });
     expect((await admin.get('/api/automation')).body.items.find((c: any) => c.actionType === 'rfq_send').mode).toBe('auto');
 
+    // [Ürün kararı] outbound messages are auto-sent only with the standing-approval rule (default off → still a card)
+    const held = await sendRfqFor('Üsküdar');
+    expect(held.rfqs.every((r: any) => r.status === 'pending_approval')).toBe(true);
+    const heldDec = (await clerk.get('/api/decisions')).body.items.find((x: any) => x.kind === 'rfq_send' && x.entityId === held.item.id);
+    expect(heldDec.detail.automation).toBe('outbound_held_for_approval');
+    expect((await admin.patch('/api/rules', { outboundAutoSendRequiresStandingApproval: true })).status).toBe(200);
     rng.value = 0; // force the ~1/20 sample
     const before = T.email.sent.length;
     const { rfqs } = await sendRfqFor('Sarıyer');
@@ -148,6 +154,7 @@ describe('automation (§16)', () => {
     const rej = await admin.post(`/api/decisions/${sample.id}/decide`, { action: 'reject', reason: 'yanlış tedarikçi' });
     expect(rej.body.effects).toContain('automation_demoted:rfq_send');
     expect((await admin.get('/api/automation')).body.items.find((c: any) => c.actionType === 'rfq_send').mode).toBe('approval');
+    await admin.patch('/api/rules', { outboundAutoSendRequiresStandingApproval: false });
   });
 
   it('forbidden actions can never pass the AI gate', async () => {

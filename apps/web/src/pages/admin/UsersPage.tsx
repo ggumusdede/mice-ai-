@@ -90,6 +90,17 @@ function UserRow({ u, onSaved }: { u: User; onSaved: (u: User) => void }) {
             }
           }}>{t.common.save}</Button>
         ) : null}
+        {isAdmin && !dirty ? (
+          <Button size="sm" variant="ghost" onClick={async () => {
+            if (!window.confirm(`${u.fullName}: tüm cihazlardaki oturumlar kapatılsın mı?`)) return;
+            try {
+              await api.users.revokeSessions(u.id);
+              toast('Oturumlar kapatıldı');
+            } catch (e) {
+              toast(errorMessage(e), 'danger');
+            }
+          }}>Oturumları kapat</Button>
+        ) : null}
       </td>
     </tr>
   );

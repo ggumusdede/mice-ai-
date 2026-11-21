@@ -237,6 +237,11 @@ try {
       const sup = await newPage(browser, `supplier${i + 1}`, true);
       await sup.goto(url);
       await sup.locator('.lines__row').first().waitFor();
+      // [Ürün kararı] hideCustomerFromSuppliers (default on): the supplier sees PRJ-####-<date>-<pax>, never the customer
+      const [pfx, seq, customerSeg, date, pax] = projectCode.split('-');
+      const pageText = await sup.locator('body').innerText();
+      expect(!pageText.includes(customerSeg), `supplier page hides the customer segment (${customerSeg})`);
+      expect(pageText.includes(`${pfx}-${seq}-${date}-${pax}`), 'supplier page shows the supplier-safe reference');
       const row1 = sup.locator('.lines__row').nth(0);
       await row1.getByLabel('Açıklama', { exact: true }).fill('SGL oda, oda+kahvaltı');
       await row1.locator('label', { hasText: 'Oda tipi' }).locator('select').selectOption('SGL');
@@ -436,6 +441,16 @@ try {
     await field.goto(`${BASE}/saha`);
     await field.waitForLoadState('networkidle');
     await shot(field, 'field-panel');
+    // least privilege ([Ürün kararı] fieldRoleCanSeeFinancials, default off): no money tabs / profit, API refuses finance
+    await field.goto(`${BASE}/projeler/${projectId}`);
+    await field.waitForSelector('.tabs');
+    await field.waitForLoadState('networkidle');
+    expect(!(await field.locator('.tabs__tab', { hasText: 'Finans' }).count()), 'field: no Finans tab');
+    expect(!(await field.locator('.tabs__tab', { hasText: 'Müşteri teklifi' }).count()), 'field: no quote tab');
+    expect(!(await field.getByText('Beklenen kâr').count()), 'field: no profit block');
+    const fin = await field.evaluate(async (id) => (await fetch(`/api/finance/entries?projectId=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('mice.token')}` } })).status, projectId);
+    expect(fin === 403, `field: finance entries refused (${fin})`);
+    await shot(field, 'field-project-no-financials');
     await field.context().close();
     const boss = await newPage(browser, 'admin-report');
     await login(boss, 'admin@demo.test');

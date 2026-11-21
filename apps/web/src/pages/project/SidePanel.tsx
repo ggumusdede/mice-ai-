@@ -6,6 +6,7 @@ import { relative, staleReason } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, DocStatusPill, ProfitBlock } from '../../components/ui';
 import { useProject } from './ProjectContext';
+import { useCanSeeFinancials } from '../../lib/visibility';
 
 const ENTITY_LABEL: Record<string, string> = {
   projects: 'Proje', service_items: 'Hizmet kalemi', supplier_offers: 'Tedarikçi teklifi', price_history: 'Fiyat geçmişi', rfqs: 'RFQ',
@@ -36,6 +37,7 @@ export function SidePanel() {
   const [busyDoc, setBusyDoc] = useState<string | null>(null);
   const [genKind, setGenKind] = useState<'program' | 'rooming_list' | 'pnl'>('program');
   const [genBusy, setGenBusy] = useState(false);
+  const canSeeFinancials = useCanSeeFinancials();
   const generate = async () => {
     setGenBusy(true);
     try {
@@ -64,11 +66,13 @@ export function SidePanel() {
 
   return (
     <aside className="project__side" aria-label="Proje özeti">
-      <section className="card card--padded">
-        <ProfitBlock title={t.profit.expected} value={detail.profit.expected} />
-        <hr className="divider" />
-        <ProfitBlock title={t.profit.realized} value={detail.profit.realized} />
-      </section>
+      {canSeeFinancials ? (
+        <section className="card card--padded">
+          <ProfitBlock title={t.profit.expected} value={detail.profit.expected} />
+          <hr className="divider" />
+          <ProfitBlock title={t.profit.realized} value={detail.profit.realized} />
+        </section>
+      ) : null}
 
       <section className="card card--padded">
         <h2 className="card__title">{t.project.documents}</h2>
@@ -101,7 +105,7 @@ export function SidePanel() {
           <select id="docgen-kind" className="input input--sm select" value={genKind} onChange={(e) => setGenKind(e.target.value as typeof genKind)}>
             <option value="program">{t.docKind.program}</option>
             <option value="rooming_list">{t.docKind.rooming_list}</option>
-            <option value="pnl">{t.docKind.pnl}</option>
+            {canSeeFinancials ? <option value="pnl">{t.docKind.pnl}</option> : null}
           </select>
           <Button size="sm" variant="secondary" icon="doc" busy={genBusy} onClick={() => void generate()}>{t.project.generateDoc}</Button>
         </div>

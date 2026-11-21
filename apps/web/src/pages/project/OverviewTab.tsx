@@ -8,13 +8,16 @@ import { Button, Callout, Card, EmptyState, InlineError, KeyValues, MarginMarkup
 import { useProject } from './ProjectContext';
 import { unitLabel } from '../../components/OfferLinesEditor';
 import { supplierName, useSuppliers } from './useSuppliers';
+import { InboxPanel } from './InboxPanel';
+import { useCanSeeFinancials } from '../../lib/visibility';
 
 export function OverviewTab() {
   const t = useT();
   const { detail } = useProject();
   const { byId } = useSuppliers();
   const items = detail.items;
-  const accommodation = items.filter((i) => i.kind === 'accommodation');
+  const money = useCanSeeFinancials(); // field role: no cost / sale / margin columns ([Ürün kararı] fieldRoleCanSeeFinancials)
+  const accommodation = money ? items.filter((i) => i.kind === 'accommodation') : [];
 
   return (
     <div className="stack stack--lg">
@@ -28,11 +31,13 @@ export function OverviewTab() {
                   <th scope="col">{t.items.kind}</th>
                   <th scope="col">{t.items.description}</th>
                   <th scope="col">{t.project.supplier}</th>
-                  <th scope="col" className="num">{t.project.offerCount}</th>
-                  <th scope="col" className="num">{t.project.cost}</th>
-                  <th scope="col" className="num">{t.project.sale}</th>
-                  <th scope="col">{t.profit.marginShort} / {t.profit.markupShort}</th>
-                  <th scope="col">{t.project.evaluation}</th>
+                  {money ? <>
+                    <th scope="col" className="num">{t.project.offerCount}</th>
+                    <th scope="col" className="num">{t.project.cost}</th>
+                    <th scope="col" className="num">{t.project.sale}</th>
+                    <th scope="col">{t.profit.marginShort} / {t.profit.markupShort}</th>
+                    <th scope="col">{t.project.evaluation}</th>
+                  </> : null}
                 </tr>
               </thead>
               <tbody>
@@ -41,11 +46,13 @@ export function OverviewTab() {
                     <td>{t.serviceKind[i.kind]}{i.valueAdd ? <div><Pill tone="purple">Katma değer</Pill></div> : null}</td>
                     <td>{i.description}<div className="muted small">{i.quantity} {unitLabel(i.unit)}{i.nights ? ` · ${i.nights} gece` : ''}</div></td>
                     <td>{i.selectedSupplierName ?? <span className="muted">—</span>}</td>
-                    <td className="num">{i.offers.filter((o) => !o.supersededBy).length}</td>
-                    <td className="num">{eur(i.costEur)}</td>
-                    <td className="num">{eur(i.saleEur)}</td>
-                    <td>{i.costEur !== null && i.saleEur !== null ? <MarginMarkup cost={i.costEur} sale={i.saleEur} /> : <span className="muted">—</span>}</td>
-                    <td><PriceClassPill value={i.priceClass} /></td>
+                    {money ? <>
+                      <td className="num">{i.offers.filter((o) => !o.supersededBy).length}</td>
+                      <td className="num">{eur(i.costEur)}</td>
+                      <td className="num">{eur(i.saleEur)}</td>
+                      <td>{i.costEur !== null && i.saleEur !== null ? <MarginMarkup cost={i.costEur} sale={i.saleEur} /> : <span className="muted">—</span>}</td>
+                      <td><PriceClassPill value={i.priceClass} /></td>
+                    </> : null}
                   </tr>
                 ))}
               </tbody>
@@ -106,6 +113,8 @@ export function OverviewTab() {
           </Card>
         );
       })}
+
+      <InboxPanel />
     </div>
   );
 }

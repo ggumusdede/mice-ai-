@@ -89,7 +89,7 @@ async function route(ctx: Ctx, id: string, email: NormalizedEmail, accepted: Ret
   const supplierIds = suppliers.map((s) => s.id);
   if (supplierIds.length) {
     const rfq = await rfqForReply(ctx, project.id, supplierIds, thread);
-    const supplier = suppliers.find((s) => s.id === rfq?.supplier_id) ?? suppliers[0];
+    const supplier = suppliers.find((s) => rfq && rfq !== 'ambiguous' && s.id === rfq.supplier_id) ?? suppliers[0];
     if (rfq === 'ambiguous' || !rfq) {
       const title = rfq === 'ambiguous'
         ? `${project.code}: ${supplier.name} yanıtı birden fazla RFQ ile eşleşti — teklifi ilgili kaleme elle okutun`

@@ -1,0 +1,1128 @@
+{
+  "version": 1,
+  "provider": "mock",
+  "model": "mock-heuristic-v1",
+  "sets": [
+    "requests",
+    "offers",
+    "contracts",
+    "invoices"
+  ],
+  "generatedAt": "2026-11-21T20:26:11.515Z",
+  "targetPrecision": 0.95,
+  "documents": 25,
+  "fieldsScored": 326,
+  "overall": {
+    "accuracy": 0.9141,
+    "ece": 0.1118
+  },
+  "byDocType": {
+    "request": {
+      "documents": 9,
+      "fields": 99,
+      "accuracy": 0.899,
+      "ece": 0.1359,
+      "perField": [
+        {
+          "field": "budget",
+          "n": 9,
+          "correct": 7,
+          "accuracy": 0.7778,
+          "meanConfidence": 0.8
+        },
+        {
+          "field": "budgetCurrency",
+          "n": 9,
+          "correct": 9,
+          "accuracy": 1,
+          "meanConfidence": 0.8444
+        },
+        {
+          "field": "city",
+          "n": 8,
+          "correct": 6,
+          "accuracy": 0.75,
+          "meanConfidence": 0.6813
+        },
+        {
+          "field": "customerName",
+          "n": 9,
+          "correct": 7,
+          "accuracy": 0.7778,
+          "meanConfidence": 0.7322
+        },
+        {
+          "field": "decisionDate",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.6
+        },
+        {
+          "field": "district",
+          "n": 6,
+          "correct": 6,
+          "accuracy": 1,
+          "meanConfidence": 0.875
+        },
+        {
+          "field": "endDate",
+          "n": 9,
+          "correct": 8,
+          "accuracy": 0.8889,
+          "meanConfidence": 0.8444
+        },
+        {
+          "field": "language",
+          "n": 9,
+          "correct": 8,
+          "accuracy": 0.8889,
+          "meanConfidence": 0.8733
+        },
+        {
+          "field": "pax",
+          "n": 9,
+          "correct": 9,
+          "accuracy": 1,
+          "meanConfidence": 0.8833
+        },
+        {
+          "field": "roomsDbl",
+          "n": 9,
+          "correct": 8,
+          "accuracy": 0.8889,
+          "meanConfidence": 0.4089
+        },
+        {
+          "field": "roomsSgl",
+          "n": 9,
+          "correct": 8,
+          "accuracy": 0.8889,
+          "meanConfidence": 0.6133
+        },
+        {
+          "field": "startDate",
+          "n": 9,
+          "correct": 9,
+          "accuracy": 1,
+          "meanConfidence": 0.95
+        }
+      ],
+      "perGroup": [
+        {
+          "field": "code",
+          "n": 32,
+          "correct": 29,
+          "accuracy": 0.9063,
+          "meanConfidence": 0.8175
+        },
+        {
+          "field": "date",
+          "n": 22,
+          "correct": 21,
+          "accuracy": 0.9545,
+          "meanConfidence": 0.8432
+        },
+        {
+          "field": "identity",
+          "n": 9,
+          "correct": 7,
+          "accuracy": 0.7778,
+          "meanConfidence": 0.7322
+        },
+        {
+          "field": "money",
+          "n": 9,
+          "correct": 7,
+          "accuracy": 0.7778,
+          "meanConfidence": 0.8
+        },
+        {
+          "field": "quantity",
+          "n": 27,
+          "correct": 25,
+          "accuracy": 0.9259,
+          "meanConfidence": 0.6352
+        }
+      ],
+      "lineF1": null,
+      "calibration": [
+        {
+          "bucket": "0.00–0.50",
+          "from": 0,
+          "to": 0.5,
+          "n": 14,
+          "meanConfidence": 0,
+          "accuracy": 0.6429,
+          "gap": -0.6429
+        },
+        {
+          "bucket": "0.50–0.60",
+          "from": 0.5,
+          "to": 0.6,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.60–0.70",
+          "from": 0.6,
+          "to": 0.7,
+          "n": 6,
+          "meanConfidence": 0.65,
+          "accuracy": 0.6667,
+          "gap": -0.0167
+        },
+        {
+          "bucket": "0.70–0.80",
+          "from": 0.7,
+          "to": 0.8,
+          "n": 5,
+          "meanConfidence": 0.75,
+          "accuracy": 1,
+          "gap": -0.25
+        },
+        {
+          "bucket": "0.80–0.85",
+          "from": 0.8,
+          "to": 0.85,
+          "n": 5,
+          "meanConfidence": 0.81,
+          "accuracy": 0.8,
+          "gap": 0.01
+        },
+        {
+          "bucket": "0.85–0.90",
+          "from": 0.85,
+          "to": 0.9,
+          "n": 7,
+          "meanConfidence": 0.8671,
+          "accuracy": 1,
+          "gap": -0.1329
+        },
+        {
+          "bucket": "0.90–0.95",
+          "from": 0.9,
+          "to": 0.95,
+          "n": 28,
+          "meanConfidence": 0.9136,
+          "accuracy": 0.9286,
+          "gap": -0.015
+        },
+        {
+          "bucket": "0.95–1.00",
+          "from": 0.95,
+          "to": 1,
+          "n": 34,
+          "meanConfidence": 0.95,
+          "accuracy": 1,
+          "gap": -0.05
+        }
+      ],
+      "threshold": {
+        "docType": "request",
+        "targetPrecision": 0.95,
+        "n": 99,
+        "threshold": 0.75,
+        "precisionAtThreshold": 0.962,
+        "coverageAtThreshold": 0.798,
+        "thresholdWilson": null,
+        "coverageAtWilson": null,
+        "leaksAtDefault": 3,
+        "note": "Nokta tahmini τ=0.75; Wilson üst sınırıyla hedef bu örnek sayısında (99) kanıtlanamıyor — daha fazla etiketli örnek gerekli."
+      }
+    },
+    "offer": {
+      "documents": 7,
+      "fields": 130,
+      "accuracy": 0.8846,
+      "ece": 0.1027,
+      "perField": [
+        {
+          "field": "currency",
+          "n": 7,
+          "correct": 7,
+          "accuracy": 1,
+          "meanConfidence": 0.95
+        },
+        {
+          "field": "guaranteePax",
+          "n": 1,
+          "correct": 1,
+          "accuracy": 1,
+          "meanConfidence": 0.8
+        },
+        {
+          "field": "lines[].board",
+          "n": 8,
+          "correct": 8,
+          "accuracy": 1,
+          "meanConfidence": 0.8125
+        },
+        {
+          "field": "lines[].kind",
+          "n": 21,
+          "correct": 21,
+          "accuracy": 1,
+          "meanConfidence": 0.8376
+        },
+        {
+          "field": "lines[].nights",
+          "n": 9,
+          "correct": 7,
+          "accuracy": 0.7778,
+          "meanConfidence": 0.8111
+        },
+        {
+          "field": "lines[].quantity",
+          "n": 21,
+          "correct": 18,
+          "accuracy": 0.8571,
+          "meanConfidence": 0.8386
+        },
+        {
+          "field": "lines[].roomType",
+          "n": 8,
+          "correct": 6,
+          "accuracy": 0.75,
+          "meanConfidence": 0.67
+        },
+        {
+          "field": "lines[].unitPrice",
+          "n": 22,
+          "correct": 22,
+          "accuracy": 1,
+          "meanConfidence": 0.8405
+        },
+        {
+          "field": "lines[].vatIncluded",
+          "n": 17,
+          "correct": 17,
+          "accuracy": 1,
+          "meanConfidence": 0.9
+        },
+        {
+          "field": "optionUntil",
+          "n": 6,
+          "correct": 4,
+          "accuracy": 0.6667,
+          "meanConfidence": 0.5667
+        },
+        {
+          "field": "prepaymentRate",
+          "n": 4,
+          "correct": 2,
+          "accuracy": 0.5,
+          "meanConfidence": 0.45
+        },
+        {
+          "field": "supplierName",
+          "n": 6,
+          "correct": 2,
+          "accuracy": 0.3333,
+          "meanConfidence": 0.4583
+        }
+      ],
+      "perGroup": [
+        {
+          "field": "code",
+          "n": 7,
+          "correct": 7,
+          "accuracy": 1,
+          "meanConfidence": 0.95
+        },
+        {
+          "field": "date",
+          "n": 6,
+          "correct": 4,
+          "accuracy": 0.6667,
+          "meanConfidence": 0.5667
+        },
+        {
+          "field": "identity",
+          "n": 6,
+          "correct": 2,
+          "accuracy": 0.3333,
+          "meanConfidence": 0.4583
+        },
+        {
+          "field": "lines",
+          "n": 106,
+          "correct": 99,
+          "accuracy": 0.934,
+          "meanConfidence": 0.8316
+        },
+        {
+          "field": "money",
+          "n": 4,
+          "correct": 2,
+          "accuracy": 0.5,
+          "meanConfidence": 0.45
+        },
+        {
+          "field": "quantity",
+          "n": 1,
+          "correct": 1,
+          "accuracy": 1,
+          "meanConfidence": 0.8
+        }
+      ],
+      "lineF1": 1,
+      "calibration": [
+        {
+          "bucket": "0.00–0.50",
+          "from": 0,
+          "to": 0.5,
+          "n": 8,
+          "meanConfidence": 0,
+          "accuracy": 0,
+          "gap": 0
+        },
+        {
+          "bucket": "0.50–0.60",
+          "from": 0.5,
+          "to": 0.6,
+          "n": 13,
+          "meanConfidence": 0.57,
+          "accuracy": 0.6923,
+          "gap": -0.1223
+        },
+        {
+          "bucket": "0.60–0.70",
+          "from": 0.6,
+          "to": 0.7,
+          "n": 3,
+          "meanConfidence": 0.65,
+          "accuracy": 0.3333,
+          "gap": 0.3167
+        },
+        {
+          "bucket": "0.70–0.80",
+          "from": 0.7,
+          "to": 0.8,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.80–0.85",
+          "from": 0.8,
+          "to": 0.85,
+          "n": 9,
+          "meanConfidence": 0.8,
+          "accuracy": 1,
+          "gap": -0.2
+        },
+        {
+          "bucket": "0.85–0.90",
+          "from": 0.85,
+          "to": 0.9,
+          "n": 27,
+          "meanConfidence": 0.8756,
+          "accuracy": 1,
+          "gap": -0.1244
+        },
+        {
+          "bucket": "0.90–0.95",
+          "from": 0.9,
+          "to": 0.95,
+          "n": 63,
+          "meanConfidence": 0.9,
+          "accuracy": 0.9841,
+          "gap": -0.0841
+        },
+        {
+          "bucket": "0.95–1.00",
+          "from": 0.95,
+          "to": 1,
+          "n": 7,
+          "meanConfidence": 0.95,
+          "accuracy": 1,
+          "gap": -0.05
+        }
+      ],
+      "threshold": {
+        "docType": "offer",
+        "targetPrecision": 0.95,
+        "n": 130,
+        "threshold": 0.65,
+        "precisionAtThreshold": 0.9725,
+        "coverageAtThreshold": 0.8385,
+        "thresholdWilson": null,
+        "coverageAtWilson": null,
+        "leaksAtDefault": 1,
+        "note": "Nokta tahmini τ=0.65; Wilson üst sınırıyla hedef bu örnek sayısında (130) kanıtlanamıyor — daha fazla etiketli örnek gerekli."
+      }
+    },
+    "contract": {
+      "documents": 4,
+      "fields": 57,
+      "accuracy": 1,
+      "ece": 0.1481,
+      "perField": [
+        {
+          "field": "currency",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "customerName",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "endDate",
+          "n": 3,
+          "correct": 3,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "guaranteePax",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.66
+        },
+        {
+          "field": "pax",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "prepaymentRate",
+          "n": 3,
+          "correct": 3,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "rooms[].count",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "rooms[].nights",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "rooms[].type",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "rooms[].unitPrice",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "startDate",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "supplierName",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "totalAmount",
+          "n": 4,
+          "correct": 4,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "vatSeparated",
+          "n": 3,
+          "correct": 3,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        }
+      ],
+      "perGroup": [
+        {
+          "field": "code",
+          "n": 7,
+          "correct": 7,
+          "accuracy": 1,
+          "meanConfidence": 0.8629
+        },
+        {
+          "field": "date",
+          "n": 7,
+          "correct": 7,
+          "accuracy": 1,
+          "meanConfidence": 0.8629
+        },
+        {
+          "field": "identity",
+          "n": 8,
+          "correct": 8,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "lines",
+          "n": 20,
+          "correct": 20,
+          "accuracy": 1,
+          "meanConfidence": 0.88
+        },
+        {
+          "field": "money",
+          "n": 7,
+          "correct": 7,
+          "accuracy": 1,
+          "meanConfidence": 0.8629
+        },
+        {
+          "field": "quantity",
+          "n": 8,
+          "correct": 8,
+          "accuracy": 1,
+          "meanConfidence": 0.755
+        }
+      ],
+      "lineF1": 1,
+      "calibration": [
+        {
+          "bucket": "0.00–0.50",
+          "from": 0,
+          "to": 0.5,
+          "n": 1,
+          "meanConfidence": 0,
+          "accuracy": 1,
+          "gap": -1
+        },
+        {
+          "bucket": "0.50–0.60",
+          "from": 0.5,
+          "to": 0.6,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.60–0.70",
+          "from": 0.6,
+          "to": 0.7,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.70–0.80",
+          "from": 0.7,
+          "to": 0.8,
+          "n": 6,
+          "meanConfidence": 0.76,
+          "accuracy": 1,
+          "gap": -0.24
+        },
+        {
+          "bucket": "0.80–0.85",
+          "from": 0.8,
+          "to": 0.85,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.85–0.90",
+          "from": 0.85,
+          "to": 0.9,
+          "n": 50,
+          "meanConfidence": 0.88,
+          "accuracy": 1,
+          "gap": -0.12
+        },
+        {
+          "bucket": "0.90–0.95",
+          "from": 0.9,
+          "to": 0.95,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.95–1.00",
+          "from": 0.95,
+          "to": 1,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        }
+      ],
+      "threshold": {
+        "docType": "contract",
+        "targetPrecision": 0.95,
+        "n": 57,
+        "threshold": 0.76,
+        "precisionAtThreshold": 1,
+        "coverageAtThreshold": 0.9825,
+        "thresholdWilson": null,
+        "coverageAtWilson": null,
+        "leaksAtDefault": 0,
+        "note": "Nokta tahmini τ=0.76; Wilson üst sınırıyla hedef bu örnek sayısında (57) kanıtlanamıyor — daha fazla etiketli örnek gerekli."
+      }
+    },
+    "invoice": {
+      "documents": 5,
+      "fields": 40,
+      "accuracy": 0.925,
+      "ece": 0.1825,
+      "perField": [
+        {
+          "field": "currency",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.9
+        },
+        {
+          "field": "dueDate",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.68
+        },
+        {
+          "field": "invoiceNo",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.9
+        },
+        {
+          "field": "issueDate",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.85
+        },
+        {
+          "field": "netAmount",
+          "n": 5,
+          "correct": 4,
+          "accuracy": 0.8,
+          "meanConfidence": 0.9
+        },
+        {
+          "field": "supplierName",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.75
+        },
+        {
+          "field": "totalAmount",
+          "n": 5,
+          "correct": 4,
+          "accuracy": 0.8,
+          "meanConfidence": 0.9
+        },
+        {
+          "field": "vatAmount",
+          "n": 5,
+          "correct": 4,
+          "accuracy": 0.8,
+          "meanConfidence": 0.9
+        }
+      ],
+      "perGroup": [
+        {
+          "field": "code",
+          "n": 5,
+          "correct": 5,
+          "accuracy": 1,
+          "meanConfidence": 0.9
+        },
+        {
+          "field": "date",
+          "n": 10,
+          "correct": 10,
+          "accuracy": 1,
+          "meanConfidence": 0.765
+        },
+        {
+          "field": "identity",
+          "n": 10,
+          "correct": 10,
+          "accuracy": 1,
+          "meanConfidence": 0.825
+        },
+        {
+          "field": "money",
+          "n": 15,
+          "correct": 12,
+          "accuracy": 0.8,
+          "meanConfidence": 0.9
+        }
+      ],
+      "lineF1": null,
+      "calibration": [
+        {
+          "bucket": "0.00–0.50",
+          "from": 0,
+          "to": 0.5,
+          "n": 1,
+          "meanConfidence": 0,
+          "accuracy": 1,
+          "gap": -1
+        },
+        {
+          "bucket": "0.50–0.60",
+          "from": 0.5,
+          "to": 0.6,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.60–0.70",
+          "from": 0.6,
+          "to": 0.7,
+          "n": 2,
+          "meanConfidence": 0.6,
+          "accuracy": 1,
+          "gap": -0.4
+        },
+        {
+          "bucket": "0.70–0.80",
+          "from": 0.7,
+          "to": 0.8,
+          "n": 3,
+          "meanConfidence": 0.7,
+          "accuracy": 0,
+          "gap": 0.7
+        },
+        {
+          "bucket": "0.80–0.85",
+          "from": 0.8,
+          "to": 0.85,
+          "n": 0,
+          "meanConfidence": null,
+          "accuracy": null,
+          "gap": null
+        },
+        {
+          "bucket": "0.85–0.90",
+          "from": 0.85,
+          "to": 0.9,
+          "n": 12,
+          "meanConfidence": 0.85,
+          "accuracy": 1,
+          "gap": -0.15
+        },
+        {
+          "bucket": "0.90–0.95",
+          "from": 0.9,
+          "to": 0.95,
+          "n": 10,
+          "meanConfidence": 0.9,
+          "accuracy": 1,
+          "gap": -0.1
+        },
+        {
+          "bucket": "0.95–1.00",
+          "from": 0.95,
+          "to": 1,
+          "n": 12,
+          "meanConfidence": 0.95,
+          "accuracy": 1,
+          "gap": -0.05
+        }
+      ],
+      "threshold": {
+        "docType": "invoice",
+        "targetPrecision": 0.95,
+        "n": 40,
+        "threshold": 0.85,
+        "precisionAtThreshold": 1,
+        "coverageAtThreshold": 0.85,
+        "thresholdWilson": null,
+        "coverageAtWilson": null,
+        "leaksAtDefault": 0,
+        "note": "Nokta tahmini τ=0.85; Wilson üst sınırıyla hedef bu örnek sayısında (40) kanıtlanamıyor — daha fazla etiketli örnek gerekli."
+      }
+    }
+  },
+  "byLanguage": [
+    {
+      "field": "en",
+      "n": 91,
+      "correct": 86,
+      "accuracy": 0.9451,
+      "meanConfidence": 0.8303
+    },
+    {
+      "field": "ru",
+      "n": 50,
+      "correct": 32,
+      "accuracy": 0.64,
+      "meanConfidence": 0.6544
+    },
+    {
+      "field": "tr",
+      "n": 185,
+      "correct": 180,
+      "accuracy": 0.973,
+      "meanConfidence": 0.8291
+    }
+  ],
+  "errors": [
+    {
+      "docId": "inv-ru-01",
+      "field": "netAmount",
+      "gold": 5680,
+      "pred": -1000,
+      "confidence": 0.7,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "inv-ru-01",
+      "field": "totalAmount",
+      "gold": 6248,
+      "pred": 248,
+      "confidence": 0.7,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "inv-ru-01",
+      "field": "vatAmount",
+      "gold": 568,
+      "pred": 1248,
+      "confidence": 0.7,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-en-01",
+      "field": "prepaymentRate",
+      "gold": 0.25,
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-en-01",
+      "field": "supplierName",
+      "gold": "Bosphorus Palace Hotel",
+      "pred": "Bosphorus Palace Hotel – Group Quotation",
+      "confidence": 0.65,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-en-02",
+      "field": "optionUntil",
+      "gold": "2027-02-15",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-en-02",
+      "field": "supplierName",
+      "gold": "Prime AV Solutions",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "lines[0].nights",
+      "gold": 2,
+      "pred": 1,
+      "confidence": 0.57,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "lines[0].quantity",
+      "gold": 12,
+      "pred": 1,
+      "confidence": 0.57,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "lines[0].roomType",
+      "gold": "DBL",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "lines[1].nights",
+      "gold": 2,
+      "pred": 1,
+      "confidence": 0.57,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "lines[1].quantity",
+      "gold": 8,
+      "pred": 1,
+      "confidence": 0.57,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "lines[1].roomType",
+      "gold": "SGL",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "optionUntil",
+      "gold": "2027-02-01",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "prepaymentRate",
+      "gold": 0.5,
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-ru-01",
+      "field": "supplierName",
+      "gold": "Отель Галата Резиденс",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "off-tr-03",
+      "field": "lines[2].quantity",
+      "gold": 2,
+      "pred": 200,
+      "confidence": 0.9,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "off-tr-03",
+      "field": "supplierName",
+      "gold": "Moda Sahil Otel",
+      "pred": "Moda Sahil Otel — Grup Teklifi",
+      "confidence": 0.65,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "req-en-03",
+      "field": "language",
+      "gold": "en",
+      "pred": "tr",
+      "confidence": 0.82,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "req-ru-01",
+      "field": "budget",
+      "gold": 30000,
+      "pred": 0,
+      "confidence": 0.9,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "req-ru-01",
+      "field": "city",
+      "gold": "İstanbul",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "req-ru-01",
+      "field": "customerName",
+      "gold": "ООО Северсталь Трейд",
+      "pred": "Бюджет 30 000 EUR. Компания ООО",
+      "confidence": 0.65,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "req-ru-02",
+      "field": "budget",
+      "gold": 120000,
+      "pred": 0,
+      "confidence": 0.9,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "req-ru-02",
+      "field": "city",
+      "gold": "Antalya",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "req-ru-02",
+      "field": "customerName",
+      "gold": "АО Ромашка",
+      "pred": "Компания АО",
+      "confidence": 0.65,
+      "matchKind": "mismatch"
+    },
+    {
+      "docId": "req-tr-03",
+      "field": "roomsDbl",
+      "gold": 10,
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "req-tr-03",
+      "field": "roomsSgl",
+      "gold": 20,
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    },
+    {
+      "docId": "req-tr-04",
+      "field": "endDate",
+      "gold": "2027-06-05",
+      "pred": null,
+      "confidence": 0,
+      "matchKind": "missing"
+    }
+  ],
+  "failures": []
+}

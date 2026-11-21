@@ -21,6 +21,7 @@ import { ContractsTab } from './ContractsTab';
 import { OperationsTab } from './OperationsTab';
 import { FinanceTab } from './FinanceTab';
 import { ClosingTab } from './ClosingTab';
+import { FINANCIAL_TABS, useCanSeeFinancials } from '../../lib/visibility';
 
 const TABS = ['overview', 'items', 'offers', 'comparison', 'quote', 'contracts', 'operations', 'finance', 'closing'] as const;
 type TabKey = (typeof TABS)[number];
@@ -32,12 +33,14 @@ export function ProjectPage() {
   const res = useApi(() => api.projects.get(id), [id]);
   const ctx = useMemo(() => (res.data ? { detail: res.data, reload: res.reload } : null), [res.data, res.reload]);
   const [outcomeOpen, setOutcomeOpen] = useState<null | 'won' | 'lost'>(null);
+  const canSeeFinancials = useCanSeeFinancials();
 
   if (res.error && !res.data) return <div className="page"><ErrorBox error={res.error} onRetry={() => void res.reload()} /></div>;
   if (!ctx) return <div className="page"><Loading /></div>;
 
   const { project, customer, alerts, stepTimer } = ctx.detail;
-  const current = (TABS as readonly string[]).includes(tab) ? (tab as TabKey) : 'overview';
+  const tabs = canSeeFinancials ? TABS : TABS.filter((k) => !FINANCIAL_TABS.includes(k));
+  const current = (tabs as readonly string[]).includes(tab) ? (tab as TabKey) : 'overview';
   const overTarget = stepTimer.businessMinutesElapsed > stepTimer.targetBusinessMinutes;
 
   return (
@@ -88,7 +91,7 @@ export function ProjectPage() {
         </section>
 
         <nav className="tabs" aria-label="Proje bölümleri">
-          {TABS.map((k) => (
+          {tabs.map((k) => (
             <NavLink key={k} to={`/projeler/${id}/${k === 'overview' ? '' : k}`} end className={() => `tabs__tab ${current === k ? 'is-active' : ''}`} aria-current={current === k ? 'page' : undefined}>
               {t.project.tabs[k]}
             </NavLink>

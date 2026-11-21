@@ -17,6 +17,19 @@ const SCALAR_KEYS: (keyof TenantRules)[] = [
   'automationPromotionThreshold', 'automationSampleRate', 'aiConfidenceThreshold', 'lowSupplierScore', 'guestDataRetentionDays', 'accommodationTaxRate',
 ];
 
+/** [Ürün kararı] boolean rules (docs/09 G-15 … G-17); defaults are the conservative option. */
+const PRODUCT_TOGGLES: { key: 'hideCustomerFromSuppliers' | 'fieldRoleCanSeeFinancials' | 'outboundAutoSendRequiresStandingApproval'; label: string; hint: string }[] = [
+  { key: 'hideCustomerFromSuppliers', label: 'Tedarikçiden müşteri adını gizle', hint: 'RFQ, hatırlatma, tedarikçi formu, konfirmasyon, rooming list: PRJ-0042-20270312-80 referansı (varsayılan: açık).' },
+  { key: 'fieldRoleCanSeeFinancials', label: 'Saha rolü finansal verileri görebilir', hint: 'Kâr, P&L, finans kayıtları, teklif maliyet / marj, sözleşme tutarları (varsayılan: kapalı).' },
+  { key: 'outboundAutoSendRequiresStandingApproval', label: 'Otomasyon terfisi dış mesajlar için kalıcı onay sayılır', hint: 'Açıksa terfi edilmiş RFQ / pazarlık / opsiyon / revizyon mesajları otomatik gider; kapalıyken yine tek dokunuşla onaya gelir (varsayılan: kapalı).' },
+];
+/** Candidates for `neverAutomateKinds` (AI action types / decision kinds that a promotion could otherwise automate). */
+const AUTOMATABLE: { key: string; label: string }[] = [
+  { key: 'customer_quote', label: 'Müşteri teklifi' }, { key: 'quote_approval', label: 'Teklif onayı' }, { key: 'margin_override', label: 'Marj altı açma' },
+  { key: 'rfq_send', label: 'RFQ gönderimi' }, { key: 'negotiation_message', label: 'Pazarlık mesajı' }, { key: 'option_extension_request', label: 'Opsiyon uzatma talebi' },
+  { key: 'revision_request', label: 'Revizyon talebi' }, { key: 'team_assignment', label: 'Ekip ataması' }, { key: 'low_confidence_payment_match', label: 'Düşük güvenli ödeme eşleşmesi' },
+];
+
 /** §8 Blok 5 — "Kod değil tablo; yönetici değiştirir." Admin only; AI can never call PATCH /rules. */
 export function RulesPage() {
   const t = useT();
@@ -77,6 +90,34 @@ export function RulesPage() {
         ) : null}
       </Card>
 
+      {rules.supplierSeasonMarkups?.length || rules.supplierRfqHours?.length ? (
+        <Card title="Kapsamlı kurallar (§16.5 kural önerilerinden)" padded={false}>
+          <div className="table-wrap">
+            <table className="table table--compact">
+              <thead><tr><th scope="col">Tedarikçi</th><th scope="col">Kural</th><th scope="col">Değer</th><th scope="col"><span className="sr-only">İşlem</span></th></tr></thead>
+              <tbody>
+                {(rules.supplierSeasonMarkups ?? []).map((o, i) => (
+                  <tr key={`s${i}`}>
+                    <td>{o.supplierName ?? o.supplierId}</td>
+                    <td>Sezon markup ({o.months.join(', ')}. ay) — yalnız fiyat sınıfı bilinmiyorsa</td>
+                    <td className="num">{pct(o.markup)}</td>
+                    <td className="num">{isAdmin ? <Button size="sm" variant="ghost" icon="x" onClick={() => setRules({ ...rules, supplierSeasonMarkups: rules.supplierSeasonMarkups.filter((_, j) => j !== i) })}>{t.common.remove}</Button> : null}</td>
+                  </tr>
+                ))}
+                {(rules.supplierRfqHours ?? []).map((o, i) => (
+                  <tr key={`r${i}`}>
+                    <td>{o.supplierName ?? o.supplierId}</td>
+                    <td>RFQ hatırlatma / telefon görevi</td>
+                    <td className="num">{o.reminderHours} / {o.callTaskHours} sa</td>
+                    <td className="num">{isAdmin ? <Button size="sm" variant="ghost" icon="x" onClick={() => setRules({ ...rules, supplierRfqHours: rules.supplierRfqHours.filter((_, j) => j !== i) })}>{t.common.remove}</Button> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
+
       <Card title={t.admin.rules}>
         <div className="rules-grid">
           {SCALAR_KEYS.map((k) => {
@@ -111,6 +152,28 @@ export function RulesPage() {
               <input aria-label="Mesai bitişi" className="input" type="time" disabled={!isAdmin} value={rules.businessHours.end} onChange={(e) => setRules({ ...rules, businessHours: { ...rules.businessHours, end: e.target.value } })} />
             </span>
           </div>
+        </div>
+      </Card>
+
+      <Card title="Ürün kararları — gizlilik ve otomasyon">
+        <p className="muted small">Ürün sahibi karar verene kadar güvenli (muhafazakâr) varsayılanlar; yalnız yönetici değiştirir.</p>
+        <div className="stack">
+          {PRODUCT_TOGGLES.map(({ key, label, hint }) => (
+            <label key={key} className={`row ${changed.includes(key) ? 'field--changed' : ''}`}>
+              <input type="checkbox" disabled={!isAdmin} checked={rules[key] === true} onChange={(e) => setRules({ ...rules, [key]: e.target.checked })} />
+              <span><strong>{label}</strong><br /><span className="muted small">{hint}</span></span>
+            </label>
+          ))}
+          <fieldset className={`field ${changed.includes('neverAutomateKinds') ? 'field--changed' : ''}`}>
+            <legend className="field__label">Asla otomatiğe alınmayan işler (Face ID gereken para onayları)</legend>
+            {AUTOMATABLE.map(({ key, label }) => (
+              <label key={key} className="row">
+                <input type="checkbox" disabled={!isAdmin} checked={rules.neverAutomateKinds.includes(key)}
+                  onChange={(e) => setRules({ ...rules, neverAutomateKinds: e.target.checked ? [...rules.neverAutomateKinds, key] : rules.neverAutomateKinds.filter((x) => x !== key) })} />
+                <span>{label} <span className="muted small mono">{key}</span></span>
+              </label>
+            ))}
+          </fieldset>
         </div>
       </Card>
 

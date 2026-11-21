@@ -22,7 +22,13 @@ export async function rateLimitStore(app: FastifyInstance): Promise<Record<strin
     const Redis = (mod.default ?? mod) as new (u: string, o: Record<string, unknown>) => { quit(): Promise<unknown> };
     return new Redis(url, { connectTimeout: 1000, maxRetriesPerRequest: 1, enableOfflineQueue: false });
   })();
-  const redis = await shared;
+  let redis: { quit(): Promise<unknown> };
+  try {
+    redis = await shared;
+  } catch (e) {
+    shared = null;
+    throw e;
+  }
   app.addHook('onClose', async () => {
     if (!shared) return;
     shared = null;

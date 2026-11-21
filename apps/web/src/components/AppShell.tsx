@@ -11,6 +11,7 @@ import { useToast } from './Toast';
 import { errorMessage } from '../api/client';
 import { useOfflineQueue } from '../lib/OfflineQueueProvider';
 import { PushToggle } from './PushToggle';
+import { PasswordChange } from './PasswordChange';
 
 interface NavItem { to: string; label: string; icon: IconName; roles?: Role[]; end?: boolean }
 
@@ -117,6 +118,7 @@ export function AppShell() {
         ) : null}
         <div className="stack">
           <PushToggle />
+          <PasswordChange />
           {webauthnSupported() ? (
             <input
               type="password"

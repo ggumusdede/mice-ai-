@@ -59,6 +59,9 @@ describe('admin (§17.1: rules / authority stay with the Admin)', () => {
     expect((await clerk.patch(`/api/users/${t.users.clerk.id}`, { authorityLevel: 'full' })).status).toBe(403);
     const u = await admin.patch(`/api/users/${t.users.ops.id}`, { authorityLevel: 'scoped', authorityScope: { customerIds: [t.customers.trusted] }, canSign: true });
     expect(u.body).toMatchObject({ authorityLevel: 'scoped', canSign: true, authorityScope: { customerIds: [t.customers.trusted] } });
+    // G-17: an authority / signing change ends the user's existing sessions → the old token is refused, a new login works
+    expect((await ops.get('/api/auth/me')).status).toBe(401);
+    ops = client(T.app, await login(T.app, t.users.ops.email));
     expect((await admin.patch(`/api/users/${t.users.admin.id}`, { role: 'clerk_sales' })).body.error.code).toBe('SELF_DEMOTION');
     const stats = await admin.get(`/api/users/${t.users.admin.id}/stats`);
     expect(stats.body).toMatchObject({ userId: t.users.admin.id });

@@ -50,11 +50,28 @@ PRD §8, ilk veri yükü olarak son 12–18 ayın kapanmış projelerini öngör
 4. **Bölme:** %30 geliştirme (istem ve eşik ayarı), %70 **dondurulmuş test**. Test seti istem geliştirmede görülmez.
 5. **Sürekli büyüme:** Canlı kullanımda insan düzeltmesi yapılan her belge (bkz. §5) aday örnektir. Aylık 20–30 yeni örnek seçilip etiketlenerek test setine eklenir.
 
-### Değerlendirme koşucusu
+### Değerlendirme koşucusu (uygulandı: `packages/ai/eval/`)
 
-- `npm run eval -w packages/ai` komutu her belgeyi `AiService` ile işler ve alan bazlı sonuçları JSON ve HTML raporu olarak üretir.
-- **CI kapısı:** İstem, model veya ayrıştırıcı değişikliği yapan PR, test setinde para alanlarında sızan hata hedefini aşarsa birleştirilemez.
-- Maliyet kontrolü: Değerlendirme, Message Batches API ile (yaklaşık %50 indirimli, asenkron) çalıştırılabilir.
+```bash
+npm run eval -w @mice/ai -- --provider=mock --set=all                 # deterministik mock, ağ yok
+npm run eval -w @mice/ai -- --provider=claude --set=offers,invoices   # ANTHROPIC_API_KEY gerekir (AI_MODEL / AI_MODEL_FAST geçerli)
+npm run eval -w @mice/ai -- --provider=claude --set=contracts --as-pdf   # metin fikstürleri pdfkit ile PDF'e çevrilir
+#   diğer seçenekler: --target=0.95 (hedef kesinlik) --out=<dizin> --fixtures=<dizin> --concurrency=2 --limit=N
+```
+
+| Parça | Dosya | Not |
+|---|---|---|
+| Fikstürler | `eval/fixtures/{requests,offers,contracts,invoices}.json` | 25 **sentetik** belge (9 talep, 7 teklif, 4 sözleşme, 5 fatura; TR/EN/RU; e-posta, WhatsApp, telefon notu, CSV/Excel, e-Fatura/e-Arşiv görünümü, yabancı fatura, eksik alanlı sözleşme). Biçim: `{id, docType, language, source, today, input:{text, channel?, file?}, gold, tags, origin}`. Altın etiketlerde yalnız listelenen alanlar skorlanır; açık `null` = "alan yok olmalı" (uydurulan değer hata sayılır). `<set>.*.json` dosyaları (ör. `offers.exported.json`) otomatik eklenir |
+| Koşucu / skor | `eval/harness.ts`, `eval/run.ts` | Alan bazlı karşılaştırma: `exact` (fatura no), `normalized` (ad / şehir: harf katlama, noktalama ve A.Ş./Ltd./ООО/Otel gibi gürültü belirteçleri atılır, eşitlik veya ≥ %60 örtüşen içerme), `code` (para birimi, oda tipi; TL→TRY), `date` (ISO gün), `int`, `money` (±0,01), `rate` (±0,0005), `bool`. Satırlar (teklif satırları, sözleşme odaları) önce açgözlü en-iyi eşleştirmeyle eşlenir (para alanı 2 puan); eşleşmeyen altın satır = eksik (güven 0), fazla tahmin satırı = satır güveniyle **hatalı kabul adayı**. Satır F1 raporlanır |
+| Güven | aynı | Alanın güveni: talepte `Extracted.confidence`, teklif/faturada `fieldConfidence[alan]` (satırlarda `lines`, KDV bayrağında `vat`), sözleşmede alan bazlı güven olmadığı için belge güveni. Üretilmemiş değerin güveni 0 (her eşikte insana gider) |
+| Rapor | `eval/reports/eval-<sağlayıcı>-<set>.{md,json}` | Belge türü bazında: alan ve alan grubu doğruluğu, kalibrasyon tablosu (0–0,5, 0,5–0,6, …, 0,95–1 aralıkları: n, ortalama güven, gözlenen doğruluk, fark) + ECE, eşik önerisi, dil bazında doğruluk, tüm hatalı alanlar. `eval-mock-all.*` mock taban çizgisidir |
+| Test | `packages/ai/test/eval-harness.test.ts` | Mock ile tüm seti çalıştırır; rapor şeklini ve mütevazı tabanı (genel ≥ %80, tür başına ≥ %70, teklif satır F1 > 0,8) doğrular. Claude modu testte çalıştırılmaz |
+| Gerçek set | `apps/api/src/scripts/export-eval-set.ts` | `npm run export-eval-set -w @mice/api -- --tenant=<uuid> [--since=YYYY-MM-DD] [--out=…]`: `ai_actions.corrected = true` olan teklif okumaları (kaynak `supplier_offers.raw_text`) ve talep ayıklamaları (kaynak `inbound_messages.body`) için altın = AI çıktısı + insan düzeltmesi (`changes[alan].after`). E-posta, telefon, IBAN, TCKN ve bilinen kişi adları (kullanıcılar, tedarikçi ve müşteri kontakları) takma adlanır; kurum adları ve fiyatlar korunur. Sözleşme / fatura düzeltmeleri kaynak metin saklanmadığı için sayılır ama dışa aktarılmaz. Çıktı acentanın ortamında kalır; iki kişilik etiket kontrolünden (§3 adım 3) geçmeden test setine alınmamalıdır |
+
+**Bugünkü mock sonucu (sentetik set, yönlendirici):** genel ham doğruluk ≈ %91; Rusça talepte bütçe 0,9 güvenle yanlış okunuyor (sızan hata örneği), Rusça teklif satırlarında miktar/gece okunamıyor, Rusça faturada tutarlar karışıyor; PDF modunda mock hiçbir şey okuyamaz (güven 0 → tümü insana). 25 belgeyle hiçbir belge türünde Wilson sınırlı %95 eşiği kanıtlanamıyor — bu beklenen sonuçtur ve gerçek setin neden gerekli olduğunu gösterir.
+
+- **CI kapısı (henüz yok ⛔):** İstem, model veya ayrıştırıcı değişikliği yapan PR, test setinde para alanlarında sızan hata hedefini aşarsa birleştirilemez. Koşucu JSON raporu bunun girdisidir (`byDocType.*.perGroup`, `threshold.leaksAtDefault`).
+- Maliyet kontrolü: Değerlendirme, Message Batches API ile (yaklaşık %50 indirimli, asenkron) çalıştırılabilir (koşucu bugün eşzamanlı çağırır, `--concurrency`).
 
 ## 4. Güven puanı ve eşik kalibrasyonu
 
@@ -74,6 +91,16 @@ Modelin kendi beyan ettiği güven puanı tek başına iyi kalibre değildir. He
 `birleşik = f(s1..s6)`. Başlangıçta basit kural tabanlı bir birleşim kullanılır. Yeterli veri biriktiğinde (≥ 1.000 etiketli alan) lojistik regresyon veya isotonic kalibrasyon ile öğrenilir.
 
 ### Eşik belirleme yöntemi
+
+Koşucunun uyguladığı (`recommendThreshold`, `eval/harness.ts`): her belge türü için skorlanan alanlar `(güven, doğru/yanlış)` çiftleridir.
+Aday eşikler gözlenen güven değerleridir; `τ` için kabul kümesi `güven ≥ τ`, kesinlik = kabul kümesindeki doğru oranı, kapsama = kabul
+edilen alan ÷ tüm alanlar. Rapor iki eşik verir: **nokta eşiği** = kesinliği hedefe (varsayılan %95, `--target`) ulaşan en düşük `τ`;
+**Wilson eşiği** = kabul kümesindeki hata oranının %95 Wilson üst sınırı `≤ 1 − hedef` olan en düşük `τ` (küçük örneklemde güvenli taraf —
+önerilecek olan budur). Hiçbir `τ` hedefe ulaşmıyorsa sonuç `null`'dır: o belge türü tümüyle insana gider (eşik gevşetilmez). Ayrıca
+bugünkü varsayılan 0,8 üstünde yanlış olan alan sayısı (`leaksAtDefault`) raporlanır. Önerilen eşik otomatik uygulanmaz; yönetici
+`aiConfidenceThreshold` (veya ileride alan türü bazlı anahtar) kuralını değiştirerek yürürlüğe koyar (§6: kural değişikliği insanda).
+Aşağıdaki adımlar hedef süreçtir:
+
 
 1. Geliştirme setinde her alan türü için `(birleşik güven, doğru/yanlış)` çiftleri toplanır.
 2. **Güvenilirlik diyagramı** çizilir ve ECE (expected calibration error) hesaplanır.

@@ -1,4 +1,4 @@
--- 009 Inbound channels (§7 Adım 0 / Adım 1 yanıt okuma, docs/07 §6–§7) and e-Fatura UBL-TR reading (§7 Adım 7, docs/07 §4).
+-- 011 Inbound channels (§7 Adım 0 / Adım 1 yanıt okuma, docs/07 §6–§7) and e-Fatura UBL-TR reading (§7 Adım 7, docs/07 §4).
 --
 -- * inbound_channels — per-tenant inbound endpoint settings: route key (URL part / WhatsApp phone_number_id) and the HMAC
 --   secret of the e-mail webhook. NOT row-audited (the secret must never be copied into the append-only audit log).

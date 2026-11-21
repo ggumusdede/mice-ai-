@@ -26,6 +26,14 @@ kırmızıya döndüğü ayrıca doğrulandı.
 | G-12 | Düşük | Güvenlik başlıkları yok (nosniff, frame, referrer, CSP); token içeren URL'ler önbelleğe / Referer'a düşebilir | Düzeltildi |
 | G-14 | **Yüksek** | Yabancı anahtarlar yalnız `id`'ye bağlıydı; FK kontrolü RLS'yi atlar → B acentası, A'nın UUID'sini bilerek A'nın tedarikçisine / projesine / RFQ'suna işaret eden satır yazabiliyordu (kiracı bütünlüğü, §3.8) | Düzeltildi |
 | G-13 | Düşük | Public rooming formu sınırsız misafir kabul ediyordu → sızan link acentanın adresinden sınırsız e-posta (spam / oltalama rölesi, §18.10) | Düzeltildi |
+| G-15 | Orta | Tedarikçiye giden her çıktıda (RFQ e-postası / hatırlatması, tedarikçi formu, pazarlık, konfirmasyon, revizyon, rooming list, `X-MICE-Project` başlığı) müşteri adını içeren proje kodu (kalan risk 6) | Düzeltildi — **[Ürün kararı]** `hideCustomerFromSuppliers` |
+| G-16 | Orta | Saha rolü kâr / P&L / finans kayıtları / teklif maliyet-marj / başkalarının taslaklarını görebiliyordu; onaysız taslağı herkes gönderebiliyordu (kalan risk 4, 5) | Düzeltildi — **[Ürün kararı]** `fieldRoleCanSeeFinancials` |
+| G-17 | Orta | JWT iptal edilemiyordu (şifre / rol değişikliği, pasife alma sonrası 12 saat geçerli) (kalan risk 3) | Düzeltildi |
+| G-18 | Orta | XLSX zip bombası: exceljs 20 MB dosyayı GB'larca açabilirdi (kalan risk 1) | Düzeltildi |
+| G-19 | Düşük | Postgres hata metni (kısıt / tablo adı) istemciye dönüyordu; 5xx loglarında DETAIL (satır değerleri) (kalan risk 9) | Düzeltildi |
+| G-20 | Düşük | Çok örnekli worker kurulumunda işler (otonom RFQ hatırlatması, özetler, e-posta yeniden denemesi) her örnekte çalışırdı | Düzeltildi |
+| G-21 | Düşük | Çok örnekli API'de hız sınırı örnek başına bellekte (kalan risk 2'nin ikinci yarısı) | Düzeltildi (isteğe bağlı Redis deposu) |
+| Ü-1 | **[Ürün kararı]** | Müşteri teklifi otomasyonu × §15 biyometri; terfi edilmiş dış mesajların otomatik gönderimi (kalan risk 7) | Güvenli varsayılan: `neverAutomateKinds`, `outboundAutoSendRequiresStandingApproval=false` |
 
 ## Bulgular
 
@@ -111,6 +119,59 @@ kırmızıya döndüğü ayrıca doğrulandı.
   (`/s/rfq/<token>` gibi URL'ler dış bağlantılara Referer ile gitmez). Test `G-12`.
 - **G-13** `services/guests.ts`: public formdan proje başına en fazla `max(200, 2 × pax)` misafir (`ROOMING_LIMIT`). Test `G-06` içinde.
 
+### G-15 … G-21 ve Ü-1 (kalan risklerin düzeltilmesi, Kasım 2026)
+
+Ürün sahibinin henüz karar vermediği her konu **acenta kuralıdır** (`packages/shared/src/rules.ts` `DEFAULT_RULES`, eklemeli;
+yönetici "Kurallar" ekranındaki "Ürün kararları" kartından değiştirir; `PATCH /api/rules` admin + insan). Varsayılan her zaman
+daha muhafazakâr seçenektir. Testler: `apps/api/test/security-residual.test.ts` (+ `contracts-automation`, `closing-admin`,
+`delivery`, `packages/domain/test/misc.test.ts`); e2e: `e2e/steps0-5.mjs` tedarikçi sayfası ve saha kullanıcısı kontrolleri.
+
+- **Ü-1 [Ürün kararı] otomasyon × biyometri.** `neverAutomateKinds` (varsayılan `customer_quote`, `quote_approval`,
+  `margin_override`): AI eylem türü veya karar türü; `aiGate` bu türleri sayaç `auto` olsa bile onaya düşürür,
+  `recordAutomationOutcome` terfi önerisi üretmez, `promoteAction` (ve eski bir terfi kartı) `NOT_PROMOTABLE` ile reddeder. §6 yapısal
+  listesi (`NEVER_AUTO_KINDS`) üstte kalır. `outboundAutoSendRequiresStandingApproval` (varsayılan **false**): **mevcut davranış
+  doğrulandı** — terfi edilmiş dış mesaj türleri (RFQ, pazarlık, opsiyon uzatma / takip, revizyon) önceden *otomatik gönderiliyor*,
+  örneklem denetimi gönderimden *sonra* yapılıyordu. Varsayılan artık daha sıkı: `auto` modda bile bu kartlar tek dokunuşla onaya
+  gelir (`detail.automation='outbound_held_for_approval'`); `true` yapılırsa yöneticinin terfi kararı kalıcı onay sayılır ve eski
+  davranış (otomatik gönderim + ~1/20 örneklem) geri gelir. Terfi kartının AI notu bu durumu söyler. Test: `§15 × §16 …`,
+  `contracts-automation.test.ts` `automation (§16)`.
+- **G-15 [Ürün kararı] tedarikçiye müşteri adı.** `hideCustomerFromSuppliers` (varsayılan **true**). `domain/project-code.ts`
+  `supplierSafeCode`: `PRJ-0042-ACME-20270312-80-HILTON` → `PRJ-0042-20270312-80` (beklenmeyen biçimde yalnız `PRJ-0042`).
+  `services/visibility.ts` `supplierRef()` kullanılan yerler: RFQ taslağı (`rfqs.ts`), public RFQ görünümü, worker RFQ hatırlatma
+  şablonu, pazarlık (`offers.ts`), opsiyon uzatma (`worker.ts`), revizyon talebi ve tedarikçi konfirmasyonu (`contracts.ts`),
+  rooming list Excel'i (otele gider; dosya adı dahil). `X-MICE-Project` başlığı her alıcı için kısa kod (`PRJ-0042`). Sözleşme
+  alanları (müşteri / fatura adı) bilinçli olarak değişmedi — sözleşme bunu gerektirir; e-posta konuları ise kodu taşımaz.
+  Test: `G-15 …` (taslak, gönderilen e-posta, tedarikçi sayfası, 24 sa hatırlatma, kural kapatılınca tam kod).
+- **G-16 [Ürün kararı] saha rolü ve taslak gönderimi.** `fieldRoleCanSeeFinancials` (varsayılan **false**), sunucuda:
+  `projectDetail` kâr, teklifler / değerlendirmeler, kalem alış / satış, müşteri teklifleri, sözleşmeler, finansal belgeler (P&L,
+  teklif, müşteri fatura taslağı) ve para içeren satırların audit görüntülerini çıkarır; zaman çizelgesi, benzer projeler ve "Bu
+  projeye sor" bağlamı da kısılır. `403 FINANCIALS_HIDDEN`: `/api/quotes/:id(/pdf)`, `/api/projects/:id/contracts`,
+  `/api/contracts/:id`, `/api/items/:id/comparison`, `/api/finance/entries`, finansal belge dosyası / yeniden üretimi, kendi karar
+  kutusunda olmayan karar ayrıntısı. Taslak listesi yalnız kendi (`from_user_id`) taslakları; başkasının taslağını düzenleyemez.
+  Web: para sekmeleri, kâr bloğu, P&L üretimi ve maliyet sütunları saha rolünde gizli (`lib/visibility.ts`). **Taslak gönderimi
+  (kural değil, her rolde):** `POST /api/drafts/:id/send` yalnız taslağın sahibi veya yönetici (`403 DRAFT_NOT_OWNER`). Test: `G-16 …`.
+- **G-17 oturum iptali.** `010_session_revocation.sql` `users.token_version`; JWT `tv` taşır, `withUserCtx` her istekte aynı
+  kullanıcı satırıyla karşılaştırır (önbelleksiz, ek sorgu yok); `tv`'siz eski belirteç reddedilir. Artış: `POST /api/auth/password`
+  (yeni şifre ≥ 10, mevcut şifreyle yeniden doğrulama; bu oturuma yeni belirteç döner), `PATCH /api/users/:id` rol / yetki seviyesi /
+  kapsam / imza / aktiflik değişikliği (ad değişikliği değil), `POST /api/users/:id/revoke-sessions` ("her yerden çıkış", yalnız
+  yönetici). Varsayılan ömür 12 sa → **8 sa** (`JWT_TTL`, eski `JWT_EXPIRES_IN` okunur). Web: profil sayfasında şifre değiştirme,
+  Kullanıcılar ekranında "Oturumları kapat". HttpOnly çerez + yenileme belirteci hâlâ öneri. Test: `G-17 …`, `closing-admin.test.ts`.
+- **G-18 XLSX zip bombası.** `apps/api/src/lib/zip-guard.ts` (bağımlılıksız): merkez dizin okunur; ZIP64 / şifreli / bilinmeyen
+  sıkıştırma reddedilir; her girdi `inflateRawSync(maxOutputLength = kalan bütçe)` ile **gerçek** boyutu ölçülerek açılır (beyan edilen
+  boyuta güvenilmez, üst üste binen girdiler ortak bütçeye takılır); sınırlar 30 MB açılmış, oran 100 (≥ 1 MB girdilerde ve toplamda),
+  2000 girdi (`XLSX_MAX_*`). `xlsxToCsv` exceljs'ten önce çağırır → tüm xlsx yüklemeleri (teklif, fatura, sözleşme, banka ekstresi,
+  public RFQ dosyası) `400 UNSAFE_ARCHIVE`. Test: `G-18 …` (gerçek xlsx geçer; deflate bombası, yalan boyut, yüksek oran, 2001 girdi,
+  zip olmayan dosya; multipart banka ekstresi).
+- **G-19 Postgres hata metni.** `errors.ts`: bilinen SQLSTATE'ler genel Türkçe mesaj (kısıt adı da dönmez), bilinmeyen PG hatası
+  500 genel mesaj; kendi tetikleyici metinlerimiz (`MIxxx`) korunur. Log yalnız `pgLogFields()` (kod, kısıt, tablo, sütun, mesaj) —
+  DETAIL (satır değerleri) asla. Test: `G-19 …`.
+- **G-20 worker lider kilidi.** `src/worker-lock.ts`: ayrılmış bağlantıda oturum düzeyi `pg_try_advisory_lock`; lider kilidi yaşadığı
+  sürece tutar, bağlantı koparsa kilit düşer ve bekleyen örnek bir sonraki turda devralır. `runIfLeader()` bekleyende `null` döner
+  ("worker standby" logu). Test: `G-20 …`.
+- **G-21 hız sınırı deposu.** `RATE_LIMIT_REDIS_URL` → `@fastify/rate-limit`'in yerleşik Redis deposu (giriş, `/api/public/*`,
+  public-b, inbound); `ioredis` isteğe bağlı paket (yüklü değilse API açılmaz — sessizce örnek başına sınıra düşmez). Redis kesintisinde
+  `skipOnError` (API ayakta kalır). `trustProxy` için `TRUST_PROXY` zaten var. Test: `G-21 …` (yapılandırma; gerçek Redis'e karşı test yok).
+
 ## İncelenip sorun bulunmayan alanlar (kanıt)
 - **RLS:** (FK açığı için bkz. G-14) `tenant_id` taşıyan tüm tablolarda `ENABLE` + `FORCE` + `tenant_isolation`; `tenants` için de (`tenant_id` üretilmiş
   sütun). `mice_app` süper kullanıcı / BYPASSRLS değil, DELETE/TRUNCATE yok, `public` şemasında CREATE yok. `withTenant` dışında
@@ -135,35 +196,27 @@ kırmızıya döndüğü ayrıca doğrulandı.
 - **Hatalar:** 5xx yanıtları genel mesaj döner (yığın izi yok). Denetim kaydı parola hash'i, token hash'i, şifreli PII ve dosya
   verisini yazmaz.
 
-## Kalan riskler / öneriler (düzeltilmedi)
-1. **XLSX zip bombası:** tedarikçi (public link) ve finans yüklemeleri exceljs ile bellekte açılıyor; 20 MB sıkıştırılmış dosya
-   GB'larca açılabilir. Öneri: ayrıştırmayı bellek sınırlı bir worker thread'e almak veya zip merkez dizinindeki açılmış boyutu
-   akış hâlinde sınırlamak (beyan edilen boyut güvenilir değil).
-2. **Ters vekil (proxy) arkasında hız sınırı:** Fastify `trustProxy` ayarlı değil; yük dengeleyici arkasında tüm istemciler tek
-   IP görünür (tüm public sayfalar birlikte kısıtlanır). Docker / üretim kurulumunda güvenilen proxy adresiyle `trustProxy`
-   ayarlanmalı; hız sınırı çok örnekli kurulumda Redis deposuna alınmalı.
-3. **JWT localStorage'da, iptal yok:** XSS olursa belirteç çalınır (G-02 artık Face ID'yi korur). 12 saatlik belirteç şifre
-   değişince iptal edilmez. Öneri: HttpOnly çerez + kısa ömürlü erişim / yenileme belirteci, `token_version` ile iptal.
-   Web sunucusunda (nginx / CDN) CSP başlığı da verilmeli.
-4. **Rol bazlı okuma kapsamı geniş:** proje detayı (kâr-zarar, marj), belgeler (P&L PDF), `/api/finance/entries`, karar
-   ayrıntısı (`GET /api/decisions/:id`) ve taslaklar tenant içindeki her role açık; saha sorumlusu da iç marjları görebilir.
-   PRD bunu açıkça yasaklamıyor — **[Ürün kararı]**: alan bazlı rol maskeleme (en az saha için).
-5. **Taslak gönderimi rol kontrolü:** onay gerektirmeyen taslağı (ör. eksik bilgi sorusu) tenant içindeki herhangi bir rol kendi
-   adresinden gönderebilir. Öneri: proje sahibi / satış-operasyon rolleriyle sınırlamak.
-6. **Proje kodu tedarikçiye gidiyor:** `PRJ-####-MÜŞTERİ-…` RFQ e-postasında ve tedarikçi sayfasında; müşteri adı tedarikçiye
-   açılıyor (müşteriyi atlama riski). **[Ürün kararı]**: tedarikçiye kısa kod (`PRJ-####`) göstermek.
-7. **Müşteri teklifi otomasyonu:** `customer_quote` PRD §6'ya göre "öneri" ve terfi edilebilir; otomatiğe alınırsa biyometri
-   gerektiren `quote_approval` AI tarafından onaylanır (gönderim yine insan). Biyometri gerektiren türlerin `NEVER_AUTO_KINDS`'a
-   eklenmesi önerilir — **[Ürün kararı]** (PRD ile çelişebilir).
-8. **Rooming rıza e-postası içeriği:** misafir adı (200 karakter) e-posta selamlamasında kullanılıyor; G-13 hacmi sınırlar ama
-   içeriği değil. Öneri: selamlamayı adsız yapmak veya adı yalnız harf / boşlukla sınırlamak.
-9. **PG hata mesajları:** `23505/23503/22P02` için Postgres mesajı istemciye dönüyor (kısıt / tablo adı). Düşük risk; üretimde
-   genel mesaja çevrilebilir.
-10. **Üretim loglaması:** Fastify logger yalnız `development`'ta açık; üretimde 5xx hataları hiç loglanmıyor. Yapılandırılmış
-    log (PII'siz) açılmalı.
-11. **`mice_app` parolası** migration'da `mice_app`; üretimde değiştirilmeli (README'de belirtilmiş).
-12. **Askıya alınan acentada worker:** `app_tenant_ids()` zaten yalnız aktif tenantları döner; ancak askıya alma ile bekleyen
-    outbox teslimleri ayrıca durdurulmuyor (teslim çalışanı kontrol etmeli).
+## Kalan riskler / öneriler
+Durum Kasım 2026 (G-15 … G-21 sonrası):
+1. ~~XLSX zip bombası~~ — **düzeltildi (G-18)**.
+2. **Ters vekil (proxy) arkasında hız sınırı:** `TRUST_PROXY` ile çözülür (kurulumda ayarlanmalı). Çok örnekli kurulumda ortak depo
+   **düzeltildi (G-21, `RATE_LIMIT_REDIS_URL`)**.
+3. **JWT localStorage'da:** iptal **düzeltildi (G-17**, `token_version`, 8 sa). Kalan öneri: HttpOnly çerez + kısa ömürlü erişim /
+   yenileme belirteci; web sunucusunda (nginx / CDN) CSP başlığı.
+4. ~~Rol bazlı okuma kapsamı geniş~~ — **düzeltildi (G-16)**, **[Ürün kararı]** `fieldRoleCanSeeFinancials` (varsayılan kapalı).
+   Satış / operasyon rolleri için alan maskeleme hâlâ ürün kararı.
+5. ~~Taslak gönderimi rol kontrolü~~ — **düzeltildi (G-16)**: yalnız taslak sahibi veya yönetici.
+6. ~~Proje kodu tedarikçiye gidiyor~~ — **düzeltildi (G-15)**, **[Ürün kararı]** `hideCustomerFromSuppliers` (varsayılan açık).
+7. ~~Müşteri teklifi otomasyonu~~ — **güvenli varsayılan (Ü-1)**, **[Ürün kararı]** `neverAutomateKinds`,
+   `outboundAutoSendRequiresStandingApproval`.
+8. **Rooming rıza e-postası içeriği:** misafir adı selamlamada (değişmedi). Öneri: adsız selamlama.
+9. ~~PG hata mesajları~~ — **düzeltildi (G-19)**.
+10. **Üretim loglaması:** pino JSON log artık açık (`LOG_LEVEL`); PG hataları yalnız temizlenmiş alanlarla loglanır (G-19).
+11. **`mice_app` parolası:** `migrate:deploy` + `APP_DB_PASSWORD` (README).
+12. **Askıya alınan acentada worker:** bekleyen outbox teslimleri ayrıca durdurulmuyor (değişmedi).
+13. **Yeni (G-21):** Redis deposu gerçek Redis'e karşı test edilmedi (yalnız yapılandırma testi); devreye almadan önce staging'de
+    doğrulanmalı. **Yeni (G-16):** satış rolünün `PATCH /api/users` web ekranı her kayıtta `authorityScope` gönderir; kapsam JSON'u
+    farklı sırada gelirse kullanıcının oturumu gereksiz yere kapanabilir (güvenli yönde hata).
 
 ## Değişen dosyalar
 `apps/api/src/{config.ts, context.ts, server.ts, security-headers.ts (yeni)}`, `routes/{auth.ts, public.ts, operations.ts}`,
@@ -172,3 +225,13 @@ kırmızıya döndüğü ayrıca doğrulandı.
 `test/closing-admin.test.ts`, `vitest.config.ts` (`LOGIN_RATE_LIMIT`); `apps/web/{index.html, src/api/client.ts,
 src/lib/webauthn.ts, src/components/AppShell.tsx, src/i18n/tr.ts}`; `.env.example`, `README.md`, `apps/api/README.md` (ortam
 değişkenleri). `email.ts` ve `notifications.ts`'e dokunulmadı.
+
+**G-15 … G-21 değişen / yeni dosyalar:** `packages/shared/src/rules.ts` (4 kural), `packages/domain/src/project-code.ts`
+(`supplierSafeCode`), `apps/api/src/{config.ts, context.ts, errors.ts, worker.ts, worker-lock.ts (yeni), rate-limit-store.ts (yeni),
+lib/zip-guard.ts (yeni), services/visibility.ts (yeni)}`, `routes/{_helpers.ts, auth.ts, admin.ts, core.ts, operations.ts, public.ts,
+public-b.ts, inbound.ts (yalnız hız sınırı deposu)}`, `services/{automation.ts, decisions.ts, projects.ts, rfqs.ts, offers.ts,
+contracts.ts, documents-b.ts, email-smtp.ts}`, `db/seed.ts`, `db/migrations/010_session_revocation.sql`;
+`apps/web/src/{lib/visibility.ts, components/PasswordChange.tsx (yeni), components/AppShell.tsx, api/client.ts,
+pages/admin/RulesPage.tsx, pages/admin/UsersPage.tsx, pages/project/{ProjectPage, SidePanel, OverviewTab}.tsx}`; testler
+`apps/api/test/security-residual.test.ts` (yeni), `contracts-automation.test.ts`, `closing-admin.test.ts`, `delivery.test.ts`,
+`packages/domain/test/misc.test.ts`; `e2e/steps0-5.mjs`.

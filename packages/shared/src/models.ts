@@ -581,3 +581,31 @@ export interface MessageDraft {
   aiGenerated: boolean;
   createdAt: ISODateTime;
 }
+
+/** "Gelen kutusu": an inbound e-mail / WhatsApp message linked to a project (GET /api/projects/:id/inbound-messages, additive). */
+export interface InboundMessageSummary {
+  id: ID;
+  channel: string;
+  /** webhook | postmark | mailgun | mime | imap | whatsapp | manual */
+  source: string;
+  fromAddress: string | null;
+  senderName: string | null;
+  subject: string | null;
+  preview: string;
+  receivedAt: ISODateTime | null;
+  /** new_request | supplier_reply | supplier_message | customer_reply | customer_revision | customer_acceptance | project_reply | extra_approval | auto_reply | unlinked | rejected */
+  kind: string | null;
+  linkMethod: string | null;
+  status: string;
+  note: string | null;
+  supplierId: ID | null;
+  supplierName: string | null;
+  rfqId: ID | null;
+  offerId: ID | null;
+  offerVersion: number | null;
+  serviceItemId: ID | null;
+  taskId: ID | null;
+  intakeProjectId: ID | null;
+  fieldExtraId: ID | null;
+  attachments: { filename: string; size: number; accepted: boolean; reason?: string; usedFor?: string }[];
+}

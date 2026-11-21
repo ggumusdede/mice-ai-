@@ -279,6 +279,7 @@ export const tr = {
     aiConfidenceThreshold: 'Yapay zekâ güven eşiği', guestDataRetentionDays: 'Misafir verisi saklama (gün)',
     lowSupplierScore: 'Düşük tedarikçi skoru eşiği', accommodationTaxRate: 'Konaklama vergisi',
     quoteOptionsMin: 'Teklif min seçenek', quoteOptionsMax: 'Teklif max seçenek', projectCodePrefix: 'Proje kodu öneki',
+    supplierSeasonMarkups: 'Tedarikçi/sezon markup', supplierRfqHours: 'Tedarikçi RFQ süreleri',
   } as Record<string, string>,
   publicPages: {
     poweredBy: 'MICE AI Operations OS ile', invalidLink: 'Bu bağlantı geçersiz veya süresi dolmuş.',

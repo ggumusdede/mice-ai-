@@ -16,11 +16,18 @@ const LABELS: Record<string, string> = {
   to: 'Alıcı', subject: 'Konu', body: 'Mesaj', diff: 'Farklar', suppliers: 'Tedarikçiler', userName: 'Kişi', reason: 'Gerekçe',
   advantage: 'Avantaj', pax: 'Kişi', startDate: 'Başlangıç', endDate: 'Bitiş', options: 'Seçenekler', title: 'Başlık',
   confidence: 'Güven', field: 'Alan', label: 'Alan', contractValue: 'Sözleşme', quoteValue: 'Teklif', message: 'Açıklama',
+  proposedValue: 'Önerilen değer', currentValue: 'Mevcut değer', sampleSize: 'Veri noktası', scope: 'Kapsam', key: 'Kural',
+  suggestionKind: 'Öneri türü', months: 'Aylar', tierIndex: 'Kademe no', minAdvantage: 'Min. avantaj', reminderHours: 'Hatırlatma (saat)',
+  callTaskHours: 'Telefon görevi (saat)', supplierSeasonMarkups: 'Tedarikçi/sezon markup', supplierRfqHours: 'Tedarikçi RFQ süreleri',
   severity: 'Önem', status: 'Durum', currency: 'Para birimi', totalAmount: 'Toplam tutar', diffInfo: 'Farklar', supplierPrepaymentRate: 'Tedarikçi ön ödeme', customerDepositRate: 'Müşteri kaporası', note: 'Not', itemId: 'Kalem', lowFields: 'Emin olunmayan alanlar', fieldConfidence: 'Alan güvenleri', extractionConfidence: 'Okuma güveni', lowConfidence: 'Düşük güven', round: 'Tur', arguments: 'Argümanlar', quoteVersion: 'Teklif sürümü', overrideReason: 'Aralık dışı gerekçesi', fullName: 'Ad soyad', duplicates: 'Olası mükerrer', supplierNames: 'Tedarikçiler', deadlineHours: 'Yanıt süresi (saat)', projectExtrasTry: 'Projede ekstra toplamı (TL)', description: 'Açıklama', name: 'Ad', score: 'Skor',
 };
 
 /** Common enum values that show up inside decision details. */
 const VALUE_LABELS: Record<string, string> = {
+  supplier_season_markup: 'Tedarikçi × sezon markup', markup_tier: 'Markup kademesi', rfq_hours: 'RFQ takip süreleri',
+  supplier_rfq_hours: 'Tedarikçiye özel RFQ süreleri', target_margin: 'Hedef marj', customer_option_days: 'Müşteri opsiyon süresi',
+  supplierSeasonMarkups: 'Tedarikçi/sezon markup', supplierRfqHours: 'Tedarikçi RFQ süreleri', markupTiers: 'Markup kademeleri',
+  targetMarginMin: 'Hedef minimum marj', rfqReminderHours: 'RFQ hatırlatma (saat)', customerOptionBusinessDays: 'Müşteri opsiyonu (iş günü)',
   accredited: 'Akredite', candidate: 'Aday', passive: 'Pasif', error: 'Hata', warning: 'Uyarı', info: 'Bilgi', critical: 'Kritik',
 };
 
@@ -28,8 +35,55 @@ export function labelFor(key: string): string {
   return LABELS[key] ?? humanizeKey(key);
 }
 
+interface EvidenceColumn { key: string; label: string; format?: 'pct' | 'eur' | 'date' | 'hours' | 'days' | 'number' | 'text' }
+interface Evidence { columns: EvidenceColumn[]; rows: Record<string, unknown>[]; truncated?: number; summary?: Record<string, unknown> }
+
+export function isEvidence(v: unknown): v is Evidence {
+  return !!v && typeof v === 'object' && Array.isArray((v as Evidence).columns) && Array.isArray((v as Evidence).rows);
+}
+
+function evidenceCell(c: EvidenceColumn, v: unknown): ReactNode {
+  if (v === null || v === undefined || v === '') return <span className="muted">—</span>;
+  if (typeof v === 'number') {
+    switch (c.format) {
+      case 'pct': return pct(v);
+      case 'eur': return eur(v);
+      case 'hours': return `${num(v)} sa`;
+      case 'days': return `${num(v)} iş günü`;
+      default: return num(v);
+    }
+  }
+  if (typeof v === 'boolean') return v ? 'Evet' : 'Hayır';
+  if (c.format === 'date' && typeof v === 'string' && ISO_DATE.test(v)) return date(v);
+  return String(v);
+}
+
+/** §16.5 "Her öneri dayandığı veriyi gösterir": the data points behind a rule suggestion, as a labelled table. */
+export function EvidenceTable({ evidence }: { evidence: Evidence }) {
+  const total = evidence.rows.length + (evidence.truncated ?? 0);
+  return (
+    <div className="evidence">
+      <div className="table-wrap">
+        <table className="table table--compact">
+          <caption className="muted small">{total} veri noktası{evidence.truncated ? ` (ilk ${evidence.rows.length} gösteriliyor)` : ''}</caption>
+          <thead><tr>{evidence.columns.map((c) => <th key={c.key} scope="col" className={c.format && c.format !== 'text' && c.format !== 'date' ? 'num' : undefined}>{c.label}</th>)}</tr></thead>
+          <tbody>
+            {evidence.rows.map((row, i) => (
+              <tr key={i}>
+                {evidence.columns.map((c) => <td key={c.key} className={c.format && c.format !== 'text' && c.format !== 'date' ? 'num' : undefined}>{evidenceCell(c, row[c.key])}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {evidence.summary && Object.keys(evidence.summary).length ? <DetailView data={evidence.summary} nested /> : null}
+    </div>
+  );
+}
+
 export function formatValue(key: string, v: unknown): ReactNode {
   if (v === null || v === undefined || v === '') return <span className="muted">—</span>;
+  if (isEvidence(v)) return <EvidenceTable evidence={v} />;
   if (typeof v === 'boolean') return v ? 'Evet' : 'Hayır';
   if (typeof v === 'number') {
     if (FRACTION_KEY.test(key) && Math.abs(v) <= 1.5) return pct(v);

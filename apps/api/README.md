@@ -13,6 +13,8 @@ npm run dev -w apps/api             # http://localhost:3001  (GET /api/health)
 npm run worker -w apps/api          # follow-ups + phase B jobs (anonymization, digests, event end, daily summaries, e-mail retry); `-- --once`
 npm run migrate:deploy -w apps/api  # deployment: migrate (owner) + `ALTER ROLE mice_app PASSWORD` from APP_DB_PASSWORD
 npm run vapid:generate -w apps/api  # VAPID key pair for Web Push
+npm run inbound:imap -w apps/api    # optional IMAP poller (INBOUND_EMAIL_MODE=imap); `-- --once`
+npm run export-eval-set -w apps/api -- --tenant=<uuid>   # real corrections → packages/ai/eval fixtures (PII masked)
 npm test -w apps/api                # vitest against mice_test (schema dropped + migrated in globalSetup)
 npx tsc --noEmit -p apps/api
 ```
@@ -30,7 +32,9 @@ Demo logins (password `demo1234`): `admin@demo.test`, `clerk@demo.test` (sales, 
 | `DATABASE_URL` | `postgres://mice_app:mice_app@localhost:5432/mice` | **must** be the non-superuser `mice_app` role (RLS) |
 | `MIGRATION_DATABASE_URL` | `postgres://postgres@localhost:5432/mice` | owner/superuser — migrations & seed only |
 | `PORT` / `HOST` | `3001` / `0.0.0.0` | |
-| `JWT_SECRET`, `JWT_EXPIRES_IN` | dev secret, `12h` | required (≥ 32 chars) unless `NODE_ENV` is `development` / `test` |
+| `JWT_SECRET`, `JWT_TTL` (legacy `JWT_EXPIRES_IN`) | dev secret, `8h` | secret required (≥ 32 chars) unless `NODE_ENV` is `development` / `test`. Tokens carry `tv` = `users.token_version`, checked on every request |
+| `RATE_LIMIT_REDIS_URL` | – | multi-instance: all limiters use @fastify/rate-limit's Redis store (optional `ioredis` package, `npm i ioredis -w apps/api`; refuses to start without it). Empty → in-memory per instance |
+| `XLSX_MAX_UNCOMPRESSED_MB` / `XLSX_MAX_RATIO` / `XLSX_MAX_ENTRIES` | 30 / 100 / 2000 | zip-bomb guard `src/lib/zip-guard.ts` before every exceljs load |
 | `CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | comma separated |
 | `PUBLIC_BASE_URL` | `http://localhost:5173` | prefix of supplier (`/s/rfq/<token>`) and quote (`/q/<token>`) links; `''` → relative |
 | `GUEST_DATA_KEY` | dev key | pgcrypto key for guest PII (required unless `NODE_ENV` is `development` / `test`) |
@@ -50,10 +54,43 @@ Demo logins (password `demo1234`): `admin@demo.test`, `clerk@demo.test` (sales, 
 | `SMTP_HOST/PORT/SECURE/USER/PASS`, `SMTP_ENVELOPE_FROM`, `SMTP_TLS_REJECT_UNAUTHORIZED`, `SMTP_*_TIMEOUT_MS` | `587`, STARTTLS | |
 | `EMAIL_REPLY_ADDRESS`, `EMAIL_MESSAGE_ID_DOMAIN`, `EMAIL_MAX_ATTEMPTS`, `OUTBOX_DATA_KEY` | –, reply domain, 8, `GUEST_DATA_KEY` | reply linking / retry payload key |
 | `MESSAGING_PROVIDER`, `WHATSAPP_PHONE_NUMBER_ID/TOKEN/API_VERSION` | `outbox` | WhatsApp Cloud API is a skeleton (not live) |
+| `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_TENANT`, `WHATSAPP_MAX_BYTES` | –, –, `demo`, 1 MB | inbound WhatsApp webhook (no secret → every POST is 401, no token → GET 403) |
+| `INBOUND_EMAIL_SECRET`, `INBOUND_EMAIL_TENANT` | –, `demo` | env HMAC secret, used ONLY for that tenant when it has no `inbound_channels` row |
+| `INBOUND_REPLAY_WINDOW_SECONDS`, `INBOUND_EMAIL_MAX_BYTES`, `INBOUND_ATTACHMENT_MAX_BYTES`, `INBOUND_MAX_ATTACHMENTS`, `INBOUND_ATTACHMENTS_TOTAL_MAX_BYTES`, `INBOUND_RATE_LIMIT` | 300 s, 25 MB, 10 MB, 10, 20 MB, 300/min | |
+| `INBOUND_EMAIL_MODE`, `IMAP_HOST/PORT/SECURE/USER/PASS/MAILBOX/PROCESSED_MAILBOX/TENANT/POLL_INTERVAL_MS/MAX_MESSAGES_PER_POLL` | `webhook` | `imap` lets `npm run inbound:imap` start |
 | `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT` | – | Web Push; absent → console fallback |
 | `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_MINIMAL_PAYLOAD`, `WEB_PUSH_TTL_SECONDS`, `WEB_PUSH_TIMEOUT_MS` | push services, –, 86400, 5000 | SSRF allow-list (suffix match) |
 
 Change the `mice_app` password in production: `ALTER ROLE mice_app PASSWORD '…'`.
+
+## Security residual-risk fixes (docs/09 G-15 … G-21)
+
+- **Sessions (G-17):** `010_session_revocation.sql` adds `users.token_version`; login / `POST /api/auth/password`
+  (`{currentPassword, newPassword}` → `{token}`) sign `tv`; `withUserCtx` refuses a token whose `tv` differs (no cache, same
+  user-row read). Bumped by password change, `PATCH /api/users/:id` role / authority / scope / canSign / active changes and
+  `POST /api/users/:id/revoke-sessions` (admin, human). Default TTL 8h.
+- **Supplier-safe reference (G-15):** `services/visibility.ts` `supplierRef()` (domain `supplierSafeCode`): RFQ drafts,
+  supplier portal view, RFQ 24h reminder template, negotiation, option-extension, revision-request and supplier-confirmation
+  drafts, rooming list xlsx use `PRJ-0042-20270312-80`; `X-MICE-Project` header is always `PRJ-0042`. Rule
+  `hideCustomerFromSuppliers` (default true). Contract fields keep the customer / billing name.
+- **Field role least privilege (G-16):** rule `fieldRoleCanSeeFinancials` (default false) → `projectDetail` redacted (no profit,
+  offers / evaluations, item cost / sale, quotes, contracts, financial documents, audit images of money rows), timeline / similar /
+  ask redacted, `403 FINANCIALS_HIDDEN` on `/api/quotes/:id(/pdf)`, `/api/projects/:id/contracts`, `/api/contracts/:id`,
+  `/api/items/:id/comparison`, `/api/finance/entries`, financial document file / regenerate and undecidable decision details;
+  drafts list only own drafts. **Draft sending:** `POST /api/drafts/:id/send` only by the draft owner (`from_user_id`) or the admin
+  (`403 DRAFT_NOT_OWNER`).
+- **Automation (§15 × §16):** rule `neverAutomateKinds` (default `customer_quote`, `quote_approval`, `margin_override`) — no auto
+  execution, no promotion proposal, `promoteAction` refuses. Rule `outboundAutoSendRequiresStandingApproval` (default false):
+  outbound kinds (`rfq_send`, `negotiation_message`, `outbound_message`, `contract_diff`) keep opening an approval card in auto mode
+  (`detail.automation = 'outbound_held_for_approval'`); true → previous behaviour (auto-send + 1/20 sample).
+- **XLSX zip bomb (G-18):** `lib/zip-guard.ts` `assertSafeZip` in `xlsxToCsv` (offers, invoices, contracts, bank statements, public
+  RFQ files) → `400 UNSAFE_ARCHIVE`.
+- **Postgres errors (G-19):** `errors.ts` maps SQLSTATEs to generic messages (no constraint / table / DETAIL); unknown → 500; logs only
+  `pgLogFields()` (code, constraint, table, column, message — never DETAIL).
+- **Worker leader lock (G-20):** `src/worker-lock.ts` session `pg_try_advisory_lock` on a dedicated connection; `runIfLeader()` —
+  standby instances log "worker standby" and retry each tick.
+- **Rate-limit store (G-21):** `src/rate-limit-store.ts` (`RATE_LIMIT_REDIS_URL`), used by auth, public, public-b and inbound limiters.
+- Tests: `test/security-residual.test.ts`.
 
 ## Principles enforced in the database (`src/db/migrations`)
 
@@ -104,6 +141,63 @@ approval/paid columns and two more DB guards: **a finance entry can only become 
   `push_subscriptions`, `GRANT SELECT ON schema_migrations TO mice_app`; tenant FKs added by 008).
 - Container: `apps/api/Dockerfile` (+ `docker/api-entrypoint.sh`: `serve | migrate | worker | seed`), see root README → Dağıtım.
 - Tests: `test/delivery.test.ts` (mocked nodemailer transport and web-push sender).
+
+## Inbound e-mail / WhatsApp, e-Fatura (migration `011_inbound_channels.sql`)
+
+Code: `routes/inbound.ts`, `services/inbound/{normalize,email-router,whatsapp,common,views}.ts`, `src/inbound-imap.ts`,
+`src/inbound-config.ts`, `services/ubl-tr.ts` + `services/einvoice.ts`. Tests: `test/inbound.test.ts` (fixture `test/fixtures/ubl-tr-invoice.xml`).
+
+**Webhooks (no login; signature-authenticated, rate-limited, raw body kept for the signature)** — `:key` = tenant slug or an
+`inbound_channels.route_key`. Any signature failure, stale timestamp or unknown key → **401 `INVALID_SIGNATURE`**.
+
+| Route | Format | Authentication |
+|---|---|---|
+| `POST /api/inbound/email/:key` | our normalized JSON (below) | `X-MICE-Timestamp: <unix s>`, `X-MICE-Signature: sha256=<hex HMAC-SHA256(secret, "<ts>." + raw body)>`, ±`INBOUND_REPLAY_WINDOW_SECONDS` |
+| `POST /api/inbound/email/:key/mime` | raw RFC 822 (`message/rfc822`) — SES (receipt rule → S3/SNS → small forwarder), MTA pipe | same HMAC headers |
+| `POST /api/inbound/email/:key/postmark` | Postmark inbound JSON (`FromFull`, `ToFull`, `Headers[]` → RFC Message-ID / In-Reply-To / References, `Attachments[]`) | HTTP Basic in the webhook URL, password = tenant secret (Postmark cannot sign; replay is neutralised by Message-ID idempotency) |
+| `POST /api/inbound/email/:key/mailgun` | Mailgun route forward (multipart: `from`, `recipient`, `subject`, `body-plain`, `Message-Id`, `In-Reply-To`, `References`, `message-headers`, files) | Mailgun `timestamp` + `token` + `signature` = HMAC-SHA256(signing key = tenant secret), replay window |
+| `GET /api/inbound/whatsapp` | `hub.mode=subscribe&hub.verify_token&hub.challenge` | `WHATSAPP_VERIFY_TOKEN` → echoes the challenge, else 403 |
+| `POST /api/inbound/whatsapp` | Meta Cloud API `messages` webhook | `X-Hub-Signature-256: sha256=HMAC(WHATSAPP_APP_SECRET, raw body)`; tenant by `metadata.phone_number_id` (`inbound_channels` route key, else `WHATSAPP_PHONE_NUMBER_ID` → `WHATSAPP_TENANT`) |
+
+Normalized JSON: `{from, to?, cc? (string | string[]), subject?, text?, html?, messageId?, inReplyTo?, references? (string | string[]),
+date?, headers? {Auto-Submitted …}, attachments?: [{filename, contentType?, base64}]}` → `InboundResult {id, duplicate, kind, status,
+projectId, intakeProjectId, offerId, taskId, linkMethod}`.
+
+Staff: `GET /api/projects/:id/inbound-messages` (project "Gelen kutusu"), `GET /api/inbound-messages/:id`,
+`GET /api/inbound-channels` / `POST /api/inbound-channels {channel:'email'|'whatsapp', routeKey?, rotateSecret?}` (admin; the e-mail
+secret is generated server-side and returned **once**; previous row deactivated, never deleted; `inbound_channels` is not row-audited so
+the secret never reaches `audit_log`).
+
+**Router (`email-router.ts`)** — 1) idempotent per Message-ID (`inbound_messages (tenant, channel, provider_message_id)` unique; a
+replay returns `duplicate:true`; a `failed` row is re-processed on retry). 2) auto-replies / bounces / our reply mailbox → stored,
+`ignored`. 3) thread → project: `In-Reply-To`/`References` = our outbox `Message-ID <outbox-id@EMAIL_MESSAGE_ID_DOMAIN>` (outbox row →
+draft → project; also earlier inbound ids) → plus address `replies+prj-0042@…` → subject tag `[PRJ-0042]` → (no thread) supplier with
+exactly one open RFQ. 4) linked + sender = supplier e-mail with an RFQ in that project → **supplier reply**: first allowed attachment
+(PDF / XLSX / CSV / image) or the reply text with the quoted part stripped → existing `parseOffer` (actor `supplier`) → new offer
+version, RFQ `responded`, low confidence → `low_confidence_review` card as before; several RFQs / unreadable → task. Linked + customer
+(project customer contact, same company domain, or someone we wrote to in the project) → attached; deterministic classifier
+(`classifyCustomerText`): revision / acceptance → `inbound_customer_*` task for the owner + critical notification (**never an
+automatic acceptance**), otherwise routine notification. 5) unknown thread from a non-supplier → `runIntake` (channel email, customer
+by contact e-mail, duplicate check → critical notification), `created_by` NULL. 6) unlinked supplier mail → `needs_review` + "hangi
+projeye ait?" notification. Attachments: allow-list pdf/xlsx/csv/txt/xml/png/jpg by extension **and** magic bytes, ≤10 per mail,
+≤10 MB each, ≤20 MB total; rejected ones are metadata only. Mail content is data for extraction only — nothing in it is executed.
+
+**WhatsApp** — text from a known customer contact (phone normalized E.164) or a number that already opened a project → attached to
+its open project (same classifier/task); otherwise → intake (channel whatsapp). Quick-reply / interactive button payload
+`extra_approve:<one-time token>` → `publicApproveExtra` (same as `/e/<token>`), refused when the sender number differs from the
+extra's `customer_phone`. Media are not downloaded (needs the Graph media API) — stored as a note. Status callbacks are ignored.
+
+**IMAP (`src/inbound-imap.ts`)** — `INBOUND_EMAIL_MODE=imap npm run inbound:imap -w apps/api`: imapflow, UNSEEN → mailparser → the
+same router → `\Seen` (or move to `IMAP_PROCESSED_MAILBOX`); failures stay UNSEEN and are retried. One instance per mailbox.
+
+**e-Fatura UBL-TR (§7 Adım 7, docs/07 §4)** — `POST /api/finance/supplier-invoices` multipart with an `.xml` file whose root is a UBL
+`Invoice` → `parseUblInvoice` (fast-xml-parser, namespace-agnostic, DOCTYPE/ENTITY refused, 5 MB): invoice no, ETTN, profile/type,
+dates, currency + exchange rate, seller / buyer VKN·TCKN / name / tax office, lines, tax subtotals (KDV per rate `0015`, konaklama
+vergisi `0059`), monetary totals, notes; consistency warnings become alarms. **No AI, confidence 1.0** (`meta.source = 'ubl_xml'`,
+`meta.ubl` summary). Supplier = `suppliers.tax_number` (new, settable via `POST/PATCH /api/suppliers` `taxNumber`) else name; project
+= `projectId` field, else a `PRJ-####` in notes/order reference, else the single open project with a signed contract of that supplier
+(else 400 `INVOICE_LINK_REQUIRED` with candidates). `amount` = TaxExclusiveAmount (net), `vatAmount` = KDV total; ETTN stored in
+`finance_entries.ubl_uuid` (unique → 409 `DUPLICATE_INVOICE`). Contract linking, mismatch alarm, task, commission: unchanged code path.
 
 ## Code map
 
@@ -233,3 +327,28 @@ manual offer form and the supplier portal still accept percent values (≤ 100).
   no), `/finans` page (bank statement import + transactions + manual match, approved payments, commissions, Mikro export,
   admin unreflected totals), document generator in the side panel, survey link after closing, field panel today / next 7 days,
   mobile tab bar with "Yeni talep".
+
+## §16.5 Rule suggestions and §18.9 evaluation set
+
+- Generator: `services/rule-suggestions.ts` collects learning data (accommodation `price_history` × `channel_prices` on the
+  same stay date / room / board / cancellation; `quote_lines.suggested_markup` vs applied `markup` on approved / sent /
+  accepted quotes; RFQ `sent_at` → first offer; admin-decided `margin_override` cards; quote `sent_at` → `accepted_at`) and
+  runs the pure `suggestRuleChanges()` from `@mice/domain`. Each new suggestion → one `rule_suggestions` row
+  (`kind`, `fingerprint`, `scope`, `patch`, `current_value`, `evidence`, `confidence`, `sample_size`, `rationale`,
+  `source='generator'`) + one admin-only `rule_suggestion` decision (badge `suggestion`, evidence table in `detail.evidence`).
+- Schedule: worker post-job `runWeeklyRuleSuggestions` (`jobs.ts`), at most once per 7 days per tenant (`job_runs` table);
+  on demand `POST /api/rules/suggestions/run` (admin). Idempotent: an identical open suggestion is never duplicated, a rejected
+  one is not proposed again for 90 days, and a second open suggestion for the same kind + scope waits for the first.
+- Effect (`registry.ts` → `applyRuleSuggestionDecision`): refuses auto / non-human execution (`AI_FORBIDDEN_ACTION`), applies
+  the patch to the CURRENT rules via `setRule` (rules row audited, `changed_by` = admin, reason = decision id); `set` patches are
+  refused with `409 RULE_SUGGESTION_STALE` when the rule changed after the suggestion. Scoped upserts merge into
+  `supplierSeasonMarkups` / `supplierRfqHours`. Edits: `{value}` / `{markup}` / `{reminderHours, callTaskHours}`.
+  Keys outside `SUGGESTABLE_RULE_KEYS` (authority, automation, AI threshold, legal, money limits) are refused; the DB
+  `rules_change_guard` still blocks AI actors.
+- New scoped rules (defaults empty → unchanged behaviour): `supplierSeasonMarkups` is used by offer evaluation only when the
+  price class is unknown (no channel price / history) instead of the lowest tier; `supplierRfqHours` sets reminder / call-task
+  hours for that supplier's new RFQs. Migration `009_rule_suggestions_eval.sql` (additive columns, `job_runs`, standard policies
+  + tenant FKs).
+- `src/scripts/export-eval-set.ts`: corrected `document_reading` (supplier offers) and `request_extraction` actions → fixtures in
+  the `packages/ai/eval` format (`offers.exported.json`, `requests.exported.json`); gold = AI output + human corrections; PII
+  pseudonymized. See docs/04 §3.

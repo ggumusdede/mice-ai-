@@ -104,7 +104,9 @@ veya `node --env-file=.env` ile yükleyin).
 |---|---|---|
 | `DATABASE_URL` | `postgres://mice_app:mice_app@localhost:5432/mice` | **süper kullanıcı olmayan** `mice_app` rolü (RLS) |
 | `MIGRATION_DATABASE_URL` | `postgres://postgres@localhost:5432/mice` | yalnız migration / seed |
-| `JWT_SECRET`, `JWT_EXPIRES_IN` | dev sırrı, `12h` | üretimde zorunlu |
+| `JWT_SECRET`, `JWT_TTL` (eski ad `JWT_EXPIRES_IN`) | dev sırrı, `8h` | sır üretimde zorunlu; oturumlar `users.token_version` ile iptal edilir (şifre / rol / yetki değişikliği, pasife alma, `POST /api/users/:id/revoke-sessions`) |
+| `RATE_LIMIT_REDIS_URL` | – | çok örnekli API: hız sınırları ortak Redis deposunda (isteğe bağlı `ioredis` paketi gerekir); boşsa örnek başına bellek |
+| `XLSX_MAX_UNCOMPRESSED_MB`, `XLSX_MAX_RATIO`, `XLSX_MAX_ENTRIES` | 30, 100, 2000 | XLSX zip bombası koruması (exceljs'ten önce) |
 | `GUEST_DATA_KEY` | dev anahtarı | misafir kişisel verisi (pgcrypto) — üretimde zorunlu, DB'de saklanmaz |
 | `ALLOW_DEV_BIOMETRIC` | – | `{biometric:{method:'dev'}}` yalnız `NODE_ENV` `development` / `test` iken veya `1` ise kabul edilir (demo / e2e) |
 | `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` | `localhost`, … | Face ID / WebAuthn |

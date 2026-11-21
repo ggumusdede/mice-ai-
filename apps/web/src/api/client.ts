@@ -5,7 +5,7 @@ import type {
   GenerateDocumentRequest, UnreflectedTotals, ChannelPriceInput, ChecklistQuestion,
   ClosingCheck, ComparisonResponse, Contract, CreateRfqsRequest, Customer, DailySummary, Decision, DecideResponse,
   DecisionInput, Delegation, DelegationInput, FieldExtra, FieldExtraInput, FieldIssue, FieldIssueInput, FinanceEntry,
-  GeneratedDocument, Guest, IntakeRequest, IntakeResponse, List, LoginRequest, LoginResponse, ManualOfferInput,
+  GeneratedDocument, Guest, InboundMessageSummary, IntakeRequest, IntakeResponse, List, LoginRequest, LoginResponse, ManualOfferInput,
   MeResponse, MessageDraft, NegotiationArgument, Project, ProjectDetail, PublicExtraView, PublicOfferInput,
   PublicQuoteView, PublicRfqView, PublicRoomingSubmit, PublicRoomingView, PublicSurveySubmit, PublicSurveyView, Quote,
   Rfq, RulesResponse, ServiceItem, ServiceItemInput, SimilarProject, Supplier, SupplierInvoiceInput, SupplierOffer,
@@ -167,6 +167,8 @@ export const api = {
   auth: {
     login: (b: LoginRequest) => post<LoginResponse>('/auth/login', b, { auth: false }),
     me: () => get<MeResponse>('/auth/me'),
+    /** G-17: ends every other session (token_version + 1); returns a fresh token for this one */
+    changePassword: (currentPassword: string, newPassword: string) => post<{ token: string }>('/auth/password', { currentPassword, newPassword }),
     webauthnRegisterOptions: (password: string) => post<Record<string, unknown>>('/auth/webauthn/register/options', { password }),
     webauthnRegisterVerify: (response: unknown, deviceLabel?: string) => post<{ verified: boolean }>('/auth/webauthn/register/verify', { response, deviceLabel }),
     webauthnAuthOptions: (b?: { decisionId?: string }) => post<Record<string, unknown>>('/auth/webauthn/authenticate/options', b ?? {}),
@@ -185,6 +187,8 @@ export const api = {
     outcome: (id: string, b: { outcome: 'won' | 'lost'; lostReason?: string }) => post<Project>(`/projects/${enc(id)}/outcome`, b),
     ask: (id: string, question: string) => post<AskResponse>(`/projects/${enc(id)}/ask`, { question }),
     timeline: (id: string) => items(get<List<AuditEntry>>(`/projects/${enc(id)}/timeline`)),
+    /** "Gelen kutusu": inbound e-mail / WhatsApp linked to the project (additive) */
+    inbound: (id: string) => items(get<List<InboundMessageSummary>>(`/projects/${enc(id)}/inbound-messages`)),
     similar: (id: string) => items(get<List<SimilarProject>>(`/projects/${enc(id)}/similar`)),
     addItem: (id: string, b: ServiceItemInput) => post<ServiceItem>(`/projects/${enc(id)}/items`, b),
     buildQuote: (id: string, b: BuildQuoteRequest) => post<Quote>(`/projects/${enc(id)}/quotes`, b),
@@ -280,6 +284,8 @@ export const api = {
     list: () => items(get<List<User>>('/users')),
     patch: (id: string, b: Partial<Pick<User, 'authorityLevel' | 'authorityScope' | 'role' | 'canSign'>>) => patch<User>(`/users/${enc(id)}`, b),
     stats: (id: string) => get<UserStats>(`/users/${enc(id)}/stats`),
+    /** G-17 "log out everywhere" (admin) */
+    revokeSessions: (id: string) => post<{ userId: string; revoked: true }>(`/users/${enc(id)}/revoke-sessions`),
   },
   delegations: {
     list: () => items(get<List<Delegation>>('/delegations')),
