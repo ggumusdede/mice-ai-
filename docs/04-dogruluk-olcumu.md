@@ -91,7 +91,7 @@ Modelin kendi beyan ettiği güven puanı tek başına iyi kalibre değildir. He
 
 ### Kayıt modeli
 
-`ai_corrections` tablosu (bkz. 02): `ai_action_id`, `field_path` (ör. `lines[2].unitPrice`), `ai_value`, `human_value`, `ai_confidence`, `correction_kind` (`value` | `missing` | `extra` | `classification`), `corrected_by`, `corrected_at`.
+Önerilen `ai_corrections` tablosu (**henüz yok**; bugün düzeltme `ai_actions.corrected / correction / corrected_by / corrected_at` alanlarında satır bazında tutulur, bkz. 02): `ai_action_id`, `field_path` (ör. `lines[2].unitPrice`), `ai_value`, `human_value`, `ai_confidence`, `correction_kind` (`value` | `missing` | `extra` | `classification`), `corrected_by`, `corrected_at`.
 
 Aşağıdaki durumların **hepsi** bu tabloya kayıt düşer:
 
@@ -110,4 +110,4 @@ Model ince ayarı (fine-tuning) **yapılmaz**. "Öğrenme" şu üç mekanizmadı
 ### Raporlama
 
 - **Haftalık rapor (§16.6):** Düzeltme oranı ve trendi; alan türü bazında sızan hata; en çok hata yapılan tedarikçi biçimleri.
-- **Model/istem sürümü bazında karşılaştırma:** `ai_actions.prompt_version`. Bir sürüm değişikliği sonrasında düzeltme oranı artarsa otomatik uyarı üretilir.
+- **Model/istem sürümü bazında karşılaştırma:** `ai_actions.prompt_version` (önerilen sütun, henüz yok; bugün yalnızca `model` kaydedilir). Bir sürüm değişikliği sonrasında düzeltme oranı artarsa otomatik uyarı üretilir.

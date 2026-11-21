@@ -13,6 +13,13 @@ Dokümanlar repodaki kod sözleşmesine dayanır:
 | `packages/shared/src/rules.ts` | Acenta bazlı varsayılan kural/eşik değerleri |
 | `packages/domain/src/*.ts` | Saf iş kuralı fonksiyonları (birim testli) |
 | `packages/ai/src/index.ts` | `AiService` arayüzü (Claude + deterministik mock) |
+| `packages/ai/src/claude.ts`, `pii.ts`, `factory.ts` | Claude istemcisi (`claude-sonnet-5-5` / `claude-haiku-5-5`), PII maskeleme, `AI_*` ortam değişkenleri |
+| `apps/api/README.md` | Gerçek rota listesi, sözleşmeden sapmalar, Faz B ayrıntıları, Mikro aktarım varsayımları |
+| `apps/api/src/routes/*.ts`, `apps/api/src/services/*.ts` | Uygulanan uç noktalar ve iş servisleri |
+| `apps/api/src/db/migrations/*.sql` | Gerçek tablolar, RLS, tetikleyiciler, §6 DB korumaları |
+| `apps/api/test/*.test.ts` | Entegrasyon testleri (gerçek PostgreSQL; izolasyon, korumalar, adım 0–8) |
+
+> Dokümanlar ilk olarak kod tamamlanmadan önce, API sözleşmesinin erken sürümüne göre yazılmıştı; Kasım 2026'da gerçek uygulamaya göre hizalandı. Uygulanmamış tasarım öğeleri metin içinde "henüz yok" / "önerilir" olarak işaretlidir.
 
 ## İçindekiler
 
@@ -26,6 +33,47 @@ Dokümanlar repodaki kod sözleşmesine dayanır:
 | 06 | [Otomasyon terfisi](06-otomasyon-terfisi.md) | §19.5, §18.12, §16 | Sayaç, 20 temiz onay, 1/20 örneklem, otomatik geri dönüş |
 | 07 | [Mühendislik cevapları](07-muhendislik-cevaplari.md) | §18 (1–17) | 17 sorunun tamamına somut öneri |
 | 08 | [Mobil karar](08-mobil-karar.md) | §19.6, §18.1 | Önce PWA; yerel iOS uygulamasını tetikleyen kriterler |
+
+Ayrıca (diğer mühendislerce eşzamanlı ekleniyor): güvenlik incelemesi — bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md); üretim hazırlığı (Docker/CI) — bkz. ilgili repo dosyaları.
+
+## Uygulama durumu
+
+PRD bölümü / özellik → kodun bugünkü durumu. ✅ uygulandı · 🟡 kısmi · ⛔ henüz yok.
+
+| PRD | Özellik | Durum | Kod / not |
+|---|---|---|---|
+| §3.1, §3.5 | Tek doğru kaynak, belgeler veriden; değişiklik yayılımı | ✅ | `services/documents.ts`, `documents-b.ts`; `003` `propagate_staleness`, `doc_kinds_for`, `documents_send_guard`, `quotes_send_guard` |
+| §3.2, §15 | Onay kapıları, karar kutusu, Face ID step-up | ✅ | `services/decisions.ts`, `registry.ts`, `phase-b-registry.ts`; `domain/authority.ts` `requiresBiometric`; `auth/webauthn.ts`. Geliştirme biyometrisi yalnız `ALLOW_DEV_BIOMETRIC` |
+| §3.3 | İnsan imzası, kullanıcının kendi adresinden gönderim | 🟡 | Kural uygulanıyor (`services/drafts.ts` `sendDraft`); her mesaj `outbox`'a yazılır. Gerçek teslim `EMAIL_PROVIDER=smtp` ile SMTP "send as" (`services/email-smtp.ts`); kullanıcı bazlı Gmail/Graph OAuth ⛔ (`email-oauth.ts` taslak) |
+| §3.6 | Silinmez kayıt, append-only audit | ✅ | `003` `forbid_delete`, `audit_row`, `audit_redact`; bölümleme / hash zinciri ⛔ |
+| §3.8, §18.11 | Çok kiracılılık (RLS) ve izolasyon testleri | ✅ / 🟡 | `apply_standard_policies`, `withTenant`; `apps/api/test/security.test.ts`. Eşzamanlılık ve property-based testler ⛔ (02 §7) |
+| §6 | AI yetki listesi ve DB korumaları | ✅ | `ai-authority.ts`, `services/automation.ts` (`aiGate`, `NEVER_AUTO_KINDS`); `finance_money_guard`, `rules_change_guard`, `supplier_accreditation_guard`, `contract_sign_guard`, `contract_lock` |
+| §7 Adım 0 | Talep analizi (yapıştırma / sesli not), proje kodu, mükerrer, eksik bilgi, atama | ✅ | `POST /api/intake`, `services/intake.ts`; sesli not tarayıcı Web Speech API ile (`apps/web/src/lib/speech.ts`) |
+| §7 Adım 0 | Gelen e-posta / WhatsApp otomatik alımı (webhook, projeye bağlama) | ⛔ | `inbound_messages` yalnızca elle girişte dolar |
+| §7 Adım 1 | Kısa liste, RFQ, tedarikçi linki, 24/48 sa takip | ✅ | `services/rfqs.ts`, `routes/public.ts`, `worker.ts` |
+| §7 Adım 2 | Teklif okuma, normalizasyon, karşılaştırma, pazarlık | ✅ | `services/offers.ts`; AI `parseSupplierOffer` |
+| §7 Adım 2, §18.5 | Kanal (OTA) fiyatı | 🟡 | Yalnızca manuel giriş (`POST /api/channel-prices`); OTA kanal API'si ⛔ |
+| §7 Adım 3–4 | Müşteri teklifi, bloklama kuralları, PDF, online onay, PO / imzalı form, revizyon | ✅ | `services/quotes.ts`, `/api/public/quotes/:token/*`, `POST /api/quotes/:id/firm-approval` |
+| §7 Adım 5 | Sözleşme okuma, fark, koşul riski, imza kilidi, ek protokol, taahhüt kaydı | ✅ | `services/contracts.ts`; ıslak imza + tarama dosya adı kaydı |
+| §7 Adım 5 | e-imza entegrasyonu | ⛔ | İmza elle kaydedilir (`POST /api/contracts/:id/sign`) |
+| §7 Adım 6 | Operasyon takvimi, rooming + KVKK rıza, saha ekstrası, saha sorunu, değişiklik akışı, günlük özet | ✅ | `routes/operations.ts`, `services/operations.ts`, `guests.ts` |
+| §7 Adım 6 | Saha ekstrası müşteri SMS linki | 🟡 | Link üretilir, SMS `outbox` (`channel='sms'`) kaydıdır (`services/messaging.ts`); gerçek SMS sağlayıcısı ⛔ |
+| §7 Adım 7 | Tedarikçi faturası okuma, ödeme talebi → onay → "ödendi", banka CSV/XLSX eşleştirme, komisyon, müşteri faturası taslağı | ✅ | `services/finance.ts`; sistem para hareket ettirmez |
+| §7 Adım 7, §18.4 | Mikro Yazılım | 🟡 | Excel dışa aktarımı ✅ (`GET /api/finance/export/mikro`, sütunlar **varsayım** — 07 §4); Mikro API ⛔; e-Fatura UBL XML okuma ⛔; banka API'si ⛔ |
+| §7 Adım 8 | Kapanış kontrolü, gerçekleşen fiyat, tedarikçi skoru, kontrol listesi önerisi, anket | ✅ | `services/closing.ts`, `routes/admin.ts` |
+| §15 | Bildirimler (kritik anında, rutin 08:30 / 18:00 özeti) | ✅ / 🟡 | `services/notifications.ts`, `notifications` tablosu; VAPID anahtarlarıyla Web Push (`services/push.ts`, `push_subscriptions`, `/api/push/*`), anahtarsız konsol. Yedek kanal (push yanıtsızsa WhatsApp/SMS) ve APNs ⛔ |
+| §15 | Üslup öğrenme | ✅ | `styleExamples` (düzeltmeler), `summarizeStyle` → `style_summaries` |
+| §16 | Otomasyon terfisi (sayaç, terfi, örneklem, geri dönüş) | ✅ | `services/automation.ts`; bkz. 06 |
+| §16.5 | Kural önerisi üreticisi | ⛔ | `rule_suggestion` kart türü ve etkisi var, öneri üreten iş yok |
+| §16.6 | Haftalık gelişim raporu | ✅ | `GET /api/reports/weekly`, `services/reports.ts` |
+| §17.9, §18.2 | KVKK: PII şifreleme, rol bazlı maskeleme, rıza / geri çekme, anonimleştirme; modele giden metinde maskeleme | ✅ / 🟡 | `services/guests.ts`, `packages/ai/src/pii.ts`; PDF/görsel maskelenmez (07 §2 sınırlar) |
+| §18.9, 04 | Doğruluk test seti, eşik kalibrasyonu | 🟡 | Mock ve sahte SDK testleri (`packages/ai/test`); etiketli gerçek test seti ve değerlendirme koşucusu ⛔ |
+| §18.16 | Saha paneli çevrimdışı kuyruk | 🟡 | `apps/web/src/lib/offlineQueue.ts` (IndexedDB) yalnız saha işlemleri; tam offline PWA önbelleği ⛔ |
+| §18.6, §18.7 | Gerçek e-posta (Gmail API / MS Graph OAuth) ve WhatsApp Business API | 🟡 / ⛔ | SMTP teslimi var (`EMAIL_PROVIDER=smtp`); Gmail/Graph OAuth ⛔; WhatsApp Cloud API iskelet, canlı değil (`MESSAGING_PROVIDER`, `services/messaging.ts`); gelen yanıtların projeye bağlanması ⛔ (Message-ID / Reply-To başlıkları hazırlanır) |
+| §18.8 | Sunucu tarafı konuşma tanıma (STT) | ⛔ | Tarayıcı Web Speech API kullanılır |
+| §18.1, 08 | Yerel iOS uygulaması | ⛔ | Faz 1 PWA (08 kriterleri) |
+| — | SSO, yenileme belirteci, işçi lider kilidi, nesne deposu | ⛔ | 01 §1, §3, §6 |
+| — | Güvenlik incelemesi; üretim kurulumu (Docker/CI) | — | Eşzamanlı ekleniyor; bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md) ve üretim hazırlığı dosyaları |
 
 ## Okuma kılavuzu
 

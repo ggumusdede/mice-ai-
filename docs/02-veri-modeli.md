@@ -1,7 +1,7 @@
 # 02 — Veri Modeli (§19.1)
 
 > PRD karşılığı: §5 (proje/kalem), §8 (veri merkezi, 8 blok), §19.1 (veri modeli), §18.11 (izolasyon testi), §18.13 (değişiklik yayılımı), §18.15 (rıza).
-> Kod karşılığı: `apps/api/src/db/migrations/001_foundation.sql` (rol, bağlam fonksiyonları), `002_tables.sql` (tüm tablolar), `003_security_and_integrity.sql` (RLS, audit, silme yasağı, eskime, kilitler, korumalar), `004_phase_b.sql` (bildirimler, üslup özetleri, ödeme/ekstra sütunları, para ve kural korumaları). API şekilleri `packages/shared/src/models.ts` (API'de camelCase; veritabanında snake_case).
+> Kod karşılığı: `apps/api/src/db/migrations/001_foundation.sql` (rol, bağlam fonksiyonları), `002_tables.sql` (tüm tablolar), `003_security_and_integrity.sql` (RLS, audit, silme yasağı, eskime, kilitler, korumalar), `004_phase_b.sql` (bildirimler, üslup özetleri, ödeme/ekstra sütunları, para ve kural korumaları), `006_delivery_channels.sql` (SMTP teslim durumu, `outbox_payloads`, `push_subscriptions`), `007_security_review.sql` (güvenlik incelemesi sertleştirmeleri; bkz. 09). API şekilleri `packages/shared/src/models.ts` (API'de camelCase; veritabanında snake_case).
 > Yeni tablo eklemek: yeni migration'da tabloyu oluşturup `SELECT apply_standard_policies('tablo')` çağırın (RLS + silme yasağı + audit + yetkiler).
 
 ## 1. Genel kurallar
@@ -73,7 +73,7 @@ Tüm tablolarda `tenant_id` vardır ve RLS açıktır. Aşağıda `id`, `tenant_
 | `rules` | `key, value jsonb, version, changed_by, reason` | `UNIQUE(tenant_id, key)`. **Kod değil tablo.** Okuma: acenta değeri, yoksa `DEFAULT_RULES`. Yazma: `PATCH /api/rules` (admin + insan); DB'de **`rules_change_guard`** AI aktörünü reddeder |
 | `fx_rates` | `currency, rate, source, rate_date` | Kur kaynağı ve tarihi (`services/fx.ts`); otomatik çekme yok |
 
-> İlk taslaktaki `push_subscriptions` ve `mail_accounts` (OAuth posta kutusu) tabloları **yoktur**; gerçek push ve posta sağlayıcıları bağlandığında eklenecektir.
+> `push_subscriptions` `006` ile eklendi (aşağıda). İlk taslaktaki `mail_accounts` (kullanıcı bazlı OAuth posta kutusu) tablosu **yoktur**; Gmail/Graph entegrasyonu henüz uygulanmadı.
 
 ### Blok 1 — Tedarikçiler
 
@@ -132,7 +132,9 @@ Tüm tablolarda `tenant_id` vardır ve RLS açıktır. Aşağıda `id`, `tenant_
 | `automation_counters` | `action_type, mode ('approval'\|'auto'), consecutive_clean, threshold, sample_rate, promoted_at, promoted_by, demoted_at, demoted_reason, total_auto, total_sampled, sample_errors` | `UNIQUE(tenant_id, action_type)`. Bkz. 06 |
 | `automation_events` | `action_type, event, decision_id, ai_action_id, at` | Yalnızca ekleme. Sayaç geçmişi |
 | `message_drafts` | `project_id, kind, channel, to_address, subject, body, original_body, language, status, requires_approval, from_user_id, ai_generated, ai_action_id, entity_type, entity_id, approved_by, approved_at, sent_by, sent_at, from_address` | `original_body` ile gönderilen `body` farkı üslup öğrenme verisidir |
-| `outbox` | `draft_id, channel ('email'\|'whatsapp'\|'sms'), from_address, to_address, subject, body, provider, status, autonomous` | Giden mesaj geçidinin çıktısı (gerçek sağlayıcı yokken "gönderildi" kaydı). Token linkleri maskelenmiş saklanır; `autonomous=true` yalnızca RFQ hatırlatması |
+| `outbox` | `draft_id, project_id, channel ('email'\|'whatsapp'\|'sms'), from_address, to_address, reply_to, subject, body, provider, status ('queued'\|'sent'\|'failed'), autonomous, message_id, in_reply_to, attempts, last_error, next_attempt_at, sent_at, provider_message_id, failure_notified_at` | Giden mesaj geçidinin kaydı (her kanal, her sağlayıcı). Token linkleri maskelenmiş saklanır; `autonomous=true` yalnızca RFQ hatırlatması. SMTP teslim/yeniden deneme durumu `006` ile. `007` ile alıcı adresi ve gövde `audit_log`'a kopyalanmaz |
+| `outbox_payloads` | `outbox_id (unique), body_enc bytea, purged_at` | `006`. Maskesiz gövde yalnızca teslime kadar, pgcrypto ile şifreli; teslim/vazgeçme sonrası boşaltılır. Audit tetikleyicisi yok |
+| `push_subscriptions` | `user_id, endpoint, p256dh, auth_secret, user_agent, device, active, failure_count, last_success_at, last_failure_at, last_error, deactivated_at, deactivated_reason` | `006`. Web Push aboneliği; `UNIQUE(tenant_id, endpoint)`; silinmez, `active=false`. Audit tetikleyicisi yok (teslim kimlik bilgisi) |
 | `notifications` | `user_id, project_id, priority ('critical'\|'routine'\|'digest'), title, body, entity_type, entity_id, status, deliver_after, digest_id, channel, sent_at, read_at` | `004`. §15 bildirimleri; rutinler 08:30 / 18:00 özetine katlanır |
 | `public_tokens` | `purpose ('rooming'\|'extra'\|'survey'\|'consent'), token_hash (unique), entity_type, entity_id, expires_at, read_only_after, revoked_at, last_used_at, use_count` | Genel tek kullanımlık linkler. RFQ ve teklif token'ları kendi tablolarındadır (`rfqs.token_hash`, `quotes.public_token_hash`) |
 
@@ -206,7 +208,7 @@ GRANT SELECT, INSERT, UPDATE ON projects TO mice_app;   -- DELETE verilmez
 - Bağlam her işlemde `withTenant()` (`src/db/pool.ts`) içinde `set_config(..., true)` ile **işlem kapsamında** ayarlanır (`app.tenant_id`, `app.user_id`, `app.actor_type`, `app.device`).
 - Migration'lar sahip/süper kullanıcıyla (`MIGRATION_DATABASE_URL`) çalışır; API ve işçi yalnızca `mice_app` ile bağlanır (`DATABASE_URL`). Üretimde `mice_app` parolası değiştirilmelidir.
 - **Misafir PII'si:** ek RLS politikası yoktur; koruma şifreleme + `GUEST_DATA_KEY`'in yalnızca yetkili rollerin sorgularında kullanılmasıdır (`services/guests.ts`).
-- **SECURITY DEFINER giriş noktaları** (yalnızca `mice_app`'e `EXECUTE`): `auth_lookup_user(email)` (girişte acenta bilinmeden kullanıcı bulma), `resolve_public_token(kind, hash)` (token **özeti** ile yalnızca `(tenant_id, entity_id)` döner; ardından normal RLS bağlamı kurulur), `app_tenant_ids()` (işçi için aktif acentalar).
+- **SECURITY DEFINER giriş noktaları** (yalnızca `mice_app`'e `EXECUTE`): `auth_lookup_user(email)` (girişte acenta bilinmeden kullanıcı bulma; `007` ile askıya alınmış acentada giriş yok), `resolve_public_token(kind, hash)` (`007` ile askıya alınmış acentanın linkleri çözülmez) (token **özeti** ile yalnızca `(tenant_id, entity_id)` döner; ardından normal RLS bağlamı kurulur), `app_tenant_ids()` (işçi için aktif acentalar).
 - **İşçi:** her acenta için ayrı işlem açar ve bağlamı açıkça ayarlar; acentalar arası tek sorgu yoktur. Platform raporları için ayrı rol (`mice_platform`) henüz yoktur.
 
 ## 5. Silinmezlik ve audit tetikleyicileri

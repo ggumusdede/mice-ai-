@@ -43,7 +43,7 @@ stateDiagram-v2
 | `sample_error` (örneklemde admin düzeltti/reddetti) | — | **Geri dönüş:** `mode = 'approval'`, `consecutiveClean = 0`, `demotedAt`, `sampleErrors + 1` |
 | `error_detected` (örneklem dışında, sonradan tespit edilen hata) | `consecutiveClean = 0` | **Geri dönüş** |
 
-**"Hata tespit edildi" ne demek?** Otomatik yapılmış bir işlemin çıktısının sonradan insan tarafından düzeltilmesi (`ai_corrections` kaydı) veya ilgili kaydın iptali, revizyonu ya da şikâyete bağlanması. Örnekler: müşteri eksik bilgi sorusuna "bunu zaten yazmıştım" dedi; tedarikçi RFQ'daki tarihin yanlış olduğunu bildirdi. Tespit yolları:
+**"Hata tespit edildi" ne demek?** Otomatik yapılmış bir işlemin çıktısının sonradan insan tarafından düzeltilmesi (`ai_actions.corrected` / `correction` kaydı) veya ilgili kaydın iptali, revizyonu ya da şikâyete bağlanması. Örnekler: müşteri eksik bilgi sorusuna "bunu zaten yazmıştım" dedi; tedarikçi RFQ'daki tarihin yanlış olduğunu bildirdi. Tespit yolları:
 
 - Taslak, eşleşme veya kayıt üzerinde sonradan yapılan düzeltme otomatik olarak `error_detected` üretir.
 - Her otomatik işlem kartının detayında "Bu otomatik işlem hatalıydı" bağlantısı bulunur (tek tık).

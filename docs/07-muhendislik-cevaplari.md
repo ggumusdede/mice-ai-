@@ -44,18 +44,29 @@
 
 | Veri | LLM'e gider mi? | Yöntem |
 |---|---|---|
-| **Misafir verisi** (rooming list) | **Hayır** | Rooming list form veya Excel'den **deterministik** olarak okunur (exceljs). LLM'e gönderilmez |
-| Müşteri kontak adı, e-posta, telefon (talep metninde) | Takma adla | `domain.pseudonymize()`: bilinen adlar (müşteri kartı, kullanıcılar) + regex (e-posta, TR telefon, TCKN, IBAN) → `[[KISI_1]]`, `[[EPOSTA_1]]`. Eşleşme tablosu sunucu belleğinde ve istek kapsamında tutulur. Model çıktısı `restorePseudonyms()` ile geri çevrilir |
-| Şirket adı, otel adı, fiyat, tarih | Evet | Tüzel kişi verisi kişisel veri değildir. **İstisna:** şahıs şirketleri; bu durumda müşteri kartında "şahıs" bayrağı ile takma ad uygulanır |
-| Tedarikçi PDF/görsel teklifleri | Evet (içerikte kontak kişi adı olabilir) | Metin katmanlı PDF'de metin çıkarılıp takma ad uygulanabilir. Taranmış belgede kırpma güvenilir değildir. Bu belgeler standart sözleşme kapsamındaki aktarıma dayanır. Tedarikçi kontak verisi düşük hassasiyetlidir ve ticari ilişkiye ilişkindir |
+| **Misafir verisi** (rooming list) | **Hayır, hiçbir zaman** | Misafirler public rooming formundan (`/r/<token>`) veya ekip API'sinden (`POST /api/projects/:id/guests`) yapılandırılmış alanlarla gelir; `services/guests.ts` hiçbir `AiService` metodunu çağırmaz. Rooming list belgesi yalnızca sayıları tutar; Excel şablonu canlı üretilir ve yalnızca yetkili rollere şifresi çözülmüş ad gösterir. Rooming Excel **içe aktarımı** henüz yok |
+| Müşteri kontak adı, e-posta, telefon (talep metninde) | Takma adla (sınırlarla, aşağıya bakın) | `@mice/ai` `Pseudonymizer` (`packages/ai/src/pii.ts`; `@mice/domain` `pseudonymize()` aynı davranışın saf karşılığıdır): regex (e-posta, TR cep/sabit + uluslararası telefon, IBAN, 11 haneli TCKN benzeri) + hitaplı ad kalıpları (`Sayın …`, `Sn. …`, `… Hanım`, `… Bey`, `Mr./Mrs./Dr. …`, `Господин …`) + çağıranın verdiği bilinen adlar → `[PERSON_1]`, `[EMAIL_1]`, `[PHONE_1]`, `[IBAN_1]`, `[NATID_1]`. Eşleşme tablosu yalnızca istek boyunca bellekte tutulur; model çıktısı `restoreDeep()` ile geri çevrilir. Taslak ve `ask` çağrılarında alıcı/gönderen ve olgulardaki kişi alanları (`collectNamesFromFacts`) bilinen ad olarak eklenir |
+| Şirket adı, otel adı, fiyat, tarih | Evet | Tüzel kişi verisi kişisel veri değildir; şirket adları **bilinçli olarak maskelenmez** (talep ayıklamada bilinen müşteri adları modele açıkça verilir). **İstisna:** şahıs şirketleri; müşteri kartında "şahıs" bayrağıyla takma ad uygulanması önerilir, **henüz uygulanmadı** [Ürün kararı] |
+| Tedarikçi PDF/görsel teklifleri, sözleşme ve fatura PDF'leri | Evet, **maskelenmeden** (içerikte kontak kişi adı, imza, IBAN olabilir) | PDF ve görseller süreç içinde maskelenemez; `document` / `image` bloğu olarak olduğu gibi gönderilir. `AI_ALLOW_BINARY_DOCS=false` ile PDF/görsel gönderimi tamamen kapatılır (çağrı `pii_unmaskable` hatası verir; ekip metni yapıştırır veya elle girer). Metin, CSV (Excel'den çevrilen) ve e-posta dosyaları maskelenir. PDF'den sunucuda metin çıkarıp maskeleyerek gönderme **henüz yok**. Bu belgeler standart sözleşme kapsamındaki aktarıma dayanır |
 | Sesli komut ses dosyası | STT servisine gider | STT sağlayıcısı da aktarım kapsamındadır. Alternatif: Türkiye'de barındırılan açık kaynak STT (bkz. §8) |
 
 **Ek önlemler:**
 
 - Sağlayıcının API verisini model eğitiminde kullanmadığı ve saklama süresi sözleşmesel olarak teyit edilmeli [Doğrulanmalı].
 - Anthropic API'de çıkarımın hangi coğrafyada çalışacağı `inference_geo` parametresiyle seçilebiliyor. Hangi bölgelerin sunulduğu ve bunun KVKK açısından etkisi **doğrulanmalı**. Hangi bölge seçilirse seçilsin Türkiye dışıdır.
-- `ai_actions` tablosunda modele giden içeriğin kendisi değil, referansı ve özeti saklanır.
+- `ai_actions` tablosunda modele giden içeriğin kendisi değil, girdi özeti (`input_summary`) ve yapılandırılmış çıktı saklanır.
 - Aydınlatma metinlerine (müşteri, tedarikçi, misafir) yurt dışına aktarım ve alıcı grupları yazılır.
+
+### Uygulamanın bilinen sınırları (kod durumu)
+
+Bu sınırlar avukat değerlendirmesine ve aydınlatma metinlerine girdi olmalıdır [Doğrulanmalı]:
+
+1. **PDF ve görseller maskelenmez.** Tedarikçi teklifi, sözleşme ve fatura PDF'leri ile görseller modele olduğu gibi gider (`packages/ai/src/claude.ts` `fileBlocks`). İçlerindeki kişi adı, telefon, e-posta, IBAN ve imza modele ulaşır. Kapatmak için `AI_ALLOW_BINARY_DOCS=false` (varsayılan: açık); bu durumda yalnızca metin girdisi kabul edilir.
+2. **Hitapsız imza adı talep ayıklamada maskelenmez.** `extractRequest` çağrısında bilinen kişi listesi verilmez; yalnızca regex ve hitap kalıpları çalışır. "Saygılarımla, Ayşe Yılmaz" gibi hitapsız bir imza adı modele açık gider. (Taslak ve `ask` çağrılarında olgulardaki kişi alanları bilinen ad olarak eklendiği için bu sınır daha dardır.) Müşteri kartındaki kontak adlarının bilinen ad olarak eklenmesi önerilir.
+3. **Şirket adları bilinçli olarak maskelenmez** (tüzel kişi verisi; eşleştirme için gerekli). Şahıs şirketi istisnası henüz uygulanmadı.
+4. **Misafir / rooming list verisi modele hiçbir zaman gönderilmez.** Misafir PII'si pgcrypto ile şifreli saklanır (`GUEST_DATA_KEY`), audit kaydına kopyalanmaz ve yalnızca `view_guest_pii` rollerine çözülür.
+5. Regex tabanlı maskeleme yanlış negatif verebilir (alışılmadık telefon biçimi, ad içinde rakam vb.); `packages/ai/test/pii.test.ts` kapsadığı kalıpları belgeler.
+6. Model istemi ve yanıtı kalıcı saklanmaz; `ai_actions` yalnızca girdi özeti (`input_summary`) ve yapılandırılmış çıktıyı (`output`, maske geri çevrilmiş hâliyle) tutar. Okunan teklif metni `supplier_offers.raw_text`, sözleşme metni `contracts.source_text` olarak acentanın kendi veritabanında kalır (audit'e kopyalanmaz).
 
 **Öneri:** (1) Misafir verisi LLM'e hiç gitmesin. (2) Diğer kişisel veri takma adla gitsin. (3) Hukuki dayanak standart sözleşme + Kurum bildirimi olsun. (4) Avukat görüşü Faz 1'in **ilk 4 haftasında** alınsın. Sağlayıcı standart sözleşmeyi kabul etmezse alternatifler: aynı modelin başka bir bulut sağlayıcısı üzerinden, o sağlayıcıyla imzalanan sözleşmeyle kullanımı, veya hassas akışlar için Türkiye'de barındırılan açık modeller. Bu alternatifler doğruluk/maliyet ödünleşimiyle birlikte değerlendirilmelidir.
 
@@ -65,20 +76,20 @@
 
 | Görev | Model | Ayar | Gerekçe |
 |---|---|---|---|
-| Talep ayıklama (TR/EN/RU) | `claude-sonnet-5-5` | Yapılandırılmış çıktı (`output_config.format` JSON şeması), `effort: low` | Çok dilli anlama ve şemaya uyum |
-| Belge okuma (PDF, görsel, Excel→CSV) | `claude-sonnet-5-5` | PDF doğrudan `document` bloğu olarak verilir; görsel desteği var | Tablo ve çok sayfalı teklifler |
-| Zor/kritik belge ikinci okuma | `claude-sonnet-5-5` farklı istemle; gerekirse `claude-opus-5-5` | Yalnızca para alanında uyuşmazlık olursa | Maliyet kontrollü doğrulama (04 §4) |
-| Taslak yazma (TR/EN/RU, sahibin üslubu) | `claude-sonnet-5-5` | Üslup örnekleri istem önbelleğinde | Kısa, doğal, kişiye özgü metin |
-| Niyet sınıflandırma (gelen mesaj, sesli komut) | `claude-haiku-5-5` | Kısa çıktı | Çok ucuz, düşük gecikme |
-| "Bu projeye sor" | `claude-sonnet-5-5` | Yalnızca verilen olgularla; yoksa "veri yok" | §3.7 dürüstlük |
-| Aylık üslup özeti, kapanış önerileri | `claude-sonnet-5-5` | Message Batches API | Acil değil, yaklaşık %50 indirim |
+| Talep ayıklama (TR/EN/RU) | `AI_MODEL` (varsayılan `claude-sonnet-5-5`) | Yapılandırılmış çıktı (`output_config.format` JSON şeması), `effort: medium` | Çok dilli anlama ve şemaya uyum |
+| Belge okuma (PDF, görsel, Excel→CSV) | `AI_MODEL` | `effort: medium`; PDF `document`, görsel `image` bloğu olarak verilir (`AI_ALLOW_BINARY_DOCS`) | Tablo ve çok sayfalı teklifler |
+| Zor/kritik belge ikinci okuma | — | **Henüz uygulanmadı.** Öneri: para alanında uyuşmazlıkta farklı istemle ikinci okuma | Maliyet kontrollü doğrulama (04 §4) |
+| Taslak yazma (TR/EN/RU, sahibin üslubu) | `AI_MODEL` | `effort: medium`; sabit sistem istemi önbellekte, üslup örnekleri istekte | Kısa, doğal, kişiye özgü metin |
+| Sesli komut niyeti | `AI_MODEL_FAST` (varsayılan `claude-haiku-5-5`) | `effort: low`, kısa çıktı, sunucu tarafı yedek model yok | Çok ucuz, düşük gecikme. Gelen mesaj sınıflandırma henüz yok |
+| "Bu projeye sor" | `AI_MODEL` | `effort: low`; yalnızca verilen olgularla, yoksa "Bu konuda veri yok." | §3.7 dürüstlük |
+| Aylık üslup özeti, kapanış önerileri | `AI_MODEL` | `effort: low`. Message Batches API **henüz kullanılmıyor** (önerilir, ≈ %50 indirim) | Acil değil |
 
 **Teknik notlar:**
 
-- `ClaudeAiService`, `refusal` ve aşırı yük (overload) durumlarında mock'a değil **insan doğrulamasına** düşer (güven puanı 0).
+- `ClaudeAiService` mock'a düşmez. Model reddi (`stop_reason: refusal`) için desteklenen modellerde sunucu tarafı yedek model (`fallbacks: "default"`, beta) açıktır; `AI_FALLBACKS=off` kapatır. Ret, aşırı yük, zaman aşımı veya geçersiz JSON tipli `AiError` olarak döner (`refusal`, `overloaded`, `rate_limit` …; SDK `AI_MAX_RETRIES` kadar yeniden dener). API bugün bu hatayı isteğin hatası olarak döndürür; ekip manuel teklif/fatura girişiyle devam eder. Otomatik "güven 0 ile insan doğrulaması kartı" yolu **henüz yok** [Ürün kararı].
 - Model kimliği yapılandırmadan okunur. Model değişikliği doğruluk test setinden geçmeden yayına alınmaz (04 §3).
 
-**Maliyet:** Kazanılan proje başına **≈ $3–6 (≈ €3–5,5)**, kaybedilen talepte **≈ $1,5–2,5**. Ayda 30 talepte **≈ €75–250**. Ayrıntılı hesap: [05-faz1-teknik-plan.md §7](05-faz1-teknik-plan.md).
+**Maliyet (varsayım) [Doğrulanmalı]:** Tipik kazanılan proje başına **≈ $1–1,5** (×1,3 payla ≈ $2; ≈ €0,9–1,9), büyük kongrede **≈ $3–5**, kaybedilen talepte **≈ $0,5–1**. Ayda 30 talepte **≈ €20–50**, büyük kongre ve yoğun "sor" kullanımıyla ≈ €100. Fiyat varsayımı Sonnet 5.5 $2 / $10 per MTok (giriş/çıkış). Ana sürücüler: tedarikçi PDF okuma, sözleşme okuma, "Bu projeye sor"; kaldıraçlar: effort, acil olmayan okumada Batch API, istem önbelleği. Ayrıntılı hesap: [05-faz1-teknik-plan.md §7](05-faz1-teknik-plan.md).
 
 ---
 
@@ -88,8 +99,8 @@
 
 | Seçenek | Yön | Durum | Değerlendirme |
 |---|---|---|---|
-| **Excel/CSV içe aktarım şablonu** | Sistem → Mikro (müşteri faturası taslağı, cari hareketler) | Çoğu muhasebe yazılımında var; Mikro'daki ekran ve şablonun **acentanın kullandığı üründe doğrulanması gerekir** | Faz 1 yöntemi. `GET /api/finance/export/mikro` (exceljs). Sütun eşlemesi acentanın örnek dosyasından çıkarılır. Her aktarım `exports` tablosunda izlenir |
-| **e-Fatura / e-Arşiv UBL-TR XML** | Gelen tedarikçi faturaları → sistem (okuma) | GİB standardı. XML; özel entegratör portalından veya Mikro e-portalından indirilebilir [Doğrulanmalı: indirme ve otomasyon imkânı] | Faz 2. Deterministik ayrıştırıcı, %100 doğruluk, LLM maliyeti yok. Fatura UUID'si `finance_entries.ubl_uuid` alanına yazılır |
+| **Excel/CSV içe aktarım şablonu** | Sistem → Mikro (müşteri faturası taslağı, cari hareketler) | Çoğu muhasebe yazılımında var; Mikro'daki ekran ve şablonun **acentanın kullandığı üründe doğrulanması gerekir** | Faz 1 yöntemi. `GET /api/finance/export/mikro` (exceljs). Uygulanan **varsayımsal** şablon (muhasebeciyle doğrulanmalı [Doğrulanmalı]): fatura başına bir satır; sütunlar Evrak Tipi, Cari Kod, Cari Ünvan, Belge No, Tarih (GG.AA.YYYY), Vade, Tutar (matrah), KDV, Toplam, Döviz, Kur, Açıklama; cari kod `120.<müşteri kısa kodu>` (alıcılar), `320.<TEDARİKÇİ ≤12>` (satıcılar), komisyon faturası için `120.K.<tedarikçi>`; fatura tarihine (`meta.issueDate`) göre filtre (`services/finance.ts`). Aktarım her çağrıda canlı üretilir; aktarım izi tablosu (`exports`) henüz yok. Mikro'da kesilen müşteri fatura no `POST /api/finance/customer-invoices` ile geri kaydedilir |
+| **e-Fatura / e-Arşiv UBL-TR XML** | Gelen tedarikçi faturaları → sistem (okuma) | GİB standardı. XML; özel entegratör portalından veya Mikro e-portalından indirilebilir [Doğrulanmalı: indirme ve otomasyon imkânı] | Faz 2. Deterministik ayrıştırıcı, %100 doğruluk, LLM maliyeti yok. Fatura UUID'sinin ayrı bir sütuna (ör. `ubl_uuid`) yazılması önerilir; sütun henüz yok |
 | **Özel entegratör API'si** | Gelen e-fatura okuma | Entegratörlerin çoğu web servis sunar; acentanın entegratörü belirlenmeli [Doğrulanmalı] | Faz 2–3. Otomatik fatura çekme |
 | **Mikro API / web servis** | Cari, fatura okuma/yazma | Bazı Mikro ürünlerinde servis katmanı olduğu biliniyor; kapsam, lisans ve maliyet **bilinmiyor** [Doğrulanmalı] | Mikro iş ortağı/bayi ile teknik toplantı yapılmalı. Mümkünse Faz 3'te çift yönlü entegrasyon |
 | **Doğrudan veritabanı (SQL Server)** | Okuma | Yerel (on-prem) kurulumda teknik olarak mümkün | **Önerilmez:** destek dışı, sürüm kırılganlığı, SaaS'a taşınamaz |
@@ -140,7 +151,7 @@
 4. **AI önerisi (Haiku):** Bağlanamayan mesaj için aday projeler önerilir. Güven eşik altıysa kullanıcıya "Bu mail hangi projeye ait?" kartı gelir.
 
 - Kişisel mailler: Yalnızca bilinen müşteri/tedarikçi alan adlarından gelen veya proje etiketi taşıyan mailler içe alınır. Kullanıcı "hariç tut" kuralı tanımlayabilir (gizlilik).
-- Belirteçler `mail_accounts.refresh_token_enc` alanında zarf şifrelemesiyle saklanır. Kullanıcı ayrıldığında erişim iptal edilir ve sorumluluk yeni kullanıcıya devredilir.
+- (Hedef tasarım; kullanıcı bazlı OAuth henüz yok — bugün `outbox` + isteğe bağlı SMTP "send as" rölesi, `services/email-smtp.ts`; OAuth taslağı `services/email-oauth.ts`.) Belirteçler önerilen `mail_accounts.refresh_token_enc` alanında zarf şifrelemesiyle saklanır. Kullanıcı ayrıldığında erişim iptal edilir ve sorumluluk yeni kullanıcıya devredilir.
 
 ---
 
@@ -312,8 +323,8 @@ PRD'de saha paneli Faz 2'dedir. Çevrimdışı mod Faz 2'nin ilk işi olarak pla
 
 - **Faz 1:** 18–22 hafta, yaklaşık 4,3 TZE (75–95 kişi-hafta).
 - **Geliştirme:** Varsayımla ≈ €70–190 bin.
-- **Aylık işletme (tek acenta):** ≈ €200–900, bunun içinde yapay zekâ ≈ €75–250.
-- **Proje başına AI:** ≈ €3–5,5.
-- **SaaS'ta acenta başı marjinal maliyet:** ≈ €115–630/ay.
+- **Aylık işletme (tek acenta):** ≈ €140–750, bunun içinde yapay zekâ ≈ €20–100.
+- **Proje başına AI:** tipik kazanılan proje ≈ $1–1,5 (≈ €0,9–1,4; ×1,3 payla ≈ €1,9), büyük kongre ≈ $3–5 [Doğrulanmalı].
+- **SaaS'ta acenta başı marjinal maliyet:** ≈ €80–480/ay.
 
 Ayrıntı ve varsayımlar: [05-faz1-teknik-plan.md](05-faz1-teknik-plan.md).

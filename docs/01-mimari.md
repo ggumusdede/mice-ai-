@@ -20,7 +20,13 @@
 
 ## 2. Bileşen diyagramı
 
-Diyagram hedef mimariyi gösterir. Kesik çizgili kutular (`Kanallar`) **henüz gerçek sağlayıcıya bağlı değildir**: bugün tüm dış mesajlar `outbox` tablosuna yazılır (+ geliştirmede konsol), push bildirimleri `notifications` tablosuna yazılıp konsol uygulamasıyla "teslim edilir". Uygulama durumu için bkz. [README "Uygulama durumu"](README.md#uygulama-durumu).
+Diyagram hedef mimariyi gösterir. Kanal bağdaştırıcıları ortam değişkenleriyle seçilir (`delivery-config.ts`, `services/delivery.ts`); her dış mesaj her durumda önce `outbox` tablosuna (bağlantılar maskeli) yazılır:
+
+- **E-posta:** varsayılan `EMAIL_PROVIDER=outbox` (yalnızca kayıt + geliştirmede konsol). `EMAIL_PROVIDER=smtp` ile gerçek SMTP teslimi (`services/email-smtp.ts`, nodemailer; From her zaman sorumlu kullanıcının adresi, başarısız teslim işçide yeniden denenir). Kullanıcı bazlı OAuth (Gmail API / MS Graph "send as me") **henüz yok** (`services/email-oauth.ts` yalnızca taslak).
+- **SMS / WhatsApp:** yalnızca `outbox` kaydı (`services/messaging.ts`); WhatsApp Cloud API bağdaştırıcısı iskelettir, canlı değildir.
+- **Push:** VAPID anahtarları verilirse Web Push (`services/push.ts`, `push_subscriptions`, `POST /api/push/subscribe`); verilmezse konsol uygulaması. Her bildirim ayrıca `notifications` tablosunda kayıtlıdır. Yerel APNs uygulaması yoktur.
+
+Bu bölümdeki kanal ayrıntıları eşzamanlı geliştirilmektedir; güncel durum için bkz. [README "Uygulama durumu"](README.md#uygulama-durumu) ve [`apps/api/README.md`](../apps/api/README.md).
 
 ```mermaid
 flowchart LR
@@ -30,11 +36,11 @@ flowchart LR
     MISAFIR[Misafir<br/>rooming + KVKK rıza / geri çekme]
   end
 
-  subgraph Kanallar["Kanallar (hedef; bugün outbox + konsol)"]
-    MAIL[Gmail API / MS Graph<br/>kullanıcı bazlı OAuth]
-    WA[WhatsApp Business API]
-    SMS[SMS sağlayıcı]
-    PUSH[Web Push / APNs]
+  subgraph Kanallar["Kanallar (önce outbox kaydı)"]
+    MAIL[SMTP (EMAIL_PROVIDER=smtp)<br/>hedef: Gmail API / MS Graph OAuth]
+    WA[WhatsApp Cloud API<br/>iskelet]
+    SMS[SMS sağlayıcı<br/>henüz yok]
+    PUSH[Web Push / VAPID]
   end
 
   subgraph Web["apps/web — React PWA"]
@@ -86,7 +92,7 @@ flowchart LR
   NOTIF -.-> PUSH --> INBOX
 ```
 
-**Kritik nokta:** Dışarıya giden her mesaj tek bir yoldan geçer: **Giden mesaj geçidi** — `services/drafts.ts` `sendDraft()` → `EmailProvider.send()` (`services/email.ts`; bugünkü uygulama `OutboxEmailProvider`, gerçek SMTP/Graph yok). Geçit şunları gönderir:
+**Kritik nokta:** Dışarıya giden her mesaj tek bir yoldan geçer: **Giden mesaj geçidi** — `services/drafts.ts` `sendDraft()` → `EmailProvider.send()` (`services/email.ts`; kanal yönlendirmesi `services/delivery.ts`: varsayılan `OutboxEmailProvider`, `EMAIL_PROVIDER=smtp` ile `SmtpEmailProvider`). Geçit şunları gönderir:
 
 - `message_drafts` taslağı; `requires_approval=true` ise yalnızca `status='approved'` olduktan sonra (onay bir karar kartından gelir: `rfq_send`, `negotiation_message`, `outbound_message`, `contract_diff` …). Gönderim, sorumlu insan kullanıcının adresinden (`from_address`) yapılır. Fiyat içermeyen eksik bilgi sorusu (`missing_info`) `requires_approval=false` olarak açılır; clerk kendisi gönderir (`POST /api/drafts/:id/send`) veya `POST /api/drafts/:id/request-approval` ile onaya yollar.
 - §6'daki tek istisna: işçinin `supplier_reminder` eylemi. Metin AI tarafından üretilmez; kodda sabit, dil bazlı şablondur (`worker.ts` `RFQ_REMINDER_TEMPLATE`), yeni link içermez, `outbox.autonomous=true` olarak işaretlenir ve `ai_actions`'a `supplier_rfq_reminder` olarak yazılır. RFQ'nun `sent` olması (yani insan onaylı `rfq_send`) ön koşuldur.
@@ -99,7 +105,7 @@ flowchart LR
 İnternet ──TLS──┤                                                 │
                 └── Ters vekil (WAF, rate-limit) ── api (N≥2) ────┼── PostgreSQL 16 (birincil + PITR, ops. bekleme)
                                                     worker (1)    │
-                                                    └── Claude API (çıkış); hedef: Gmail-Graph / WhatsApp / SMS / Push
+                                                    └── Claude API, SMTP rölesi, Web Push servisleri (çıkış); hedef: Gmail-Graph / WhatsApp / SMS
 ```
 
 - Üretim kurulumu (konteyner imajları, CI) ayrı bir çalışmayla ekleniyor; bkz. üretim hazırlığı dokümanları (Docker/CI). Güvenlik incelemesi için bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md).
@@ -174,7 +180,7 @@ Tüm uç noktalar `/api` önekiyle; tam liste `apps/api/src/routes/*.ts`.
 |---|---|---|---|
 | 1 | **Tek doğru kaynak** | Belgeler (`documents`) `content` JSON'unu, üretilen dosyayı (`file_data`) ve hangi varlıklardan üretildiğini (`document_dependencies`) saklar. Elle düzenlenebilir belge alanı yoktur; değişiklik "yeniden üret" (`POST /api/documents/:id/regenerate`) ile yeni sürüm demektir. Üreticiler `registerDocumentGenerator(kind, …)` ile kayıtlıdır (`services/documents.ts`, `documents-b.ts`). Kur, teklifte `fx_rate/fx_source/fx_date` olarak bir kez tutulur (`fx_rates` tablosundan). | `documents`, `document_dependencies`, `@mice/shared` tipleri |
 | 2 | **Onay kapıları** | Kritik geçişler durum alanlarıyla (`quotes.status`, `contracts.status`, `finance_entries.status`) ve karar kartlarıyla (`decisions`) yönetilir. Kararın etkisi `registerDecisionEffect(kind, fn)` ile kayıtlı fonksiyondur (`services/registry.ts`, `phase-b-registry.ts`). Önce domain kuralları (`validateQuote` vb.) çalışır; kural dışı teklif `blocked` olur ve onaya gelmeden önce ekibe döner. Veritabanı ayrıca şunları zorlar: `approved` teklifte `approved_by` veya `approval_decision_id` (CHECK); onaysız teklif `sent` olamaz (`quotes_send_guard`); kilitli sözleşme yalnızca ek protokolle değişir (`contract_lock`); para ve imza geçişleri yalnızca insan aktörle (bkz. §5.1). | `decisions`, `domain/quote-validation`, `domain/authority`, `003_security_and_integrity.sql`, `004_phase_b.sql` |
-| 3 | **İnsan imzası** | AI katmanı yalnızca `Draft` üretir. Gönderim yalnızca Giden mesaj geçidinden yapılır ve kullanıcının kendi adresinden çıkar (bugün `outbox`; hedef Gmail/Graph "send as user"). Taslaklar sahibin düzeltmelerinden çıkarılan `styleExamples` (`original_body` → `body`) ile üslup öğrenir. | `packages/ai`, `services/drafts.ts`, `services/email.ts`, `message_drafts`, `outbox` |
+| 3 | **İnsan imzası** | AI katmanı yalnızca `Draft` üretir. Gönderim yalnızca Giden mesaj geçidinden yapılır ve kullanıcının kendi adresinden çıkar (`outbox` kaydı + isteğe bağlı SMTP "send as"; hedef Gmail/Graph kullanıcı OAuth'u, henüz yok). Taslaklar sahibin düzeltmelerinden çıkarılan `styleExamples` (`original_body` → `body`) ile üslup öğrenir. | `packages/ai`, `services/drafts.ts`, `services/email.ts`, `email-smtp.ts`, `message_drafts`, `outbox` |
 | 4 | **Kısa ve net** | Taslak istemi "selam + 1–4 kısa cümle veya kısa madde listesi + kapanış" kuralını taşır (`prompts.ts` `SYSTEM_DRAFT`). Rakip adı/fiyatı taslak girdisinden ayıklanır (`sanitizeDraftFacts`); kendini AI olarak ele veren taslak düşük güvenle işaretlenir (`revealsAi`). Üretim sonrası ayrı kelime sayısı kontrolü yoktur. | `packages/ai/src/prompts.ts`, `drafts.ts` |
 | 5 | **Değişiklik yayılımı** | Kaynak tablolardaki `AFTER INSERT/UPDATE` tetikleyicisi (`propagate_staleness`, yalnızca izlenen sütunlar değişince) bağımlı belgeleri `status='stale'` ve `stale_reason` ile işaretler; `doc_kinds_for()` domain'deki `DOCUMENT_DEPENDENCIES` haritasının aynasıdır (test eşitliği doğrular). Eski belge gönderilemez (`documents_send_guard`), teklif belgesi `current` değilse teklif `sent` olamaz (`quotes_send_guard`) → `409 DOCUMENT_STALE`. | `02-veri-modeli.md §6`, `domain/propagation` |
 | 6 | **Silinmez kayıt** | Tüm kiracılı tablolarda `BEFORE DELETE` ve `BEFORE TRUNCATE` tetikleyicisi istisna fırlatır (`forbid_delete`); `mice_app` rolünün `DELETE` yetkisi de yoktur. Her `INSERT/UPDATE` genel `audit_row()` tetikleyicisiyle `audit_log` tablosuna yazılır: aktör tipi ve kimliği, zaman, cihaz, proje, önce/sonra (gizli ve şifreli alanlar `audit_redact` ile çıkarılır). `audit_log` yalnızca eklemeye açıktır. Yanlış kayıt silinmez; `cancelled`/`passive`/`superseded`/`ended` durumuna alınır. | `02-veri-modeli.md §5` |
@@ -206,4 +212,4 @@ Tüm uç noktalar `/api` önekiyle; tam liste `apps/api/src/routes/*.ts`.
 | Zaman | Saklama UTC'dir. İş takvimi `rules.businessHours` (varsayılan `Europe/Istanbul`, 09:00–18:00, hafta içi, `holidays[]` listesi) ile hesaplanır; ayrı tatil tablosu yoktur. |
 | Para | Tutarlar `numeric(14,2)` tipindedir. İç hesap EUR'dur. Kur `fx_rates` tablosundan, kaynağı ve tarihiyle okunur; otomatik kur çekme (ör. TCMB) **henüz yok**. |
 | Dil | Arayüz TR. Yazışmalar TR, EN ve RU (`Language`). |
-| Gizli anahtarlar | Ortam değişkenleri (`.env.example`). `GUEST_DATA_KEY` misafir PII'sinin pgcrypto anahtarıdır ve veritabanında saklanmaz. OAuth posta kutusu bağlantısı henüz olmadığından yenileme belirteci saklanmaz. |
+| Gizli anahtarlar | Ortam değişkenleri (`.env.example`). `GUEST_DATA_KEY` misafir PII'sinin pgcrypto anahtarıdır ve veritabanında saklanmaz; SMTP yeniden deneme gövdeleri `outbox_payloads`'ta ayrı anahtarla şifreli tutulur ve teslimden sonra boşaltılır. OAuth posta kutusu bağlantısı henüz olmadığından yenileme belirteci saklanmaz. |

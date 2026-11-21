@@ -5,6 +5,8 @@
 
 ## 1. Faz 1 kapsamı (teknik)
 
+> Bu tablo planlanan kapsamdır. Kodun bugünkü durumu (ör. Adım 6–8 kodda mevcut; SMTP e-posta ve Web Push bağdaştırıcıları var; Gmail/Graph OAuth, WhatsApp, SMS ve sunucu tarafı STT henüz bağlı değil) için bkz. [README "Uygulama durumu"](README.md#uygulama-durumu).
+
 | Dahil | Faz 1'de basit tutulan | Faz 2+ |
 |---|---|---|
 | Veri merkezi: tedarikçi, fiyat geçmişi, müşteri/proje, kurallar, kontrol listesi | Kanal fiyatı yalnızca **manuel giriş yardımı** ile | OTA/toptancı iş ortaklığı API'si |
