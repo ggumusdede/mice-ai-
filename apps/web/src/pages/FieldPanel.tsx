@@ -1,20 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { DEFAULT_RULES, type FieldExtraInput, type FieldIssueInput, type Project } from '@mice/shared';
+import { DEFAULT_RULES, type FieldExtra, type FieldExtraInput, type FieldIssueInput, type Project } from '@mice/shared';
 import { api, errorMessage } from '../api/client';
 import { useApi } from '../api/hooks';
 import { useT } from '../i18n';
 import { dateRange, dateTime, todayISO, tl } from '../lib/format';
 import { extraLimitStatus } from '../lib/fieldLimits';
+import { isToday, isUpcoming } from '../lib/fieldDates';
 import { useOfflineQueue } from '../lib/OfflineQueueProvider';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
-import { Button, Callout, EmptyState, ErrorBox, InlineError, Loading, Pill, Segmented } from '../components/ui';
-
-function isToday(p: Project, today: string) {
-  if (!p.startDate) return false;
-  const end = p.endDate ?? p.startDate;
-  return p.startDate <= today && today <= end;
-}
+import { Button, Callout, CopyLink, EmptyState, ErrorBox, InlineError, Loading, Pill, Segmented } from '../components/ui';
 
 export function FieldPanelPage() {
   const t = useT();
@@ -23,11 +18,21 @@ export function FieldPanelPage() {
   const rules = useApi(() => api.rules.get().catch(() => DEFAULT_RULES), []);
   const todays = useMemo(() => (projects.data ?? []).filter((p) => isToday(p, today)), [projects.data, today]);
   const upcoming = useMemo(
-    () => (projects.data ?? []).filter((p) => !isToday(p, today) && (p.startDate ?? '') > today).sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? '')).slice(0, 5),
+    () => (projects.data ?? []).filter((p) => isUpcoming(p, today)).sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? '')),
     [projects.data, today],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = (projects.data ?? []).find((p) => p.id === (selectedId ?? todays[0]?.id)) ?? null;
+  const selected = [...todays, ...upcoming].find((p) => p.id === (selectedId ?? todays[0]?.id)) ?? null;
+  const card = (p: Project) => (
+    <li key={p.id}>
+      <button type="button" className={`fproj ${selected?.id === p.id ? 'is-active' : ''}`} onClick={() => setSelectedId(p.id)} aria-pressed={selected?.id === p.id}>
+        <span className="fproj__code mono">{p.code}</span>
+        <span className="fproj__name">{p.customerName ?? p.title}</span>
+        <span className="fproj__meta">{p.venueName ?? p.city ?? ''} · {dateRange(p.startDate, p.endDate)}</span>
+        {isToday(p, today) ? <Pill tone="success">{t.common.today}</Pill> : null}
+      </button>
+    </li>
+  );
   const limits = { perItem: rules.data?.fieldExtraPerItemLimitTry ?? DEFAULT_RULES.fieldExtraPerItemLimitTry, perProject: rules.data?.fieldExtraPerProjectLimitTry ?? DEFAULT_RULES.fieldExtraPerProjectLimitTry };
 
   return (
@@ -44,23 +49,16 @@ export function FieldPanelPage() {
       {projects.loading && !projects.data ? <Loading /> : null}
 
       {projects.data ? (
-        <section aria-label={t.field.todayProjects}>
-          <h2 className="section-title">{t.field.todayProjects}</h2>
-          {todays.length || upcoming.length ? (
-            <ul className="field-projects">
-              {[...todays, ...upcoming].map((p) => (
-                <li key={p.id}>
-                  <button type="button" className={`fproj ${selected?.id === p.id ? 'is-active' : ''}`} onClick={() => setSelectedId(p.id)} aria-pressed={selected?.id === p.id}>
-                    <span className="fproj__code mono">{p.code}</span>
-                    <span className="fproj__name">{p.customerName ?? p.title}</span>
-                    <span className="fproj__meta">{p.venueName ?? p.city ?? ''} · {dateRange(p.startDate, p.endDate)}</span>
-                    {isToday(p, today) ? <Pill tone="success">{t.common.today}</Pill> : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : <EmptyState icon="field" title={t.field.noProjects} />}
-        </section>
+        <>
+          <section aria-label={t.field.todayProjects} className="field-section">
+            <h2 className="section-title">{t.field.todayProjects}</h2>
+            {todays.length ? <ul className="field-projects">{todays.map(card)}</ul> : <EmptyState icon="field" title={t.field.noProjects} />}
+          </section>
+          <section aria-label={t.field.upcoming} className="field-section">
+            <h2 className="section-title">{t.field.upcoming}</h2>
+            {upcoming.length ? <ul className="field-projects">{upcoming.map(card)}</ul> : <p className="muted small">{t.field.noUpcoming}</p>}
+          </section>
+        </>
       ) : null}
 
       {selected ? (
@@ -198,6 +196,7 @@ function ExtraForm({ projectId, limits }: { projectId: string; limits: { perItem
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState('');
   const [phone, setPhone] = useState('');
+  const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const queuedForProject = q.pending
@@ -214,8 +213,10 @@ function ExtraForm({ projectId, limits }: { projectId: string; limits: { perItem
     setError(null);
     try {
       const body: FieldExtraInput = { description: desc.trim(), amountTry: amt, customerPhone: phone.trim() || undefined };
-      const r = await q.submit({ method: 'POST', path: `/projects/${encodeURIComponent(projectId)}/field-extras`, body, label: `Ekstra: ${body.description.slice(0, 30)} · ${tl(amt)}` });
+      const r = await q.submit<FieldExtra & { approvalLink?: string }>({ method: 'POST', path: `/projects/${encodeURIComponent(projectId)}/field-extras`, body, label: `Ekstra: ${body.description.slice(0, 30)} · ${tl(amt)}` });
       toast(r.queued ? t.common.offlineSaved : t.common.saved, r.queued ? 'neutral' : 'success');
+      // without a customer phone the one-time approval link is shared manually (e.g. WhatsApp)
+      setLink(!r.queued && r.result?.approvalLink ? r.result.approvalLink : null);
       setDesc('');
       setAmount('');
       if (!r.queued) void extras.reload();
@@ -258,6 +259,12 @@ function ExtraForm({ projectId, limits }: { projectId: string; limits: { perItem
       </div>
       <InlineError message={error} />
       <Button type="submit" size="lg" className="btn--block" icon="send" busy={busy} disabled={!desc.trim() || !(amt > 0)}>{t.field.extraSubmit}</Button>
+      {link ? (
+        <div className="stack stack--sm">
+          <span className="small muted">{t.field.approvalLink}</span>
+          <CopyLink url={link} />
+        </div>
+      ) : null}
 
       {extras.data?.length ? (
         <ul className="list small">

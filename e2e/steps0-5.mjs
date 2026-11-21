@@ -133,6 +133,15 @@ async function apiAs(page, method, path, body) {
   );
 }
 
+/** The code's venue segment follows the selected accommodation / hall offer (PRJ-#### stays) — re-read it after a selection. */
+async function refreshCode(page, id) {
+  const r = await apiAs(page, 'GET', `/projects/${id}`);
+  const code = r.json?.project?.code;
+  expect(code && code.split('-').slice(0, 2).join('-') === projectCode.split('-').slice(0, 2).join('-'), `PRJ sequence stable (${projectCode} → ${code})`);
+  if (code !== projectCode) console.log(`   project code → ${code}`);
+  projectCode = code;
+}
+
 // ---------------------------------------------------------------- scenario
 const browser = await chromium.launch({ headless: !process.env.HEADED });
 const clerk = await newPage(browser, 'clerk');
@@ -264,7 +273,11 @@ try {
     }
     // select the parsed hall offer
     const sel = hall.getByRole('button', { name: 'Bu teklifi seç' });
-    if (await sel.count()) await sel.first().click();
+    if (await sel.count()) {
+      await sel.first().click();
+      await hall.getByText('Seçili').first().waitFor();
+    }
+    await refreshCode(clerk, projectId);
     await shot(clerk, 'project-offers-desktop', true);
   });
 
@@ -286,6 +299,9 @@ try {
     const accOffers = clerk.locator('.card', { hasText: 'Konaklama 30 SGL' }).first();
     await accOffers.getByRole('button', { name: 'Bu teklifi seç' }).first().click();
     await accOffers.getByText('Seçili').first().waitFor();
+    await clerk.waitForLoadState('networkidle');
+    await refreshCode(clerk, projectId);
+    expect(/-[A-Z0-9]+$/.test(projectCode) && !projectCode.endsWith('-TBD'), 'venue segment set from the selected hotel');
   });
 
   let quoteLink = '';

@@ -1,7 +1,7 @@
 // Phase B completion — project code venue segment (§5), program / rooming list / realized P&L documents (§3.1, §3.5, §17.9).
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { client, closeApp, login, makeApp, newTenant, ownerSql, quotableProject, resetClock, type Client, type TestApp } from './helpers.js';
+import { client, closeApp, login, makeApp, newTenant, ownerSql, quotableProject, resetClock, twoOptions, type Client, type TestApp } from './helpers.js';
 import { signedProject, type SignedProject } from './phase-b-helpers.js';
 
 let T: TestApp;
@@ -50,6 +50,26 @@ describe('project code venue segment (§5)', () => {
     const patched = await clerk.patch(`/api/projects/${q.projectId}`, { venueName: 'Kalamış Marina Otel', billingInfo: 'Anadolu İlaç A.Ş., Şişli VD 1112223334' });
     expect(patched.body.code).toMatch(/-80-KALAMISMARINAO$/);
     expect(patched.body.billingInfo).toMatch(/Şişli VD/);
+  });
+});
+
+describe('billing info fixed in the project (Overview) un-blocks an agency-template contract', () => {
+  it('empty billing field → contract diff; PATCH project billingInfo → re-compare fills it → clean', async () => {
+    const q = await quotableProject(admin, t, 'new');
+    await ownerSql('UPDATE projects SET customer_id = NULL, billing_info = NULL WHERE id = $1', [q.projectId]);
+    const quote = await admin.post(`/api/projects/${q.projectId}/quotes`, twoOptions(q));
+    const sent = await admin.post(`/api/quotes/${quote.body.id}/send`);
+    expect(sent.status).toBe(200);
+    await client(T.app).post(`/api/public/quotes/${sent.body.approvalLink.split('/q/')[1]}/accept`, { optionNo: 1, approverName: 'Müşteri' });
+    const c = await admin.post(`/api/projects/${q.projectId}/contracts`, { supplierId: t.suppliers.moda, serviceItemIds: [q.accItemId, q.hallItemId], template: 'agency' });
+    const first = await admin.post(`/api/contracts/${c.body.id}/compare`);
+    expect(first.body.status).toBe('diff_pending');
+    expect(first.body.diff.some((d: any) => d.field === 'billingInfo')).toBe(true);
+    await clerk.patch(`/api/projects/${q.projectId}`, { billingInfo: 'Yeni Müşteri A.Ş., Beşiktaş VD 1231231231' });
+    const second = await admin.post(`/api/contracts/${c.body.id}/compare`);
+    expect(second.body.fields.billingInfo).toMatch(/Beşiktaş VD/);
+    expect(second.body.diff.some((d: any) => d.field === 'billingInfo')).toBe(false);
+    expect(second.body.status).toBe('clean');
   });
 });
 

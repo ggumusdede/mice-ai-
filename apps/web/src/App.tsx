@@ -10,6 +10,7 @@ import { IntakePage } from './pages/Intake';
 import { ProjectPage } from './pages/project/ProjectPage';
 import { FieldPanelPage } from './pages/FieldPanel';
 import { WeeklyReportPage } from './pages/WeeklyReport';
+import { FinancePage } from './pages/FinancePage';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { RulesPage } from './pages/admin/RulesPage';
 import { UsersPage } from './pages/admin/UsersPage';
@@ -61,6 +62,7 @@ export function App() {
           <Route path="projeler/:id/:tab?" element={<ProjectPage />} />
           <Route path="saha" element={<FieldPanelPage />} />
           <Route path="rapor" element={<WeeklyReportPage />} />
+          <Route path="finans" element={<FinancePage />} />
           <Route path="yonetim" element={<AdminLayout />}>
             <Route index element={<Navigate to="kurallar" replace />} />
             <Route path="kurallar" element={<RulesPage />} />

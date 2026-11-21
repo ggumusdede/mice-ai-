@@ -4,7 +4,7 @@ import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
 import { date, dateTime, tl } from '../../lib/format';
-import { groupTasksByDay } from '../../lib/tasks';
+import { groupTasksByDay, taskTitleInProject } from '../../lib/tasks';
 import { useToast } from '../../components/Toast';
 import { Button, Card, CopyLink, ErrorBox, InlineError, Loading, Pill } from '../../components/ui';
 import { useProject } from './ProjectContext';
@@ -48,7 +48,7 @@ function TasksCalendar() {
               <ul className="cal__tasks">
                 {g.tasks.map((task) => (
                   <li key={task.id} className={`cal__task ${task.status !== 'open' ? 'is-done' : ''}`}>
-                    <span>{task.title}{task.source === 'ai' ? <Pill tone="purple">AI</Pill> : null}</span>
+                    <span>{taskTitleInProject(task.title)}{task.source === 'ai' ? <Pill tone="purple">AI</Pill> : null}</span>
                     {task.status === 'open' ? (
                       <Button size="sm" variant="ghost" icon="check" onClick={() => void complete(task)} aria-label={`${t.ops.complete}: ${task.title}`}>{t.ops.complete}</Button>
                     ) : <Pill tone="success">{t.ops.complete}</Pill>}
@@ -176,6 +176,8 @@ function GuestsCard() {
       title={t.ops.guests}
       padded={false}
       actions={
+        <div className="row">
+        {res.data?.length ? <Button size="sm" variant="ghost" icon="doc" onClick={() => void api.projects.roomingListXlsx(detail.project.id, detail.project.code).catch((e) => toast(errorMessage(e), 'danger'))}>{t.ops.roomingExcel}</Button> : null}
         <Button size="sm" variant="secondary" icon="link" busy={busy} onClick={async () => {
           setBusy(true);
           try {
@@ -186,6 +188,7 @@ function GuestsCard() {
             setBusy(false);
           }
         }}>{t.ops.roomingLink}</Button>
+        </div>
       }
     >
       {link ? <div className="card--padded"><CopyLink url={link} /></div> : null}

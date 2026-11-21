@@ -12,6 +12,7 @@ const ENTITY_LABEL: Record<string, string> = {
   quotes: 'Müşteri teklifi', quote_lines: 'Teklif satırı', contracts: 'Sözleşme', decisions: 'Karar', message_drafts: 'Mesaj taslağı',
   documents: 'Belge', finance_entries: 'Finans kaydı', tasks: 'Görev', guests: 'Misafir', field_extras: 'Saha ekstra',
   offer_evaluations: 'Değerlendirme', negotiation_rounds: 'Pazarlık turu', inbound_messages: 'Gelen mesaj', public_tokens: 'Paylaşım linki', notifications: 'Bildirim', reservations: 'Rezervasyon', ai_actions: 'Yapay zekâ işlemi',
+  surveys: 'Anket', field_issues: 'Saha sorunu', bank_transactions: 'Banka hareketi', consent_events: 'Rıza kaydı', checklist_questions: 'Kontrol listesi sorusu', delegations: 'Vekâlet', rules: 'Kural', suppliers: 'Tedarikçi', customers: 'Müşteri',
 };
 const ACTION_LABEL: Record<string, string> = { insert: 'eklendi', update: 'güncellendi', delete: 'silindi' };
 /** Older audit rows carry the raw user-agent; keep it short. */
@@ -33,6 +34,20 @@ export function SidePanel() {
   const { detail, reload } = useProject();
   const toast = useToast();
   const [busyDoc, setBusyDoc] = useState<string | null>(null);
+  const [genKind, setGenKind] = useState<'program' | 'rooming_list' | 'pnl'>('program');
+  const [genBusy, setGenBusy] = useState(false);
+  const generate = async () => {
+    setGenBusy(true);
+    try {
+      const doc = await api.projects.generateDocument(detail.project.id, genKind);
+      await reload();
+      toast(t.project.docGenerated(t.docKind[doc.kind] ?? doc.kind, doc.version));
+    } catch (e) {
+      toast(errorMessage(e), 'danger');
+    } finally {
+      setGenBusy(false);
+    }
+  };
 
   const regenerate = async (doc: GeneratedDocument) => {
     setBusyDoc(doc.id);
@@ -71,6 +86,8 @@ export function SidePanel() {
                     <Button size="sm" variant="ghost" icon="refresh" busy={busyDoc === d.id} onClick={() => void regenerate(d)} aria-label={`${t.project.regenerate}: ${t.docKind[d.kind]}`}>
                       {t.project.regenerate}
                     </Button>
+                  ) : d.kind === 'rooming_list' ? (
+                    <Button size="sm" variant="ghost" onClick={() => void api.projects.roomingListXlsx(detail.project.id, detail.project.code).catch((e) => toast(errorMessage(e), 'danger'))}>Excel</Button>
                   ) : d.downloadUrl ? (
                     <Button size="sm" variant="ghost" onClick={() => void openBinary(d.downloadUrl!.replace(API_BASE, ''), `${d.kind}-v${d.version}.pdf`).catch((e) => toast(errorMessage(e), 'danger'))}>PDF</Button>
                   ) : null}
@@ -79,6 +96,15 @@ export function SidePanel() {
             ))}
           </ul>
         ) : <p className="muted">—</p>}
+        <div className="docgen">
+          <label className="sr-only" htmlFor="docgen-kind">{t.project.generateDoc}</label>
+          <select id="docgen-kind" className="input input--sm select" value={genKind} onChange={(e) => setGenKind(e.target.value as typeof genKind)}>
+            <option value="program">{t.docKind.program}</option>
+            <option value="rooming_list">{t.docKind.rooming_list}</option>
+            <option value="pnl">{t.docKind.pnl}</option>
+          </select>
+          <Button size="sm" variant="secondary" icon="doc" busy={genBusy} onClick={() => void generate()}>{t.project.generateDoc}</Button>
+        </div>
       </section>
 
       <section className="card card--padded">

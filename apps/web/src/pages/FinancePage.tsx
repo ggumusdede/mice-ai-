@@ -117,10 +117,10 @@ function BankCard({ entries, kindLabel, onChanged }: { entries: FinanceEntry[]; 
                   <tr key={x.id}>
                     <td className="nowrap">{date(x.bookedAt)}</td>
                     <td>{x.description}{x.counterparty ? <div className="muted small">{x.counterparty}</div> : null}</td>
-                    <td className={`num ${x.amount < 0 ? 'text-danger' : 'text-success'}`}>{money(x.amount, x.currency)}</td>
+                    <td className={`num nowrap ${x.amount < 0 ? 'text-danger' : 'text-success'}`}>{money(x.amount, x.currency)}</td>
                     <td>
                       <Pill tone={TX_TONE[x.status] ?? 'neutral'}>{t.finance.txStatus[x.status] ?? x.status}</Pill>
-                      {x.matchConfidence != null ? <div className="muted small">{t.common.confidence} {pct(x.matchConfidence, 0)}</div> : null}
+                      {x.matchConfidence != null ? <div className="muted small nowrap">{t.common.confidence} {pct(x.matchConfidence, 0)}</div> : null}
                     </td>
                     <td>
                       {m ? <div className="small">{entryLabel(m, kindLabel(m))}</div> : null}

@@ -1,19 +1,198 @@
-# mice-ai-
-## End-to-end UI scenario (workflow steps 0–5)
+# MICE AI Operations OS
 
-`e2e/steps0-5.mjs` drives the real UI in headless Chromium (Playwright) against **already running** servers:
+Kurumsal toplantı, kongre, teşvik gezisi ve etkinlik (MICE) organize eden butik seyahat acentaları için **yapay zekâ destekli
+operasyon sistemi** — PRD v0.4'ün çalışan uygulaması. Talep gelir → hizmet kalemleri belirlenir → tedarikçi teklifleri toplanır
+→ müşteri teklifi onaylanır → sözleşme → operasyon → fatura / ödeme / tahsilat → kapanış ve öğrenme. Her aşama **tek proje
+kaydına** bağlıdır; belgeler veriden üretilir, yapay zekâ taslak hazırlar, para / taahhüt / dış iletişim içeren her adım
+insan onayından (karar kutusu, gerektiğinde Face ID) geçer.
+
+> **English summary.** MICE AI Operations OS is an AI-assisted operations system for MICE travel agencies (PRD v0.4).
+> One project record carries a request from intake through supplier RFQs, offer comparison, a validated customer quote,
+> contracts, on-site operations, finance (invoices, payment approvals, bank matching, Mikro export) and closing/learning.
+> AI (Claude, or a deterministic mock) only drafts and suggests; every money, contract or outbound step is a human decision
+> in a mobile decision inbox (WebAuthn/Face ID step-up for money and contract approvals). Multi-tenant PostgreSQL with RLS,
+> append-only audit, no deletes, and automatic staleness of documents when their data changes. Monorepo: shared contract +
+> pure domain rules + AI service + Fastify API + React/Vite PWA. Quick start below; demo logins `admin@demo.test` … / `demo1234`.
+
+## İçindekiler
+
+- [Sistem özeti (PRD v0.4)](#sistem-özeti-prd-v04)
+- [Mimari ve monorepo düzeni](#mimari-ve-monorepo-düzeni)
+- [Hızlı başlangıç](#hızlı-başlangıç)
+- [Ortam değişkenleri](#ortam-değişkenleri)
+- [PRD ilkeleri → kod](#prd-ilkeleri--kod)
+- [Testler](#testler)
+- [End-to-end UI senaryoları (adım 0–5 ve 6–8)](#end-to-end-ui-senaryoları)
+- [Bilinen sınırlar / sonraki adımlar](#bilinen-sınırlar--sonraki-adımlar)
+
+## Sistem özeti (PRD v0.4)
+
+**Hedefler (§1):** talep → fiyatlı teklif süresi 3–4 günden **2 iş gününe**; teklif / sözleşme / program / kâr-zarar
+arasındaki tutarsızlıkların yapısal olarak sıfırlanması; tekrarlayan işlerin yapay zekâya devri; her kapanan projenin fiyat,
+tedarikçi ve talep bilgisinin bir sonraki işe geri beslenmesi.
+
+**İş akışı (§7, adım 0–8)**
+
+| Adım | Ekranda | Arka planda |
+|---|---|---|
+| 0 Talep analizi | "Yeni talep": e-posta / WhatsApp / telefon notu / sesli not yapıştır | AI ayıklama + güven skoru, mükerrer kontrolü, eksik bilgi soru taslağı, tedarikçi ön eşleşme, atama önerisi; proje kodu `PRJ-####-MÜŞTERİ-TARİH-KİŞİ-MEKÂN` |
+| 1 RFQ | Kalemler & RFQ: kısa liste, 3–5 tedarikçi | `rfq_send` kararı, tek kullanımlık tedarikçi linki `/s/rfq/<token>`, hatırlatma / telefon görevi |
+| 2 Karşılaştırma | Teklifler, karşılaştırma, pazarlık taslağı | AI teklif okuma (PDF/Excel/e-posta), normalizasyon, kanal fiyatı / geçmiş medyan, gizli maliyetler; rakip fiyatı argüman olamaz |
+| 3 Müşteri teklifi | Teklif oluşturucu (2–3 seçenek) | Marj ≥ hedef, opsiyon tarihi ≤ tedarikçi opsiyonu, aday tedarikçi blok; kişi bazlı yetki → `quote_approval` (Face ID) |
+| 4 Müşteri onayı | `/q/<token>` (online veya PO / imzalı form) | kazanıldı / kaybedildi (nedenli), revizyon talebi |
+| 5 Sözleşme | Şablondan sözleşme, alan alan fark, koşul riski | temiz olmadan imza yok; `contract_approval` (Face ID); imzada kilit + borç / alacak kayıtları |
+| 6 Operasyon | Görev takvimi, günlük özet, saha paneli, rooming | imzada görev takvimi; rooming formu `/r/<token>` (KVKK rızası), saha ekstrası (5.000 / 15.000 TL limit, müşteri onayı `/e/<token>`), değişiklik akışı |
+| 7 Finans | Finans sekmesi + **/finans** sayfası | tedarikçi faturası (AI okuma, tutar alarmı), ödeme talebi → yönetici onayı (Face ID) → insan "ödendi" işaretler; banka ekstresi eşleştirme; komisyon mutabakatı; müşteri faturası taslağı + Mikro'da kesilen fatura no; Mikro Excel aktarımı |
+| 8 Kapanış | Kapanış kontrolü, plan vs gerçekleşen | gerçekleşen fiyatlar → fiyat geçmişi, tedarikçi skoru, "neyi geç öğrendik?" → kontrol listesi önerisi, 3 soruluk anket `/survey/<token>` |
+
+Ayrıca: haftalık gelişim raporu (§16.6), kurallar / kullanıcılar / vekâlet / otomasyon / kontrol listesi / tedarikçi / müşteri
+yönetimi, otomasyon terfisi (N temiz onay → otomatik, ~1/20 örneklem denetim, hatada geri dönüş), bildirimler (kritik anında,
+rutin 08:30 / 18:00 özet).
+
+## Mimari ve monorepo düzeni
+
+```
+packages/shared   @mice/shared  — tek doğru kaynak sözleşme: enum'lar, modeller, HTTP API (api.ts), §6 AI yetki listesi, varsayılan kurallar
+packages/domain   @mice/domain  — saf iş kuralı fonksiyonları (marj/markup, teklif doğrulama, sözleşme farkı, yetki & vekâlet,
+                                  biyometri gereksinimi, banka eşleştirme, KVKK saklama, proje kodu, iş günü hesabı …) + birim testleri
+packages/ai       @mice/ai      — AiService arayüzü: ClaudeAiService (Anthropic SDK) ve deterministik MockAiService, PII maskeleme
+apps/api          @mice/api     — Fastify 5 + PostgreSQL 16 (RLS), JWT, WebAuthn, pdfkit, exceljs; worker (takip / KVKK / özet işleri)
+apps/web          @mice/web     — React 18 + Vite PWA (mobil öncelikli karar kutusu, masaüstü proje ekranı, public token sayfaları)
+e2e/              Playwright UI senaryoları (adım 0–5 ve 6–8)
+docs/             mühendislik dokümanları (mimari, veri modeli, AI yetki matrisi, doğruluk ölçümü, faz planı, otomasyon, mobil karar)
+scripts/          db-start.sh (yerel Postgres 16, `mice` + `mice_test`)
+```
+
+İstek akışı: web (`/api` proxy) → Fastify route (`apps/api/src/routes/*`, kayıt indeksi `routes/index.ts`) → `withTenant`
+(transaction + `SET LOCAL app.tenant_id / user / actor / device`) → servis (`apps/api/src/services/*`) → `@mice/domain` kuralları
+ve `@mice/ai` → PostgreSQL (RLS + tetikleyiciler: denetim kaydı, silme yasağı, belge eskime yayılımı, kilitler).
+Ayrıntılar: [`docs/01-mimari.md`](docs/01-mimari.md), API: [`apps/api/README.md`](apps/api/README.md).
+
+## Hızlı başlangıç
+
+Gereksinimler: Node ≥ 20, PostgreSQL 16 (yerelde `scripts/db-start.sh` kurar/başlatır), Playwright yalnızca e2e için.
+
+```bash
+npm install
+bash scripts/db-start.sh                       # Postgres :5432 — mice + mice_test veritabanları
+npm run migrate -w apps/api                    # migration'lar (schema_migrations)
+npm run seed -w apps/api -- --reset            # demo acenta "Demo MICE Acenta" (şemayı sıfırlar)
+AI_PROVIDER=mock npm start -w apps/api         # API → http://localhost:3001 (GET /api/health); geliştirmede `npm run dev -w apps/api`
+(cd apps/web && npx vite)                      # Web → http://localhost:5173 (/api → :3001 proxy)
+npm run worker -w apps/api                     # (isteğe bağlı) takipler, KVKK anonimleştirme, özetler; `-- --once`
+```
+
+Demo girişleri (şifre **`demo1234`**):
+
+| E-posta | Rol |
+|---|---|
+| `admin@demo.test` | Yönetici (karar kutusu, kurallar, rapor, finans) |
+| `clerk@demo.test` | Satış (Marmara Teknoloji için kapsamlı yetki) |
+| `ops@demo.test` | Operasyon (misafir verisini görür) |
+| `field@demo.test` | Saha sorumlusu (saha paneli) |
+| `finance@demo.test` | Finans (fatura, ödeme talebi, banka, Mikro) |
+
+Gerçek Claude ile çalıştırmak için `ANTHROPIC_API_KEY` verin ve `AI_PROVIDER` değerini boş bırakın (veya `claude`).
+
+## Ortam değişkenleri
+
+Tam liste ve açıklamalar: [`.env.example`](.env.example) (uygulamalar `process.env` okur; dosyayı `set -a; . ./.env; set +a`
+veya `node --env-file=.env` ile yükleyin).
+
+| Değişken | Varsayılan | Not |
+|---|---|---|
+| `DATABASE_URL` | `postgres://mice_app:mice_app@localhost:5432/mice` | **süper kullanıcı olmayan** `mice_app` rolü (RLS) |
+| `MIGRATION_DATABASE_URL` | `postgres://postgres@localhost:5432/mice` | yalnız migration / seed |
+| `JWT_SECRET`, `JWT_EXPIRES_IN` | dev sırrı, `12h` | üretimde zorunlu |
+| `GUEST_DATA_KEY` | dev anahtarı | misafir kişisel verisi (pgcrypto) — üretimde zorunlu, DB'de saklanmaz |
+| `ALLOW_DEV_BIOMETRIC` | – | `{biometric:{method:'dev'}}` yalnız `NODE_ENV!=='production'` veya `1` iken kabul edilir (demo / e2e) |
+| `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` | `localhost`, … | Face ID / WebAuthn |
+| `PUBLIC_BASE_URL` | `http://localhost:5173` | tedarikçi / müşteri / rooming / ekstra / anket linklerinin öneki |
+| `CORS_ORIGIN`, `PUBLIC_RATE_LIMIT`, `PORT`, `HOST` | | |
+| `ANTHROPIC_API_KEY` | – | yoksa mock AI |
+| `AI_PROVIDER` | – | `mock` → her zaman mock |
+| `AI_MODEL`, `AI_MODEL_FAST` | `claude-sonnet-5-5`, `claude-haiku-5-5` | |
+| `AI_MAX_RETRIES`, `AI_TIMEOUT_MS`, `AI_FALLBACKS`, `AI_ALLOW_BINARY_DOCS` | | `AI_ALLOW_BINARY_DOCS=false` → PDF/görsel modele gitmez (KVKK) |
+| `WORKER_INTERVAL_MS`, `PDF_FONT_PATH`, `PDF_FONT_BOLD_PATH` | | |
+
+## PRD ilkeleri → kod
+
+| PRD | Nerede |
+|---|---|
+| §3.1 Tek doğru kaynak, belgeler veriden | `services/documents.ts` (`registerDocumentGenerator`): teklif + kâr-zarar (plan **ve gerçekleşen**, marj ve markup ayrı) `quotes.ts`, müşteri faturası taslağı `closing.ts`, **program** ve **rooming list** `documents-b.ts`; `POST /api/projects/:id/documents` |
+| §3.2 Onay kapıları, §15 karar kutusu | `services/decisions.ts`, `registry.ts`, `phase-b-registry.ts`; `@mice/domain` `canDecide`, `requiresBiometric` (ödeme, sözleşme, saha ekstrası, **müşteri teklifi onayı ve marj istisnası** — §15 "para ve sözleşme onaylarında biyometrik doğrulama zorunlu") |
+| §3.3 İnsan imzası | `services/drafts.ts` (gönderim yalnız insan / onaylı karar ile), `email.ts` (outbox) |
+| §3.5 Değişiklik yayılımı | DB tetikleyicileri `propagate_staleness` / `doc_kinds_for` ↔ `@mice/domain` `DOCUMENT_DEPENDENCIES` (test eşitliği kontrol eder); eski belge gönderilemez |
+| §3.6 Silinmez kayıt | `BEFORE DELETE` tetikleyicileri, append-only `audit_log` (proje kodu değişince eski kod denetimde kalır) |
+| §3.8 Çok kiracılı | RLS (`tenant_id = app_tenant_id()`), `withTenant`, `apply_standard_policies()` |
+| §5 Proje kodu | `@mice/domain` `formatProjectCode`; konaklama / salon teklifi seçilince veya mekân girilince mekân kısmı yenilenir, `PRJ-####` sabit (`items.ts` `syncProjectVenue`) |
+| §6 AI yetki sınırları | `@mice/shared` `ai-authority.ts`, `automation.ts` (`aiGate`, `NEVER_AUTO_KINDS`), DB korumaları (para hareketi / kural yazımı yalnız insan) |
+| §9 Marj ↔ markup | `@mice/domain` `profitSummary`, `pricing.ts`; arayüzde daima ayrı satır |
+| §16 Kendini geliştiren yapı | `automation.ts` sayaçları, terfi / örneklem / geri dönüş; `reports.ts` haftalık rapor |
+| §17.9 KVKK | `guests.ts` (pgcrypto, rol bazlı maskeleme, rıza / geri çekme, anonimleştirme); rooming Excel'i canlı üretilir, kişisel veri belgeye kopyalanmaz |
+
+Mühendislik dokümanları: [`docs/README.md`](docs/README.md) — [mimari](docs/01-mimari.md), [veri modeli](docs/02-veri-modeli.md),
+[AI yetki matrisi](docs/03-yapay-zeka-yetki-matrisi.md), [doğruluk ölçümü](docs/04-dogruluk-olcumu.md),
+[faz 1 planı](docs/05-faz1-teknik-plan.md), [otomasyon terfisi](docs/06-otomasyon-terfisi.md),
+[mühendislik cevapları](docs/07-muhendislik-cevaplari.md), [mobil karar](docs/08-mobil-karar.md).
+
+## Testler
+
+```bash
+npm run typecheck                               # tüm workspace'ler (tsc --noEmit)
+(cd packages/domain && npx vitest run)          # saf iş kuralları
+(cd packages/ai && npx vitest run)              # Claude istemcisi (sahte SDK) + mock
+(cd apps/api && npx vitest run)                 # entegrasyon: gerçek Postgres `mice_test` (şema her koşuda yeniden kurulur)
+(cd apps/web && npx vitest run && npx vite build)
+node e2e/steps0-5.mjs && node e2e/steps6-8.mjs   # UI senaryoları (aşağıda)
+```
+
+## End-to-end UI senaryoları
+
+`e2e/steps0-5.mjs` ve `e2e/steps6-8.mjs` gerçek arayüzü headless Chromium (Playwright) ile **çalışan** sunuculara karşı sürer:
 
 ```bash
 bash scripts/db-start.sh && npm run migrate -w apps/api && npm run seed -w apps/api -- --reset
 AI_PROVIDER=mock npm start -w apps/api        # :3001
-(cd apps/web && npx vite)                      # :5173, proxies /api → :3001
-node e2e/steps0-5.mjs                          # BASE_URL=…, SHOTS=<dir> (default e2e/shots), HEADED=1
+(cd apps/web && npx vite)                      # :5173, /api → :3001
+node e2e/steps0-5.mjs                          # BASE_URL=…, SHOTS=<dir> (varsayılan e2e/shots), HEADED=1
+node e2e/steps6-8.mjs
 ```
 
-Flow: clerk intake → admin mobile inbox (assignment) → items / shortlist / 3 RFQs → admin `rfq_send` → supplier links
-(`POST /api/rfqs/:id/link`) → 3 suppliers answer on `/s/rfq/<token>` → pasted supplier e-mail parsed + verified →
-comparison + negotiation draft → 2-option quote (forced margin block, then fixed) → admin approval → send → customer
-accepts on `/q/<token>` (PO) → contract from template → compare → condition-risk + contract approval (dev biometric) →
-sign → locked + finance entries → empty inbox ("Her şey yolunda") → seeded projects, field panel, weekly report render.
-Every run creates a fresh project, so it can be rerun on the same database. Exit code 1 + `PROBLEMS` list on any
-unexpected API 5xx/404, page error or failed assertion; screenshots (deviceScaleFactor 1) land in `SHOTS`.
+**Adım 0–5:** satış intake → yönetici mobil karar kutusu (atama) → kalemler / kısa liste / 3 RFQ → `rfq_send` onayı →
+tedarikçi linkleri (`POST /api/rfqs/:id/link`) → 3 tedarikçi `/s/rfq/<token>` üzerinden teklif verir → yapıştırılan tedarikçi
+e-postası okunur + doğrulanır → karşılaştırma + pazarlık taslağı → teklif seçimi (proje kodunun mekân kısmı güncellenir) →
+2 seçenekli teklif (zorlanan marj bloğu, sonra düzeltme) → yönetici onayı (Face ID / dev) → gönderim → müşteri `/q/<token>`
+üzerinden kabul (PO) → şablondan sözleşme → karşılaştırma → koşul riski + sözleşme onayı (dev biometrik) → imza → kilit + finans
+kayıtları → boş kutu ("Her şey yolunda") → seed projeler, saha paneli, haftalık rapor.
+
+**Adım 6–8:** proje API ile karşılaştırılmış sözleşmeye kadar hazırlanır (fatura bilgisi olmadan → sözleşme temiz değil) →
+fatura bilgisi Genel bakış'ta düzeltilir → yeniden karşılaştırma temiz → yönetici onayı (dev biometrik) → imza → imzayla gelen
+operasyon görevleri → program belgesi → rooming linki → `/r/<token>` KVKK rıza kutusuyla 2 misafir → misafirler ops için açık,
+satış için maskeli + standart rooming Excel indirme → etkinlik günü: saha kullanıcısı mobil panelde "Bugünkü projeler"den
+5.000 TL üstü ekstra girer → müşteri `/e/<token>` onaylar → yönetici `field_extra` kararı (dev biometrik) → yansıt / gerekçeyle
+yansıtma → finans tedarikçi faturası → ödeme talebi → yönetici onayı (dev biometrik) → "ödendi" → **/finans**'ta banka CSV
+içe aktarma otomatik eşleşir + Mikro Excel indirme → müşteri faturası taslağı + Mikro fatura no → tahsilat CSV eşleşir →
+kapanış kontrolü → "neyi geç öğrendik?" ile kapanış → anket linki + gerçekleşen kâr-zarar → kontrol listesi önerisi kararı →
+`/survey/<token>` → haftalık rapor, yansıtılmayan farklar, markup kademesi düzenleme (geri alınır), vekâlet oluştur / sonlandır →
+mobil sekme çubuğu ("Yeni talep", profil menüsünde Finans / Rapor / Yönetim).
+
+Her koşu yeni proje oluşturur (aynı veritabanında tekrar çalıştırılabilir). Beklenmeyen API 5xx/404, sayfa hatası veya
+başarısız doğrulamada çıkış kodu 1 + `PROBLEMS` listesi; ekran görüntüleri (deviceScaleFactor 1) `SHOTS` klasörüne yazılır.
+Not: mock AI kontrol listesi önerilerini tekrarlamaz; aynı veritabanında ikinci koşuda öneri kartı çıkmayabilir (senaryo bunu
+loglar ve atlar).
+
+## Bilinen sınırlar / sonraki adımlar
+
+- **Gerçek iletişim sağlayıcıları yok:** e-posta / SMS / WhatsApp `email.ts` outbox + konsol; push bildirim `NotificationService`
+  konsol uygulaması. SMTP / WhatsApp Business API / Web Push (veya APNs) bağlanmalı (`setNotificationService`, `EmailProvider`).
+- **Mikro aktarım formatı varsayım:** sütunlar ve cari kod şeması (`120.<kısa kod>`, `320.<TEDARİKÇİ>`) muhasebeci / Mikro
+  "Excel'den fatura aktarımı" şablonuyla doğrulanmalı (`finance.ts` `mikroExport`).
+- **OTA / kanal fiyatı verisi:** kanal fiyatları manuel giriş / seed; otomatik OTA erişimi (lisans, scraping yasakları) açık konu.
+- **Banka entegrasyonu:** ekstre dosya yükleme (CSV / XLSX); bankaların açık bankacılık API'leri ve her bankanın CSV varyantı
+  için ek ayrıştırıcı testleri gerekli.
+- **e-Fatura / e-Arşiv:** müşteri faturası Mikro'da kesilir; sistem yalnız taslak + fatura no kaydı tutar.
+- **WebAuthn:** dev doğrulaması demo/e2e içindir; üretimde `ALLOW_DEV_BIOMETRIC` kapalı, gerçek cihaz kaydı gerekli.
+- **Tarayıcı tarafı çevrimdışı kuyruk** yalnız saha işlemleri için; tam offline PWA önbelleği yok.
+- **Rooming Excel şablonu** yaygın otel formatıdır; zincir otellerin kendi şablonları için eşleme eklenebilir.
+- Gerçekleşen kâr-zarar fatura toplamlarından hesaplanır; kısmi faturalarda kalem bazlı dağıtım sonraki iş.

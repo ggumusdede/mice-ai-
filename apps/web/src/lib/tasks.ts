@@ -22,3 +22,8 @@ export function groupTasksByDay(tasks: Task[], now: Date = new Date()): DayGroup
       overdue: day !== 'none' && day < today && list.some((t) => t.status === 'open'),
     }));
 }
+
+/** Inside a project screen the task title's leading project code ("PRJ-0001-… · " / "PRJ-0001-…: ") is redundant. */
+export function taskTitleInProject(title: string): string {
+  return title.replace(/^[A-Z]{2,6}-\d{3,}[\w-]*\s*[·:]\s*/, '');
+}

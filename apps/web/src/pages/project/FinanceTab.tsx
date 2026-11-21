@@ -11,6 +11,7 @@ import { useProject } from './ProjectContext';
 import { MarkPaidAction, ReconcileAction } from '../../components/FinanceActions';
 import { supplierName, useSuppliers } from './useSuppliers';
 
+const PART_LABEL: Record<string, string> = { prepayment: 'Ön ödeme', balance: 'Bakiye', deposit: 'Kapora', full: 'Tamamı' };
 const STATUS_TONE: Record<string, Tone> = { open: 'accent', pending_approval: 'warning', approved: 'success', paid: 'success', matched: 'success', cancelled: 'neutral' };
 
 export function FinanceTab() {
@@ -22,6 +23,8 @@ export function FinanceTab() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   const { reload: reloadProject } = useProject();
+  // references of contract entries are the project code (at signing time) — redundant inside the project
+  const projectSeq = detail.project.code.split('-').slice(0, 2).join('-');
   const replace = (n: FinanceEntry) => {
     res.setData((p) => (p ?? []).map((x) => (x.id === n.id ? n : x)));
     void reloadProject();
@@ -69,9 +72,9 @@ export function FinanceTab() {
                   <tr key={e.id}>
                     <td>{t.financeKind[e.kind]}</td>
                     <td>{e.supplierId ? supplierName(byId, e.supplierId) : '—'}</td>
-                    <td className="small">{e.invoiceNo ?? e.reference ?? '—'}</td>
-                    <td className="num">{money(e.amount, e.currency)}</td>
-                    <td className="num">{eur(e.amountEur)}</td>
+                    <td className="small">{e.invoiceNo ?? (e.reference && !e.reference.startsWith(projectSeq) ? e.reference : '—')}{typeof e.meta?.part === 'string' ? <div className="muted">{PART_LABEL[e.meta.part] ?? e.meta.part}</div> : null}</td>
+                    <td className="num nowrap">{money(e.amount, e.currency)}</td>
+                    <td className="num nowrap">{eur(e.amountEur)}</td>
                     <td className="nowrap">{date(e.dueDate)}</td>
                     <td><Pill tone={STATUS_TONE[e.status] ?? 'neutral'}>{t.financeStatus[e.status] ?? e.status}</Pill></td>
                     <td className="num">
@@ -192,7 +195,7 @@ function CustomerInvoiceForm({ onSaved }: { onSaved: () => void }) {
   const accepted = detail.quotes.find((q) => q.status === 'accepted' && q.acceptedOptionNo != null) ?? null;
   const opt = accepted?.options.find((o) => o.optionNo === accepted.acceptedOptionNo) ?? null;
   const suggested = opt && accepted ? Math.round(opt.totals.saleEur * accepted.fxRate * 100) / 100 : 0;
-  const [f, setF] = useState({ invoiceNo: '', amount: suggested, currency: accepted?.currency ?? 'EUR', vatAmount: '' as string, issueDate: new Date().toISOString().slice(0, 10), dueDate: '' });
+  const [f, setF] = useState({ invoiceNo: '', amount: suggested, currency: (accepted?.currency ?? 'EUR') as string, vatAmount: '' as string, issueDate: new Date().toISOString().slice(0, 10), dueDate: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async (e: FormEvent) => {

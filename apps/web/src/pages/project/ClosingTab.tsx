@@ -4,7 +4,7 @@ import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
 import { dateTime, eur } from '../../lib/format';
 import { useToast } from '../../components/Toast';
-import { Button, Callout, Card, ErrorBox, InlineError, Loading, ProfitBlock, TextArea } from '../../components/ui';
+import { Button, Callout, Card, CopyLink, ErrorBox, InlineError, Loading, ProfitBlock, TextArea } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { useProject } from './ProjectContext';
 
@@ -16,6 +16,7 @@ export function ClosingTab() {
   const [lessons, setLessons] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [closeResult, setCloseResult] = useState<{ surveyUrl: string | null; suggestions: number } | null>(null);
   const closed = !!detail.project.closedAt;
 
   return (
@@ -60,7 +61,16 @@ export function ClosingTab() {
 
       <Card title={t.closing.lessons}>
         {closed ? (
-          <Callout tone="success" icon="check">{t.closing.closed} · {dateTime(detail.project.closedAt)}</Callout>
+          <div className="stack">
+            <Callout tone="success" icon="check">{t.closing.closed} · {dateTime(detail.project.closedAt)}</Callout>
+            {closeResult?.suggestions ? <Callout tone="purple" icon="sparkle">{t.closing.suggestions(closeResult.suggestions)}</Callout> : null}
+            {closeResult?.surveyUrl ? (
+              <div className="stack stack--sm">
+                <span className="field__label">{t.closing.surveyLink}</span>
+                <CopyLink url={closeResult.surveyUrl} />
+              </div>
+            ) : null}
+          </div>
         ) : (
           <>
             <TextArea label={t.closing.lessons} hint={t.closing.lessonsHint} rows={5} value={lessons} onChange={(e) => setLessons(e.target.value)} />
@@ -71,7 +81,8 @@ export function ClosingTab() {
                 setBusy(true);
                 setError(null);
                 try {
-                  await api.projects.close(detail.project.id, lessons.trim() || undefined);
+                  const r = await api.projects.close(detail.project.id, lessons.trim() || undefined);
+                  setCloseResult({ surveyUrl: r.surveyUrl, suggestions: r.effects.filter((x) => x.startsWith('checklist_question_suggested')).length });
                   await reload();
                   toast(t.closing.closed);
                 } catch (e) {

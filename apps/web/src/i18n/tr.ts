@@ -233,7 +233,7 @@ export const tr = {
     withinLimits: 'Limit içinde — kararı siz verirsiniz', needsAdmin: 'Limit aşıldı — yönetici / vekil onayı gerekecek',
     projectTotal: 'Bu projede ekstra toplamı', offlineQueue: (n: number) => `${n} kayıt gönderilmeyi bekliyor`,
     offline: 'Çevrimdışı', online: 'Çevrimiçi', syncNow: 'Şimdi gönder', synced: 'Tüm kayıtlar gönderildi',
-    selectProject: 'Proje seçin', upcoming: 'Yaklaşan (7 gün)', noUpcoming: 'Önümüzdeki 7 günde etkinlik yok.',
+    selectProject: 'Proje seçin', upcoming: 'Yaklaşan (7 gün)', approvalLink: 'Müşteri onay linki (WhatsApp ile paylaşın)', noUpcoming: 'Önümüzdeki 7 günde etkinlik yok.',
   },
   report: {
     title: 'Haftalık gelişim raporu', week: 'Hafta', quoteTime: 'Talep → teklif süresi', median: 'Medyan',

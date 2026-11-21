@@ -773,3 +773,26 @@ tr.diff th { font-weight: 600; }
 
 .sidebar__cta { margin: 0 4px 12px; justify-content: center; gap: 8px; }
 .sidebar__cta:hover { text-decoration: none; }
+
+/* ---------- phase B completion: mobile "Yeni talep" tab, profile-sheet nav, inline finance forms ---------- */
+.tabbar__link--new { color: var(--accent); }
+.tabbar__plus {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.tabbar__link--new.is-active .tabbar__plus { background: var(--purple); }
+.sheet-nav { display: flex; flex-direction: column; margin: 4px 0 16px; border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.sheet-nav__link {
+  display: grid; grid-template-columns: 24px 1fr 16px; align-items: center; gap: 12px; padding: 13px 14px;
+  color: var(--text); border-bottom: 0.5px solid var(--border); min-height: 48px;
+}
+.sheet-nav__link:last-child { border-bottom: 0; }
+.sheet-nav__link:hover { text-decoration: none; background: var(--accent-tint); }
+.sheet-nav__link.is-active { color: var(--accent); }
+.inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: flex-end; }
+.inline-form .input--sm { width: auto; min-width: 0; flex: 1 1 140px; max-width: 220px; }
+.inline-form .select { flex: 1 1 220px; max-width: 320px; }
+.field-section + .field-section { margin-top: 16px; }
+.proj-info .field__hint { margin-top: 4px; }
+.docgen { display: flex; gap: 8px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 0.5px solid var(--border); }
+.docgen .select { flex: 1; min-width: 0; }

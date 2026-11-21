@@ -26,7 +26,7 @@ export function AppShell() {
     { to: '/', label: t.nav.inbox, icon: 'inbox', end: true },
     { to: '/projeler', label: t.nav.projects, icon: 'folder', roles: ['admin', 'clerk_sales', 'clerk_ops', 'finance', 'signatory'] },
     { to: '/saha', label: t.nav.field, icon: 'field' },
-    { to: '/finans', label: t.nav.finance, icon: 'chart', roles: ['admin', 'finance'] },
+    { to: '/finans', label: t.nav.finance, icon: 'doc', roles: ['admin', 'finance'] },
     { to: '/rapor', label: t.nav.report, icon: 'chart', roles: ['admin'] }, // GET /api/reports/weekly is admin-only
     { to: '/yonetim', label: t.nav.admin, icon: 'settings', roles: ['admin'] },
   ];
@@ -108,7 +108,7 @@ export function AppShell() {
               <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setProfileOpen(false)} className={({ isActive }) => `sheet-nav__link ${isActive ? 'is-active' : ''}`}>
                 <Icon name={n.icon} size={20} />
                 <span>{n.label}</span>
-                <Icon name="chevron" size={16} />
+                <Icon name="chevronRight" size={16} />
               </NavLink>
             ))}
           </nav>

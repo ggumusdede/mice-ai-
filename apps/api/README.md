@@ -176,3 +176,20 @@ or `{guests}`.
 
 **VAT unit**: `@mice/ai` now returns OfferLine `vatRate` as a fraction (0.1). `normalizeLines()` stays as a guard because the
 manual offer form and the supplier portal still accept percent values (≤ 100).
+
+**Phase B completion (additive)**
+- `POST /api/projects/:id/documents {kind: 'program'|'rooming_list'|'pnl'}` — generators in `services/documents-b.ts` (program per event
+  day from items; rooming_list keeps **counts only**, no PII) and the `pnl` generator now adds the realized part (plan vs actual,
+  margin and markup separately, supplier contract vs invoice, extras, deviations) once the quote is accepted. Staleness /
+  regenerate as for other documents (finance / guest / project changes mark them stale).
+- `GET /api/projects/:id/rooming-list.xlsx` — standard rooming list template rendered live; names / e-mail / phone decrypted only
+  for `view_guest_pii` roles (`X-PII-Masked: 1` otherwise).
+- Project code venue segment: selecting an accommodation (else hall) offer sets `venue_name` (`items.ts` `syncProjectVenue`) →
+  `patchProject` regenerates the code with `formatProjectCode`; `PRJ-####` stays, the previous code stays in `audit_log`.
+- `compareContract`: an agency-template contract whose billing field was empty picks up billing info added later to the project
+  (the supplier's own contract text is never rewritten).
+- `requiresBiometric` also covers `quote_approval` and `margin_override` (§15: a customer quote is a money commitment).
+- Web: project Overview "Proje bilgileri" (billing info / venue), Finans tab (mark paid, commission reconcile, customer invoice
+  no), `/finans` page (bank statement import + transactions + manual match, approved payments, commissions, Mikro export,
+  admin unreflected totals), document generator in the side panel, survey link after closing, field panel today / next 7 days,
+  mobile tab bar with "Yeni talep".

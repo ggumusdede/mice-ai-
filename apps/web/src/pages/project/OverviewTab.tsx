@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api, errorMessage } from '../../api/client';
+import { useToast } from '../../components/Toast';
 import { useT } from '../../i18n';
 import { eur, pct, signedPct } from '../../lib/format';
-import { Card, EmptyState, MarginMarkup, Pill, PriceClassPill } from '../../components/ui';
+import { Button, Callout, Card, EmptyState, InlineError, KeyValues, MarginMarkup, Pill, PriceClassPill, TextArea, TextInput } from '../../components/ui';
 import { useProject } from './ProjectContext';
 import { unitLabel } from '../../components/OfferLinesEditor';
 import { supplierName, useSuppliers } from './useSuppliers';
@@ -15,6 +18,7 @@ export function OverviewTab() {
 
   return (
     <div className="stack stack--lg">
+      <ProjectInfoCard />
       <Card title={t.project.items} padded={false}>
         {items.length ? (
           <div className="table-wrap">
@@ -103,5 +107,63 @@ export function OverviewTab() {
         );
       })}
     </div>
+  );
+}
+
+/** Editable project facts that documents depend on: billing info (contract / customer invoice) and venue (code's venue segment). */
+function ProjectInfoCard() {
+  const t = useT();
+  const toast = useToast();
+  const { detail, reload } = useProject();
+  const p = detail.project;
+  const billing = p.billingInfo ?? detail.customer?.billingAddress ?? null;
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ billingInfo: p.billingInfo ?? '', venueName: p.venueName ?? '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const patch: Record<string, string | null> = {};
+      if (f.billingInfo.trim() !== (p.billingInfo ?? '')) patch.billingInfo = f.billingInfo.trim() || null;
+      if (f.venueName.trim() !== (p.venueName ?? '')) patch.venueName = f.venueName.trim() || null;
+      if (Object.keys(patch).length) await api.projects.patch(p.id, patch);
+      await reload();
+      setEditing(false);
+      toast(t.common.saved);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card
+      title={t.project.info}
+      className="proj-info"
+      actions={!editing ? <Button size="sm" variant="secondary" icon="doc" onClick={() => { setF({ billingInfo: p.billingInfo ?? '', venueName: p.venueName ?? '' }); setEditing(true); }}>{t.common.edit}</Button> : null}
+    >
+      {editing ? (
+        <div className="stack">
+          <TextArea label={t.project.billingInfo} rows={3} placeholder={t.project.billingPlaceholder} value={f.billingInfo} onChange={(e) => setF({ ...f, billingInfo: e.target.value })} />
+          <TextInput label={t.project.venue} hint={t.project.venueHint} value={f.venueName} onChange={(e) => setF({ ...f, venueName: e.target.value })} />
+          <InlineError message={error} />
+          <div className="row-end">
+            <Button variant="ghost" disabled={busy} onClick={() => setEditing(false)}>{t.common.cancel}</Button>
+            <Button busy={busy} onClick={() => void save()}>{t.common.save}</Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <KeyValues rows={[
+            { k: t.projects.code, v: <span className="mono">{p.code}</span> },
+            { k: t.project.venue, v: p.venueName ?? <span className="muted">—</span> },
+            { k: t.project.billingInfo, v: billing ?? <span className="muted">—</span>, warn: !billing },
+          ]} />
+          {!billing ? <Callout tone="warning" icon="alert">{t.project.billingMissing}</Callout> : null}
+        </>
+      )}
+    </Card>
   );
 }

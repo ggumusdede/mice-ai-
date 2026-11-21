@@ -172,6 +172,12 @@ export async function compareContract(ctx: Ctx, id: string): Promise<Contract> {
   const p = await getProjectRow(ctx, c.project_id);
   const snap = await quoteSnapshot(ctx, c.project_id, c.supplier_id, c.service_item_ids);
   const fields = c.fields as ContractFields;
+  // agency template: fields we filled from project data are refreshed when they were empty and the project now has them
+  // (e.g. billing info added later in the project Overview) — the supplier's own contract text is never rewritten.
+  if (c.template === 'agency' && !fields.billingInfo && snap.snapshot.billingInfo) {
+    fields.billingInfo = snap.snapshot.billingInfo;
+    await ctx.db.query('UPDATE contracts SET fields = $2 WHERE id = $1', [id, JSON.stringify(fields)]);
+  }
   const diff = diffContractVsQuote(fields, snap.snapshot);
   const clean = isContractClean(diff);
   const fx = await currentFx(ctx.db);
