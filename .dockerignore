@@ -1,0 +1,14 @@
+# keep the build context small and secret-free
+**/node_modules
+**/dist
+.git
+.github
+.pgdata
+.env
+.env.*
+!.env.example
+e2e/shots
+**/*.log
+**/.DS_Store
+**/coverage
+backups

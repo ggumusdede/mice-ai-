@@ -40,6 +40,11 @@ export const tr = {
     devFallback: 'Geliştirici doğrulaması ile onayla', biometricFailed: 'Biyometrik doğrulama tamamlanamadı',
     decided: 'Karar kaydedildi', effects: 'Sonuçlar', registerFaceId: 'Face ID’yi bu cihaza kaydet',
     faceIdRegistered: 'Face ID kaydedildi', registerFaceIdPassword: 'Şifreniz (Face ID kaydı için)', project: 'Proje',
+    pushEnable: 'Bildirimleri aç', pushDisable: 'Bildirimleri kapat', pushEnabled: 'Bildirimler bu cihazda açık',
+    pushDisabled: 'Bildirimler bu cihazda kapatıldı', pushDenied: 'Bildirim izni reddedildi; tarayıcı / iPhone ayarlarından açabilirsiniz.',
+    pushUnavailable: 'Bu sunucuda anlık bildirim yapılandırılmamış.',
+    pushIosHint: 'iPhone / iPad’de bildirim almak için önce Paylaş → “Ana Ekrana Ekle” ile uygulamayı ekleyin ve ana ekrandan açın (iOS 16.4+).',
+    pushHelp: 'Kritik işler anında, rutin bildirimler 08:30 / 18:00 özetinde gelir.',
   },
   badge: {
     within_rules: 'Kural içinde', critical: 'Kritik', suggestion: 'Öneri',

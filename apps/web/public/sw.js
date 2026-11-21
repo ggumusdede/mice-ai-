@@ -3,8 +3,10 @@
  * - Static assets: stale-while-revalidate
  * - /api/* is never cached (field-panel writes are queued in IndexedDB by the app itself,
  *   because iOS Safari has no Background Sync; the app flushes the queue on 'online').
+ * - Web Push (§15): 'push' shows the notification (critical → requireInteraction, digest replaces the previous digest
+ *   via tag); 'notificationclick' focuses an open app window on the decision inbox or opens it.
  */
-const CACHE = 'mice-shell-v1';
+const CACHE = 'mice-shell-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/icon-180.png', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -61,4 +63,46 @@ self.addEventListener('message', (event) => {
   if (event.data === 'flush-queue') {
     self.clients.matchAll().then((clients) => clients.forEach((c) => c.postMessage('flush-queue')));
   }
+});
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'MICE OS', body: event.data ? event.data.text() : '' };
+  }
+  const critical = data.priority === 'critical';
+  const url = typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/';
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'MICE OS', {
+      body: data.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: data.tag || undefined,
+      renotify: !!data.tag,
+      requireInteraction: critical,
+      data: { url },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && 'focus' in c) {
+          return c.focus().then((w) => (w && 'navigate' in w ? w.navigate(target) : w));
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});
+
+// The browser rotated the subscription: re-subscribe needs the JWT, so let an open window redo it on next load.
+self.addEventListener('pushsubscriptionchange', () => {
+  self.clients.matchAll({ type: 'window' }).then((clients) => clients.forEach((c) => c.postMessage('push-resubscribe')));
 });

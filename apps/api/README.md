@@ -28,13 +28,14 @@ Demo logins (password `demo1234`): `admin@demo.test`, `clerk@demo.test` (sales, 
 | `DATABASE_URL` | `postgres://mice_app:mice_app@localhost:5432/mice` | **must** be the non-superuser `mice_app` role (RLS) |
 | `MIGRATION_DATABASE_URL` | `postgres://postgres@localhost:5432/mice` | owner/superuser — migrations & seed only |
 | `PORT` / `HOST` | `3001` / `0.0.0.0` | |
-| `JWT_SECRET`, `JWT_EXPIRES_IN` | dev secret, `12h` | secret required in production |
+| `JWT_SECRET`, `JWT_EXPIRES_IN` | dev secret, `12h` | required (≥ 32 chars) unless `NODE_ENV` is `development` / `test` |
 | `CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | comma separated |
 | `PUBLIC_BASE_URL` | `http://localhost:5173` | prefix of supplier (`/s/rfq/<token>`) and quote (`/q/<token>`) links; `''` → relative |
-| `GUEST_DATA_KEY` | dev key | pgcrypto key for guest PII (required in production) |
-| `ALLOW_DEV_BIOMETRIC` | – | `{biometric:{method:'dev'}}` is accepted only when `NODE_ENV!=='production'` or this is `1` |
+| `GUEST_DATA_KEY` | dev key | pgcrypto key for guest PII (required unless `NODE_ENV` is `development` / `test`) |
+| `ALLOW_DEV_BIOMETRIC` | – | `{biometric:{method:'dev'}}` is accepted only when `NODE_ENV` is `development` / `test` or this is `1` |
 | `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` | `localhost`, …, CORS origins | |
 | `PUBLIC_RATE_LIMIT` | `60` | requests/min per IP on `/api/public/*` |
+| `LOGIN_RATE_LIMIT` | `20` | `POST /api/auth/login` attempts/min per IP |
 | `WORKER_INTERVAL_MS` | `300000` | |
 | `AI_PROVIDER`, `ANTHROPIC_API_KEY`, `AI_MODEL`, … | | see `packages/ai/src/factory.ts` |
 | `PDF_FONT_PATH`, `PDF_FONT_BOLD_PATH` | DejaVu/Liberation if present | Unicode TTF for Turkish characters |

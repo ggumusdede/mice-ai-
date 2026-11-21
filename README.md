@@ -105,10 +105,10 @@ veya `node --env-file=.env` ile yükleyin).
 | `MIGRATION_DATABASE_URL` | `postgres://postgres@localhost:5432/mice` | yalnız migration / seed |
 | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev sırrı, `12h` | üretimde zorunlu |
 | `GUEST_DATA_KEY` | dev anahtarı | misafir kişisel verisi (pgcrypto) — üretimde zorunlu, DB'de saklanmaz |
-| `ALLOW_DEV_BIOMETRIC` | – | `{biometric:{method:'dev'}}` yalnız `NODE_ENV!=='production'` veya `1` iken kabul edilir (demo / e2e) |
+| `ALLOW_DEV_BIOMETRIC` | – | `{biometric:{method:'dev'}}` yalnız `NODE_ENV` `development` / `test` iken veya `1` ise kabul edilir (demo / e2e) |
 | `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` | `localhost`, … | Face ID / WebAuthn |
 | `PUBLIC_BASE_URL` | `http://localhost:5173` | tedarikçi / müşteri / rooming / ekstra / anket linklerinin öneki |
-| `CORS_ORIGIN`, `PUBLIC_RATE_LIMIT`, `PORT`, `HOST` | | |
+| `CORS_ORIGIN`, `PUBLIC_RATE_LIMIT`, `LOGIN_RATE_LIMIT`, `PORT`, `HOST` | | giriş: dakikada IP başına 20 deneme |
 | `ANTHROPIC_API_KEY` | – | yoksa mock AI |
 | `AI_PROVIDER` | – | `mock` → her zaman mock |
 | `AI_MODEL`, `AI_MODEL_FAST` | `claude-sonnet-5-5`, `claude-haiku-5-5` | |

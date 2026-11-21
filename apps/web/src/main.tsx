@@ -31,6 +31,12 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       .register('/sw.js')
       .then((reg) => {
         window.addEventListener('online', () => reg.active?.postMessage('flush-queue'));
+        // the browser rotated the push subscription (sw.js 'pushsubscriptionchange') → register the new one
+        navigator.serviceWorker.addEventListener('message', (e) => {
+          if (e.data === 'push-resubscribe' && 'Notification' in window && Notification.permission === 'granted') {
+            import('./lib/push').then((m) => m.enablePush()).catch(() => undefined);
+          }
+        });
       })
       .catch(() => undefined);
   });

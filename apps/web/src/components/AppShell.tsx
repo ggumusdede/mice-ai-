@@ -10,6 +10,7 @@ import { registerBiometric, webauthnSupported } from '../lib/webauthn';
 import { useToast } from './Toast';
 import { errorMessage } from '../api/client';
 import { useOfflineQueue } from '../lib/OfflineQueueProvider';
+import { PushToggle } from './PushToggle';
 
 interface NavItem { to: string; label: string; icon: IconName; roles?: Role[]; end?: boolean }
 
@@ -115,6 +116,7 @@ export function AppShell() {
           </nav>
         ) : null}
         <div className="stack">
+          <PushToggle />
           {webauthnSupported() ? (
             <input
               type="password"

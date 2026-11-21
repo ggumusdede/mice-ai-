@@ -167,7 +167,8 @@ describe('weekly report (§16.6)', () => {
   it('returns the single-screen report shape (admin only)', async () => {
     expect((await clerk.get('/api/reports/weekly')).status).toBe(403);
     // a corrected AI draft this month feeds the style summary
-    const d = (await admin.get('/api/drafts')).body.items.find((x: any) => x.status !== 'sent' && x.status !== 'discarded');
+    // (a draft waiting for approval is frozen — G-01 — so correct a plain draft)
+    const d = (await admin.get('/api/drafts')).body.items.find((x: any) => x.status === 'draft');
     if (d) await admin.patch(`/api/drafts/${d.id}`, { body: `${d.body}\n\nSaygılarımla` });
     const r = await admin.get('/api/reports/weekly?weekStart=2026-11-16');
     expect(r.status).toBe(200);

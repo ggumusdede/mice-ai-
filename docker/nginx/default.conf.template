@@ -1,0 +1,78 @@
+# SPA + /api reverse proxy. ${API_UPSTREAM} is substituted at container start (nginx templates / envsubst).
+# TLS is expected to terminate at a load balancer / ingress in front of this container.
+upstream mice_api {
+  server ${API_UPSTREAM};
+  keepalive 16;
+}
+
+map $http_x_forwarded_proto $fwd_proto {
+  default $http_x_forwarded_proto;
+  ''      $scheme;
+}
+
+server {
+  listen 8080;
+  server_name _;
+  root /usr/share/nginx/html;
+  server_tokens off;
+  client_max_body_size 25m;   # API: 20 MB uploads (multipart) / 10 MB JSON
+
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml application/manifest+json;
+
+  location = /healthz { access_log off; default_type text/plain; return 200 "ok\n"; }
+
+  # API (and public token routes /api/public/*) → Fastify. No caching, real client IP for rate limiting (TRUST_PROXY=1).
+  location /api/ {
+    proxy_pass http://mice_api;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $fwd_proto;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_read_timeout 180s;  # AI document parsing can take a while
+    proxy_buffering off;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Cache-Control "no-store" always;
+  }
+
+  # hashed Vite assets: immutable, 1 year
+  location /assets/ {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  # service worker / app shell / manifest: always revalidate (new deploys must reach the PWA)
+  location = /sw.js {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Service-Worker-Allowed "/" always;
+    try_files $uri =404;
+  }
+  location = /index.html {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache" always;
+  }
+  location = /manifest.webmanifest {
+    include /etc/nginx/snippets/security-headers.conf;
+    default_type application/manifest+json;
+    add_header Cache-Control "no-cache" always;
+  }
+
+  # icons and other static files: short cache
+  location ~* \.(?:png|svg|ico|webp)$ {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=86400" always;
+    try_files $uri =404;
+  }
+
+  # SPA history fallback: /projeler/…, /s/rfq/<token>, /q/<token> … → index.html (no-cache)
+  location / {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri /index.html;
+  }
+}
