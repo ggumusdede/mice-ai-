@@ -3,6 +3,7 @@
 // under RLS scoped to the one entity the token names.
 import type { FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import { rateLimitStore } from '../rate-limit-store.js';
 import { z } from 'zod';
 import { parse, tokenParam } from './_helpers.js';
 import { withPublicToken } from './public.js';
@@ -14,7 +15,7 @@ import { publicSurveySubmit, publicSurveyView } from '../services/closing.js';
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export async function publicPhaseBRoutes(app: FastifyInstance): Promise<void> {
-  await app.register(rateLimit, { max: app.deps.config.publicRateLimitPerMinute, timeWindow: '1 minute' });
+  await app.register(rateLimit, { ...(await rateLimitStore(app)), max: app.deps.config.publicRateLimitPerMinute, timeWindow: '1 minute' });
 
   app.get('/api/public/rooming/:token', async (req) => {
     const { token } = parse(tokenParam, req.params);

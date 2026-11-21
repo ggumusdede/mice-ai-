@@ -1,6 +1,6 @@
 // §16 Kendini geliştiren yapı: counters per AI action type, promotion proposals, ~1/20 sample audit, auto-demotion.
 // Every suggest-type AI action passes through aiGate(). Forbidden actions (§6) can never be executed by AI paths.
-import { aiAuthorityOf, isPromotable, type AiActionType, type AutomationCounter, type DecisionKind } from '@mice/shared';
+import { aiAuthorityOf, isPromotable, type AiActionType, type AutomationCounter, type DecisionKind, type TenantRules } from '@mice/shared';
 import { applyAutomationOutcome, promote, shouldSample, type AutomationOutcome } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { setActor } from '../db/pool.js';
@@ -18,6 +18,21 @@ export const NEVER_AUTO_KINDS: ReadonlySet<DecisionKind> = new Set<DecisionKind>
   'margin_override', 'automation_promotion', 'automation_demotion', 'audit_sample', 'field_extra', 'unbilled_payment_escalation',
   'low_supplier_score', 'closing_overdue',
 ]);
+
+/** Decision kinds whose effect sends a message outside the agency (RFQ, negotiation, option extension / follow-up,
+ *  revision request). In auto mode they are only sent automatically when the tenant rule
+ *  `outboundAutoSendRequiresStandingApproval` is true ([Ürün kararı]); otherwise they keep opening an approval card. */
+export const OUTBOUND_KINDS: ReadonlySet<DecisionKind> = new Set<DecisionKind>(['rfq_send', 'negotiation_message', 'outbound_message', 'contract_diff']);
+const OUTBOUND_ACTIONS: ReadonlySet<string> = new Set([
+  'rfq_send', 'negotiation_message', 'option_extension_request', 'revision_request', 'customer_missing_info_question',
+]);
+
+/** [Ürün kararı] `neverAutomateKinds`: action types or decision kinds that can never be promoted / auto-executed. */
+export function neverAutomated(rules: Pick<TenantRules, 'neverAutomateKinds'>, actionType: string, kind?: string | null): boolean {
+  if (kind && NEVER_AUTO_KINDS.has(kind as DecisionKind)) return true;
+  const list = Array.isArray(rules.neverAutomateKinds) ? rules.neverAutomateKinds : [];
+  return list.includes(actionType) || (!!kind && list.includes(kind));
+}
 
 export function assertAiMayExecute(actionType: string, kind?: DecisionKind): void {
   const authority = aiAuthorityOf(actionType);
@@ -52,8 +67,11 @@ async function event(ctx: Ctx, actionType: string, ev: string, decisionId: strin
 }
 
 /** Applies an outcome to the counter; proposes promotion / records demotion as decisions. */
-export async function recordAutomationOutcome(ctx: Ctx, actionType: AiActionType, outcome: AutomationOutcome, decisionId: string | null): Promise<string[]> {
+export async function recordAutomationOutcome(
+  ctx: Ctx, actionType: AiActionType, outcome: AutomationOutcome, decisionId: string | null, kind?: DecisionKind | null,
+): Promise<string[]> {
   const effects: string[] = [];
+  const rules = await ctx.rules();
   const counter = await getCounter(ctx, actionType);
   const t = applyAutomationOutcome(counter, outcome, ctx.now());
   await saveCounter(ctx, t.counter, t.demoted ? { demotedReason: outcome } : {});
@@ -68,7 +86,8 @@ export async function recordAutomationOutcome(ctx: Ctx, actionType: AiActionType
     });
     effects.push(`automation_demoted:${actionType}`);
   }
-  if (t.proposePromotion && isPromotable(actionType)) {
+  // §15 × §16: kinds the tenant keeps out of automation (default: customer quote approval — Face ID) get no proposal
+  if (t.proposePromotion && isPromotable(actionType) && !neverAutomated(rules, actionType, kind)) {
     const open = await ctx.db.query(
       `SELECT 1 FROM decisions WHERE kind = 'automation_promotion' AND status = 'open' AND detail->>'actionType' = $1`, [actionType]);
     if (!open.rowCount) {
@@ -76,7 +95,9 @@ export async function recordAutomationOutcome(ctx: Ctx, actionType: AiActionType
         kind: 'automation_promotion', badge: 'suggestion',
         summary: `"${actionType}" ${t.counter.consecutiveClean} kez düzeltmesiz onaylandı. Artık otomatik yapayım mı?`,
         detail: { actionType, consecutiveClean: t.counter.consecutiveClean, threshold: t.counter.threshold, sampleRate: t.counter.sampleRate },
-        aiNote: `Otomatiğe geçerse yaklaşık her ${Math.round(1 / (t.counter.sampleRate || 0.05))} işten biri örneklem denetimine gelir; hata görülürse otomatik geri dönülür.`,
+        aiNote: `Otomatiğe geçerse yaklaşık her ${Math.round(1 / (t.counter.sampleRate || 0.05))} işten biri örneklem denetimine gelir; hata görülürse otomatik geri dönülür.`
+          + (OUTBOUND_ACTIONS.has(actionType) && !rules.outboundAutoSendRequiresStandingApproval
+            ? ' Dış mesaj: "outboundAutoSendRequiresStandingApproval" kuralı kapalı olduğu sürece mesajlar yine tek dokunuşla onaya gelir.' : ''),
         primaryActionLabel: 'Otomatiğe al', requiredRole: 'admin',
       });
       effects.push(`automation_promotion_proposed:${actionType}`);
@@ -87,6 +108,7 @@ export async function recordAutomationOutcome(ctx: Ctx, actionType: AiActionType
 
 export async function promoteAction(ctx: Ctx, actionType: AiActionType, adminId: string): Promise<void> {
   if (!isPromotable(actionType)) throw forbidden(`${actionType} otomatiğe alınamaz (§16: yasak/otonom liste)`, 'NOT_PROMOTABLE');
+  if (neverAutomated(await ctx.rules(), actionType)) throw forbidden(`${actionType} otomatiğe alınamaz (kural: neverAutomateKinds)`, 'NOT_PROMOTABLE');
   const counter = await getCounter(ctx, actionType);
   await saveCounter(ctx, promote(counter, ctx.now()), { promotedBy: adminId });
   await event(ctx, actionType, 'promoted', null);
@@ -113,10 +135,17 @@ export async function aiGate(ctx: Ctx, actionType: AiActionType, spec: DecisionS
   }
   if (authority !== 'suggest') throw forbidden(`aiGate yalnızca öneri türü işler içindir: ${actionType}`, 'AI_GATE_MISUSE');
   const counter = await getCounter(ctx, actionType);
-  const canAuto = counter.mode === 'auto' && !spec.forceApproval && !NEVER_AUTO_KINDS.has(spec.kind);
+  const rules = await ctx.rules();
+  // outbound message in auto mode without a standing approval ([Ürün kararı]) → still a (one-tap) human approval
+  const outboundHeld = OUTBOUND_KINDS.has(spec.kind) && !rules.outboundAutoSendRequiresStandingApproval;
+  const canAuto = counter.mode === 'auto' && !spec.forceApproval && !neverAutomated(rules, actionType, spec.kind) && !outboundHeld;
   if (!canAuto) {
-    const decision = await createDecision(ctx, { ...spec, aiActionType: actionType });
-    return { mode: 'approval', decision, effects: [] };
+    const held = counter.mode === 'auto' && outboundHeld;
+    const decision = await createDecision(ctx, {
+      ...spec, aiActionType: actionType,
+      ...(held ? { detail: { ...(spec.detail ?? {}), automation: 'outbound_held_for_approval' } } : {}),
+    });
+    return { mode: 'approval', decision, effects: held ? ['outbound_held_for_approval'] : [] };
   }
   assertAiMayExecute(actionType, spec.kind);
   const decision = await createDecision(ctx, { ...spec, aiActionType: actionType, autoExecuted: true });

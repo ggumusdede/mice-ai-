@@ -25,3 +25,13 @@ export function slugTr(s: string): string {
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 }
+
+/** Supplier-safe reference (security review G-15, [Ürün kararı] `hideCustomerFromSuppliers`): the project code without the
+ *  customer and venue segments — `PRJ-0042-ACME-20270312-80-HILTON` → `PRJ-0042-20270312-80`. A code that does not have the
+ *  six-segment shape (legacy / hand-edited) falls back to `<PREFIX>-<SEQ>` so nothing customer-specific can leak. */
+export function supplierSafeCode(code: string): string {
+  const parts = String(code ?? '').trim().split('-');
+  if (parts.length === 6 && /^\d+$/.test(parts[1])) return [parts[0], parts[1], parts[3], parts[4]].join('-');
+  const m = /^([A-Za-z0-9]+-\d+)/.exec(String(code ?? '').trim());
+  return m ? m[1].toUpperCase() : 'PRJ';
+}

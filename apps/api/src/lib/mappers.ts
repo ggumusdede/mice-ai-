@@ -29,7 +29,7 @@ export function mapSupplier(r: Row): Supplier {
     lat: num(r.lat), lng: num(r.lng), capacityPax: num(r.capacity_pax), roomCount: num(r.room_count), halls: r.halls ?? [],
     status: r.status, segment: r.segment, email: r.email, phone: r.phone, contactName: r.contact_name, commission: r.commission,
     paymentTerms: r.payment_terms, performanceScore: num(r.performance_score), avgResponseHours: num(r.avg_response_hours),
-    accreditedBy: r.accredited_by, accreditedAt: iso(r.accredited_at),
+    accreditedBy: r.accredited_by, accreditedAt: iso(r.accredited_at), taxNumber: r.tax_number ?? null,
   };
 }
 

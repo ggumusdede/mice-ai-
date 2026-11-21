@@ -19,9 +19,10 @@ import { amendContract, compareContract, createContract, getContractRow, listCon
 import { editDraft, getDraftRow, listDrafts, sendDraft } from '../services/drafts.js';
 import { getDocumentFile, latestDocumentFor, listDocuments, regenerateDocument } from '../services/documents.js';
 import { mapContract, mapSupplier, mapTask } from '../lib/mappers.js';
-import { AppError, badRequest, notFound } from '../errors.js';
+import { AppError, badRequest, forbidden, notFound } from '../errors.js';
 import { createDecision } from '../services/decisions.js';
 import { generateOperationsCalendar, itemChangeFlow } from '../services/operations.js';
+import { FINANCIAL_DOC_KINDS, assertDocumentVisible, assertFinancialsVisible, canSeeFinancials, visibleDrafts } from '../services/visibility.js';
 
 const auth = { preHandler: requireAuth };
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
@@ -59,7 +60,14 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   });
   app.get('/api/decisions/:id', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, (ctx) => getDecision(ctx, id));
+    return asUser(req, async (ctx) => {
+      const d = await getDecision(ctx, id);
+      // least privilege: a field user without financials opens only the cards their inbox shows them
+      if (!(await canSeeFinancials(ctx)) && !(await listDecisions(ctx, { status: d.status, projectId: d.projectId ?? undefined })).some((x) => x.id === d.id)) {
+        throw forbidden('Bu karar kartını görme yetkiniz yok', 'FINANCIALS_HIDDEN');
+      }
+      return d;
+    });
   });
   app.post('/api/decisions/:id/decide', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -167,6 +175,7 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
     lat: z.number().nullish(), lng: z.number().nullish(), capacityPax: z.number().int().nullish(), roomCount: z.number().int().nullish(),
     halls: z.array(z.record(z.unknown())).optional(), segment: z.string().nullish(), email: z.string().nullish(), phone: z.string().nullish(),
     contactName: z.string().nullish(), commission: z.record(z.unknown()).nullish(), paymentTerms: z.string().nullish(),
+    taxNumber: z.string().regex(/^\d{10,11}$/, 'VKN (10) / TCKN (11 hane)').nullish(),
     status: z.enum(['candidate', 'accredited', 'passive']).optional(), reason: z.string().optional(),
   });
   app.post('/api/suppliers', auth, async (req) => {
@@ -220,7 +229,10 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   });
   app.get('/api/items/:id/comparison', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, (ctx) => comparison(ctx, id));
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
+      return comparison(ctx, id);
+    });
   });
   app.post('/api/offers/:id/negotiate', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -258,7 +270,10 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   });
   app.get('/api/quotes/:id', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, (ctx) => getQuote(ctx, id));
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
+      return getQuote(ctx, id);
+    });
   });
   app.post('/api/quotes/:id/send', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -272,6 +287,7 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/quotes/:id/pdf', auth, async (req, reply) => {
     const { id } = parse(idParam, req.params);
     const file = await asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
       const doc = await latestDocumentFor(ctx, 'quote', 'quote', id);
       if (!doc) throw notFound('Teklif belgesi');
       return getDocumentFile(ctx, doc.id);
@@ -287,11 +303,17 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   });
   app.get('/api/projects/:id/contracts', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, async (ctx) => list(await listContracts(ctx, id)));
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
+      return list(await listContracts(ctx, id));
+    });
   });
   app.get('/api/contracts/:id', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, async (ctx) => mapContract(await getContractRow(ctx, id)));
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
+      return mapContract(await getContractRow(ctx, id));
+    });
   });
   app.post('/api/contracts/:id/parse', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -322,17 +344,25 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   // ---------------- drafts (§3.3)
   app.get('/api/drafts', auth, async (req) => {
     const q = parse(z.object({ projectId: z.string().uuid().optional() }), req.query);
-    return asUser(req, async (ctx) => list(await listDrafts(ctx, q.projectId)));
+    return asUser(req, async (ctx) => list(await visibleDrafts(ctx, await listDrafts(ctx, q.projectId))));
   });
   app.patch('/api/drafts/:id', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(z.object({ body: z.string().min(1).optional(), subject: z.string().nullish(), to: z.string().nullish() }), req.body);
-    return asUser(req, (ctx) => editDraft(ctx, id, body));
+    return asUser(req, async (ctx) => {
+      const d = await getDraftRow(ctx, id);
+      if (!(await canSeeFinancials(ctx)) && d.from_user_id !== ctx.user!.id) throw forbidden('Başka kullanıcının taslağı', 'DRAFT_NOT_OWNER');
+      return editDraft(ctx, id, body);
+    });
   });
   app.post('/api/drafts/:id/send', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     return asUser(req, async (ctx) => {
       const d = await getDraftRow(ctx, id);
+      // §3.3: a message leaves from its owner's address — only the draft's owner (or the admin) presses send
+      if (ctx.user!.role !== 'admin' && d.from_user_id !== ctx.user!.id) {
+        throw forbidden('Taslağı yalnızca sahibi (gönderen kullanıcı) veya yönetici gönderebilir', 'DRAFT_NOT_OWNER');
+      }
       const sent = await sendDraft(ctx, id);
       if (d.kind === 'supplier_confirmation' && d.entity_type === 'contract') await onSupplierConfirmationSent(ctx, d.entity_id);
       return sent;
@@ -358,16 +388,23 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
     const q = parse(z.object({ history: z.coerce.boolean().optional() }), req.query);
     return asUser(req, async (ctx) => {
       await getProjectRow(ctx, id);
-      return list(await listDocuments(ctx, id, q.history));
+      const docs = await listDocuments(ctx, id, q.history);
+      return list((await canSeeFinancials(ctx)) ? docs : docs.filter((d) => !FINANCIAL_DOC_KINDS.has(d.kind)));
     });
   });
   app.post('/api/documents/:id/regenerate', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, (ctx) => regenerateDocument(ctx, id));
+    return asUser(req, async (ctx) => {
+      await assertDocumentVisible(ctx, id);
+      return regenerateDocument(ctx, id);
+    });
   });
   app.get('/api/documents/:id/file', auth, async (req, reply) => {
     const { id } = parse(idParam, req.params);
-    const file = await asUser(req, (ctx) => getDocumentFile(ctx, id));
+    const file = await asUser(req, async (ctx) => {
+      await assertDocumentVisible(ctx, id);
+      return getDocumentFile(ctx, id);
+    });
     return sendPdf(reply, file);
   });
 

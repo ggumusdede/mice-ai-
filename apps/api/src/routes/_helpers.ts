@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { withUserCtx, type AppDeps, type Ctx } from '../context.js';
 import { forbidden, unauthorized } from '../errors.js';
 
-export interface JwtUser { userId: string; tenantId: string; role: Role }
+/** `tv` = users.token_version at login (session revocation, G-17); a token without it is refused. */
+export interface JwtUser { userId: string; tenantId: string; role: Role; tv?: number }
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {

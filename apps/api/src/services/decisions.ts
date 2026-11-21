@@ -174,7 +174,7 @@ export async function decide(ctx: Ctx, id: string, input: DecisionInput): Promis
   // §16: every human outcome on an AI suggestion feeds the automation counter; edits are learning data.
   if (row.ai_action_type) {
     const outcome = outcomeFor(row.kind, input.action);
-    effectList.push(...(await recordAutomationOutcome(ctx, row.ai_action_type, outcome, id)));
+    effectList.push(...(await recordAutomationOutcome(ctx, row.ai_action_type, outcome, id, row.kind)));
     if (input.action === 'edit') await recordCorrection(ctx, row.ai_action_id, { edits: input.edits, draft: row.draft }, outcome);
     else await recordAiOutcome(ctx, row.ai_action_id, outcome);
   }

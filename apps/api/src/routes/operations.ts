@@ -17,6 +17,7 @@ import { roomingListXlsx } from '../services/documents-b.js';
 import { loadQuotes } from '../services/quotes.js';
 import { getProjectRow } from '../services/projects.js';
 import { mapDocument } from '../lib/mappers.js';
+import { assertFinancialsVisible } from '../services/visibility.js';
 
 const auth = { preHandler: requireAuth };
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -111,7 +112,10 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
   // ---------------- finance (Adım 7)
   app.get('/api/finance/entries', auth, async (req) => {
     const q = parse(z.object({ projectId: z.string().uuid().optional(), kind: z.string().optional(), status: z.string().optional() }), req.query);
-    return asUser(req, async (ctx) => list(await listEntries(ctx, q)));
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx); // least privilege: not for the field role ([Ürün kararı] fieldRoleCanSeeFinancials)
+      return list(await listEntries(ctx, q));
+    });
   });
   const invoiceFields = z.object({
     projectId: z.string().uuid().optional(), supplierId: z.string().uuid().optional(), invoiceNo: z.string().min(1).max(60).optional(),

@@ -38,14 +38,21 @@ async function matchCustomer(ctx: Ctx, customerId: string | undefined, name: str
   return hit ? { id: hit.id, name: hit.name } : null;
 }
 
-export async function runIntake(ctx: Ctx, req: IntakeRequest): Promise<IntakeResponse> {
-  const user = requireUser(ctx);
+export interface IntakeOptions {
+  /** an already stored inbound_messages row (e-mail / WhatsApp webhook) — no second row is written */
+  inboundId?: string;
+  /** created_by for system intake (webhooks: null); default = the logged-in user */
+  createdBy?: string | null;
+}
+
+export async function runIntake(ctx: Ctx, req: IntakeRequest, opts: IntakeOptions = {}): Promise<IntakeResponse> {
+  const user = { id: opts.createdBy !== undefined ? opts.createdBy : requireUser(ctx).id };
   const rules = await ctx.rules();
   const now = ctx.now();
   const receivedAt = req.receivedAt ? new Date(req.receivedAt) : now;
 
   // 1) raw inbound message
-  const inbound = (await ctx.db.query(
+  const inbound = opts.inboundId ? { id: opts.inboundId } : (await ctx.db.query(
     `INSERT INTO inbound_messages (tenant_id, channel, from_address, subject, body, received_at, created_by)
      VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6) RETURNING *`,
     [req.channel, req.fromAddress ?? null, req.subject ?? null, req.body, receivedAt, user.id],

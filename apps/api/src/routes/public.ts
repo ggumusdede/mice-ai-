@@ -3,6 +3,7 @@
 // Rate-limited (registered inside an encapsulated plugin with @fastify/rate-limit).
 import type { FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import { rateLimitStore } from '../rate-limit-store.js';
 import { z } from 'zod';
 import { CURRENCIES, SERVICE_KINDS, type ActorType } from '@mice/shared';
 import { withoutTenant } from '../db/pool.js';
@@ -35,7 +36,7 @@ const offerLine = z.object({
 });
 
 export async function publicRoutes(app: FastifyInstance): Promise<void> {
-  await app.register(rateLimit, { max: app.deps.config.publicRateLimitPerMinute, timeWindow: '1 minute' });
+  await app.register(rateLimit, { ...(await rateLimitStore(app)), max: app.deps.config.publicRateLimitPerMinute, timeWindow: '1 minute' });
 
   // ---------------- supplier portal (§10)
   app.get('/api/public/rfq/:token', async (req) => {

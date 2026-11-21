@@ -7,6 +7,7 @@ import { asUser, idParam, list, parse, requireAuth } from './_helpers.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import { mapChecklist, mapDelegation, mapUser } from '../lib/mappers.js';
 import { loadRules, setRule } from '../services/rules.js';
+import { generateRuleSuggestions } from '../services/rule-suggestions.js';
 import { closeProject, computeClosingCheck } from '../services/closing.js';
 import { userStats, weeklyReport } from '../services/reports.js';
 import { expireDecisionsFor } from '../services/decisions.js';
@@ -57,11 +58,23 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         if (!(k in DEFAULT_RULES)) throw badRequest(`Bilinmeyen kural: ${k}`, undefined, 'UNKNOWN_RULE');
         if (!sameShape(DEFAULT_RULES[k as keyof TenantRules], v)) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
         if (typeof v === 'number' && (!Number.isFinite(v) || v < 0)) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
+        // string-list rules (neverAutomateKinds): only short identifiers
+        const def = DEFAULT_RULES[k as keyof TenantRules];
+        if (Array.isArray(def) && def.length && def.every((x) => typeof x === 'string')
+          && !(v as unknown[]).every((x) => typeof x === 'string' && /^[a-z_]{1,64}$/.test(x))) {
+          throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
+        }
       }
       for (const [k, v] of patch) await setRule(ctx.db, k as keyof TenantRules, v, ctx.user!.id, reason);
       return loadRules(ctx.db);
     });
   });
+
+  // ---------------- §16.5 rule suggestions: run the generator now (admin). It only opens admin-only decision cards.
+  app.post('/api/rules/suggestions/run', auth, async (req) => asUser(req, async (ctx) => {
+    assertAdminHuman(ctx);
+    return generateRuleSuggestions(ctx);
+  }));
 
   // ---------------- users (§4 kişi bazlı yetki: only Admin changes the level)
   app.patch('/api/users/:id', auth, async (req) => {
@@ -77,13 +90,30 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const cur = (await ctx.db.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
       if (!cur) throw notFound('Kullanıcı');
       if (id === ctx.user!.id && ((body.role && body.role !== 'admin') || body.active === false)) throw conflict('Yönetici kendi rolünü düşüremez / kendini pasife alamaz', 'SELF_DEMOTION');
+      // G-17: a role / authority / signing / active change ends the user's existing sessions (token_version + 1)
+      const privilegeChange = (body.role !== undefined && body.role !== cur.role)
+        || (body.authorityLevel !== undefined && body.authorityLevel !== cur.authority_level)
+        || (body.authorityScope !== undefined && JSON.stringify(body.authorityScope) !== JSON.stringify(cur.authority_scope ?? {}))
+        || (body.canSign !== undefined && body.canSign !== cur.can_sign)
+        || (body.active !== undefined && body.active !== cur.active);
       const { rows } = await ctx.db.query(
         `UPDATE users SET authority_level = COALESCE($2, authority_level), authority_scope = COALESCE($3, authority_scope), role = COALESCE($4, role),
-           can_sign = COALESCE($5, can_sign), active = COALESCE($6, active), full_name = COALESCE($7, full_name), languages = COALESCE($8, languages)
+           can_sign = COALESCE($5, can_sign), active = COALESCE($6, active), full_name = COALESCE($7, full_name), languages = COALESCE($8, languages),
+           token_version = token_version + CASE WHEN $9::boolean THEN 1 ELSE 0 END
          WHERE id = $1 RETURNING *`,
         [id, body.authorityLevel ?? null, body.authorityScope ? JSON.stringify(body.authorityScope) : null, body.role ?? null, body.canSign ?? null,
-          body.active ?? null, body.fullName ?? null, body.languages ?? null]);
+          body.active ?? null, body.fullName ?? null, body.languages ?? null, privilegeChange]);
       return mapUser(rows[0]);
+    });
+  });
+  // G-17 "log out everywhere": every token issued so far for this user stops working at its next request
+  app.post('/api/users/:id/revoke-sessions', auth, async (req) => {
+    const { id } = parse(idParam, req.params);
+    return asUser(req, async (ctx) => {
+      assertAdminHuman(ctx);
+      const { rows } = await ctx.db.query('UPDATE users SET token_version = token_version + 1 WHERE id = $1 RETURNING id', [id]);
+      if (!rows[0]) throw notFound('Kullanıcı');
+      return { userId: id, revoked: true };
     });
   });
   app.get('/api/users/:id/stats', auth, async (req) => {

@@ -18,6 +18,7 @@ import { currentFx, toEur } from './fx.js';
 import { listGuests } from './guests.js';
 import { money, pct, renderPdf } from './pdf.js';
 import { getProjectRow } from './projects.js';
+import { supplierRef } from './visibility.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const KIND_TR: Record<string, string> = {
@@ -78,9 +79,10 @@ export async function roomingListXlsx(ctx: Ctx, projectId: string): Promise<{ fi
   const wb = new ExcelJS.Workbook();
   wb.creator = 'MICE AI Operations OS';
   const ws = wb.addWorksheet('Rooming List');
+  const ref = await supplierRef(ctx, p.code); // sent to the hotel → supplier-safe reference (hideCustomerFromSuppliers)
   ws.columns = [{ width: 6 }, { width: 32 }, { width: 10 }, { width: 13 }, { width: 13 }, { width: 7 }, { width: 28 }, { width: 18 }, { width: 24 }];
   const head: [string, string][] = [
-    ['Acenta', await tenantName(ctx)], ['Otel', hotel], ['Proje', p.code], ['Etkinlik', p.title ?? ''],
+    ['Acenta', await tenantName(ctx)], ['Otel', hotel], ['Proje', ref], ['Etkinlik', p.title ?? ''],
     ['Tarih', `${p.start_date ?? '?'} – ${p.end_date ?? '?'}`], ['Oluşturma', isoDate(ctx.now())],
   ];
   ws.addRow(['ROOMING LIST']).font = { bold: true, size: 14 };
@@ -110,7 +112,7 @@ export async function roomingListXlsx(ctx: Ctx, projectId: string): Promise<{ fi
   ws.addRow(['', `Toplam misafir: ${guests.length}`]).font = { bold: true };
   for (const [room, n] of byRoom) ws.addRow(['', `${room}: ${n}`]);
   const data = Buffer.from(await wb.xlsx.writeBuffer());
-  return { fileName: `${p.code}-rooming-list.xlsx`, data, rows: guests.length, masked };
+  return { fileName: `${ref}-rooming-list.xlsx`, data, rows: guests.length, masked };
 }
 
 // ------------------------------------------------------------------ realized P&L (used by the 'pnl' generator in quotes.ts)

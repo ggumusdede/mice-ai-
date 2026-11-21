@@ -71,7 +71,8 @@ describe('delivery config & pure helpers', () => {
     expect(m.messageId).toBe('<abc@agency.test>');
     expect(m.inReplyTo).toBe('<prev@agency.test>');
     expect(m.references).toEqual(['<prev@agency.test>']);
-    expect(m.headers).toMatchObject({ 'X-MICE-Project': 'PRJ-0042-ANADOLU-0312-SK-MODA', 'X-MICE-Outbox-Id': 'abc', 'Auto-Submitted': 'auto-generated' });
+    expect(m.headers).toMatchObject({ 'X-MICE-Project': 'PRJ-0042', // short ref: the full code (customer name) never leaves in a header
+       'X-MICE-Outbox-Id': 'abc', 'Auto-Submitted': 'auto-generated' });
     expect(m.envelope).toEqual({ from: 'bounce@agency.test', to: 'otel@example.com' });
     const plain = buildMail({ outboxId: 'b', from: 'a@x.test', to: 'b@y.test', subject: null, body: 'x', messageIdDomain: 'x.test' });
     expect(plain.replyTo).toBeUndefined();
@@ -166,7 +167,7 @@ describe('SMTP provider (mocked transport)', () => {
     expect(m1.text).toContain('SECRET-TOKEN-123'); // the recipient gets the real link …
     expect(m1.messageId).toBe(`<${a.id}@agency.test>`);
     expect(m1.replyTo?.[0]).toMatch(/^replies\+prj-\d+@agency\.test$/);
-    expect(m1.headers['X-MICE-Project']).toBe(projectCode);
+    expect(m1.headers['X-MICE-Project']).toBe(projectCode.split('-').slice(0, 2).join('-'));
     expect(m1.inReplyTo).toBeUndefined();
     expect(m2.inReplyTo).toBe(m1.messageId);
     expect(m2.references).toEqual([m1.messageId]);

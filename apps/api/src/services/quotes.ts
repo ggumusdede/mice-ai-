@@ -112,7 +112,7 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
   const supplierStatusByItem: Record<string, SupplierStatus | null> = {};
   const lowestMarkup = markupForAdvantage(Number.NEGATIVE_INFINITY, rules.markupTiers);
   const options: QuoteOption[] = [];
-  const lineRows: (QuoteLine & { supplierId: string | null })[] = [];
+  const lineRows: (QuoteLine & { supplierId: string | null; suggestedMarkup: number | null; advantage: number | null })[] = [];
 
   for (const [i, opt] of req.options.entries()) {
     const optionNo = i + 1;
@@ -126,6 +126,8 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
       let markup: number | null = l.markup ?? null;
       let supplierId: string | null = null;
       let optionUntil: string | null = null;
+      let suggestedMarkup: number | null = null; // §16.5 learning data: tier suggestion vs applied markup
+      let advantage: number | null = null;
       if (offerId) {
         const offer = ev.offers.find((o) => o.id === offerId);
         if (!offer) {
@@ -136,6 +138,8 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
         const e = ev.evaluations.find((x) => x.offerId === offerId);
         if (!e) throw badRequest(`${item.description}: teklif normalize edilemedi (kur?)`, undefined, 'OFFER_NOT_NORMALIZABLE');
         unitCost = e.normalized.totalNetExVatEur / Math.max(mult({ quantity: Number(item.quantity), nights: item.nights }), 1e-9);
+        suggestedMarkup = e.suggestedMarkup;
+        advantage = e.advantage;
         markup ??= e.suggestedMarkup ?? lowestMarkup;
         supplierId = offer.supplierId;
         optionUntil = offer.optionUntil;
@@ -162,7 +166,7 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
         valueAdd: item.value_add, supplierOptionUntil: optionUntil,
       };
       lines.push(line);
-      lineRows.push({ ...line, supplierId });
+      lineRows.push({ ...line, supplierId, suggestedMarkup, advantage });
     }
     options.push(assembleOption(optionNo, opt.title, lines, rules.accommodationTaxRate, fxRate));
   }
@@ -200,10 +204,12 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
   for (const l of lineRows) {
     await ctx.db.query(
       `INSERT INTO quote_lines (tenant_id, quote_id, option_no, service_item_id, offer_id, supplier_id, description, kind, quantity, unit, nights,
-         unit_cost_eur, unit_price_eur, markup, vat_rate, value_add, supplier_option_until, sort)
-       VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+         unit_cost_eur, unit_price_eur, markup, vat_rate, value_add, supplier_option_until, sort, suggested_markup, advantage)
+       VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [q.id, l.optionNo, l.serviceItemId, l.offerId, l.supplierId, l.description, l.kind, l.quantity, l.unit, l.nights, l.unitCostEur,
-        l.unitPriceEur, l.markup, l.vatRate, l.valueAdd, l.supplierOptionUntil, sort++],
+        l.unitPriceEur, l.markup, l.vatRate, l.valueAdd, l.supplierOptionUntil, sort++,
+        l.suggestedMarkup == null ? null : Math.round(l.suggestedMarkup * 10000) / 10000,
+        l.advantage == null || !Number.isFinite(l.advantage) ? null : Math.max(-9999, Math.min(9999, Math.round(l.advantage * 10000) / 10000))],
     );
   }
   for (const pr of prev) {

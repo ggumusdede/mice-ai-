@@ -9,6 +9,27 @@ export interface MarkupTier {
   markup: number;
 }
 
+/** §16.5 (additive) supplier × season scoped markup. Applied ONLY when the price class of an offer is unknown (no matching
+ *  channel price / no history): instead of falling back to the lowest tier, the evidence-backed seasonal markup is suggested.
+ *  When a real channel advantage exists the tier table still decides. Months are 1..12 (local date of the service). */
+export interface SupplierSeasonMarkup {
+  supplierId: string;
+  supplierName?: string;
+  months: number[];
+  /** markup on cost as fraction */
+  markup: number;
+  note?: string;
+}
+
+/** §16.5 (additive) per-supplier RFQ follow-up hours (overrides rfqReminderHours / rfqCallTaskHours for that supplier). */
+export interface SupplierRfqHours {
+  supplierId: string;
+  supplierName?: string;
+  reminderHours: number;
+  callTaskHours: number;
+  note?: string;
+}
+
 export interface TenantRules {
   /** §9 Kanal fiyatına göre avantaj → markup tablosu */
   markupTiers: MarkupTier[];
@@ -44,6 +65,21 @@ export interface TenantRules {
   automationSampleRate: number;
   /** §6 güven puanı eşiği */
   aiConfidenceThreshold: number;
+  /** [Ürün kararı] §15 × §16: AI action types (e.g. 'customer_quote') or decision kinds (e.g. 'quote_approval') that are never
+   *  promoted to / executed in auto mode (no promotion proposal either). Default: customer quote approval + margin override —
+   *  §15 requires Face ID for money commitments, an AI auto-approval would bypass it. Structural §6 list stays on top. */
+  neverAutomateKinds: string[];
+  /** [Ürün kararı] §6 × §16: true → the admin's automation promotion counts as a standing approval and promoted outbound
+   *  messages (RFQ, negotiation, option extension, revision request) are sent automatically (with the ~1/20 sample audit).
+   *  false (default) → promoted outbound messages still open a one-tap approval card; nothing leaves without a human. */
+  outboundAutoSendRequiresStandingApproval: boolean;
+  /** [Ürün kararı] Supplier-facing outputs (RFQ e-mail / reminder, supplier portal, negotiation, confirmation, revision
+   *  request, rooming list, mail headers) use the supplier-safe reference (PRJ-0042-20270312-80) instead of the project code
+   *  that contains the customer name. Default true. */
+  hideCustomerFromSuppliers: boolean;
+  /** [Ürün kararı] Least privilege: false (default) → the field role sees no profit / P&L / finance entries / quote cost &
+   *  margin / contract amounts / drafts of other users (enforced server-side). */
+  fieldRoleCanSeeFinancials: boolean;
   /** §17.9 KVKK: rıza vermeyen misafir verisinin saklama süresi (gün) — avukat belirleyecek */
   guestDataRetentionDays: number;
   /** düşük tedarikçi skoru uyarı eşiği (0..100) */
@@ -57,6 +93,9 @@ export interface TenantRules {
   /** §7 Adım 3 teklif seçenek sayısı */
   quoteOptionsMin: number;
   quoteOptionsMax: number;
+  /** §16.5 scoped overrides (default empty → behaviour unchanged) */
+  supplierSeasonMarkups: SupplierSeasonMarkup[];
+  supplierRfqHours: SupplierRfqHours[];
 }
 
 export const DEFAULT_RULES: TenantRules = {
@@ -87,6 +126,10 @@ export const DEFAULT_RULES: TenantRules = {
   automationPromotionThreshold: 20,
   automationSampleRate: 0.05,
   aiConfidenceThreshold: 0.8,
+  neverAutomateKinds: ['customer_quote', 'quote_approval', 'margin_override'],
+  outboundAutoSendRequiresStandingApproval: false,
+  hideCustomerFromSuppliers: true,
+  fieldRoleCanSeeFinancials: false,
   guestDataRetentionDays: 730,
   lowSupplierScore: 50,
   projectCodePrefix: 'PRJ',
@@ -94,6 +137,8 @@ export const DEFAULT_RULES: TenantRules = {
   accommodationTaxRate: 0.02,
   quoteOptionsMin: 2,
   quoteOptionsMax: 3,
+  supplierSeasonMarkups: [],
+  supplierRfqHours: [],
 };
 
 export type RuleKey = keyof TenantRules;

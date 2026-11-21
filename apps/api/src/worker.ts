@@ -6,7 +6,8 @@ import path from 'node:path';
 import { dueFollowups, type FollowupAction, type FollowupState } from '@mice/domain';
 import { createAiService } from '@mice/ai';
 import { loadConfig } from './config.js';
-import { initPool, withoutTenant, closePool } from './db/pool.js';
+import { initPool, withoutTenant, closePool, getPool } from './db/pool.js';
+import { createLeaderLock, type LeaderLock } from './worker-lock.js';
 import { withSystemCtx, type AppDeps, type Ctx } from './context.js';
 import { createDeliveryProvider } from './services/delivery.js';
 import { loadDeliveryConfig } from './delivery-config.js';
@@ -17,6 +18,7 @@ import { createDecision } from './services/decisions.js';
 import { aiDraft } from './services/drafts.js';
 import { aiGate } from './services/automation.js';
 import { logAiAction } from './services/ai-log.js';
+import { supplierRef } from './services/visibility.js';
 import { iso } from './lib/dates.js';
 import { runPostJobs, runPreJobs } from './jobs.js';
 
@@ -63,7 +65,7 @@ async function execute(ctx: Ctx, a: FollowupAction, now: Date): Promise<string> 
       if (!r) return 'skip';
       await ctx.db.query('UPDATE rfqs SET reminder_sent_at = $2 WHERE id = $1', [a.rfqId, now]);
       if (r.email && r.sender_email) {
-        const tpl = (RFQ_REMINDER_TEMPLATE[r.language] ?? RFQ_REMINDER_TEMPLATE.tr)({ contact: r.contact_name ?? r.supplier_name, code: r.code, item: r.description, sender: r.sender_name });
+        const tpl = (RFQ_REMINDER_TEMPLATE[r.language] ?? RFQ_REMINDER_TEMPLATE.tr)({ contact: r.contact_name ?? r.supplier_name, code: await supplierRef(ctx, r.code), item: r.description, sender: r.sender_name });
         await ctx.deps.email.send(ctx.db, { tenantId: ctx.tenantId, projectId: r.project_id, from: r.sender_email, to: r.email, subject: tpl.subject, body: tpl.body, autonomous: true });
         await logAiAction(ctx, { actionType: 'supplier_rfq_reminder', projectId: r.project_id, entityType: 'rfq', entityId: r.id, result: { confidence: 1, model: 'template', data: { template: r.language } } });
       }
@@ -107,7 +109,7 @@ async function execute(ctx: Ctx, a: FollowupAction, now: Date): Promise<string> 
       await task(ctx, { projectId: o.project_id, assigneeId: o.owner_id, kind: 'option_expiry', title: `${o.code}: ${o.supplier_name} opsiyonu ${a.optionUntil} tarihinde bitiyor`, originKey: `offer:${o.id}:option`, entityType: 'supplier_offer', entityId: o.id, dueAt: now });
       const draft = await aiDraft(ctx, {
         kind: 'option_extension', language: 'tr', recipientName: o.contact_name ?? o.supplier_name,
-        facts: { projectCode: o.code, optionUntil: a.optionUntil },
+        facts: { projectCode: await supplierRef(ctx, o.code), optionUntil: a.optionUntil },
       }, { projectId: o.project_id, to: o.email, status: 'pending_approval', requiresApproval: true, fromUserId: o.owner_id, entityType: 'supplier_offer', entityId: o.id });
       await aiGate(ctx, 'option_extension_request', {
         projectId: o.project_id, kind: 'outbound_message', badge: 'critical', urgent: true,
@@ -171,6 +173,13 @@ export async function runFollowupsOnce(deps: AppDeps, now: Date = deps.now()): P
   return out;
 }
 
+/** Multi-instance deploys (G-20): only the instance holding the advisory leader lock runs jobs; others stay standby
+ *  (null) and retry on the next tick. */
+export async function runIfLeader(lock: LeaderLock, deps: AppDeps, now?: Date): Promise<Record<string, string[]> | null> {
+  if (!(await lock.acquire())) return null;
+  return runFollowupsOnce(deps, now ?? deps.now());
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
   const config = loadConfig();
@@ -180,11 +189,12 @@ if (isMain) {
   const deps: AppDeps = { config, ai: createAiService(process.env), email: createDeliveryProvider(delivery), now: () => new Date(), rng: Math.random };
   const once = process.argv.includes('--once');
   let running: Promise<void> | null = null;
-  const tick = () => (running = runFollowupsOnce(deps)
-    .then((r) => console.log(JSON.stringify({ level: 'info', time: new Date().toISOString(), msg: 'worker tick', result: r })))
+  const lock = createLeaderLock(getPool());
+  const tick = () => (running = runIfLeader(lock, deps)
+    .then((r) => console.log(JSON.stringify({ level: 'info', time: new Date().toISOString(), msg: r ? 'worker tick' : 'worker standby (another instance holds the leader lock)', result: r ?? undefined })))
     .catch((e) => console.error(e))
     .finally(() => { running = null; }));
-  if (once) tick().finally(() => closePool());
+  if (once) tick().finally(() => lock.release().then(() => closePool()));
   else {
     tick();
     const timer = setInterval(() => { if (!running) tick(); }, config.workerIntervalMs);
@@ -194,6 +204,7 @@ if (isMain) {
       const force = setTimeout(() => process.exit(1), Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 30_000));
       force.unref();
       if (running) await running;
+      await lock.release();
       await closePool();
       process.exit(0);
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatProjectCode, slugTr } from '../src/project-code.js';
+import { formatProjectCode, slugTr, supplierSafeCode } from '../src/project-code.js';
 import { retentionUntil, shouldAnonymize, pseudonymize, restorePseudonyms } from '../src/kvkk.js';
 import { canNegotiate, negotiationDraftViolations, ALLOWED_NEGOTIATION_ARGUMENTS } from '../src/negotiation.js';
 import { staleKindsFor, changeImpact, revisionTargetStep, DOCUMENT_DEPENDENCIES } from '../src/propagation.js';
@@ -22,6 +22,18 @@ describe('project code', () => {
   it('unknown parts → TBD; seq above 9999 not truncated', () => {
     expect(formatProjectCode({ prefix: 'PRJ', seq: 12345, customer: null, date: null, pax: null, venue: '  ' })).toBe('PRJ-12345-TBD-TBD-TBD-TBD');
     expect(formatProjectCode({ prefix: 'PRJ', seq: 1, customer: '***', date: 'yarın', pax: 0, venue: null })).toBe('PRJ-0001-TBD-TBD-TBD-TBD');
+  });
+});
+
+describe('supplier-safe project reference (hideCustomerFromSuppliers)', () => {
+  it('drops the customer and venue segments', () => {
+    expect(supplierSafeCode('PRJ-0042-ACMEILAC-20270312-80-HILTONBOMONTI')).toBe('PRJ-0042-20270312-80');
+    expect(supplierSafeCode('PRJ-12345-TBD-TBD-TBD-TBD')).toBe('PRJ-12345-TBD-TBD');
+  });
+  it('unknown shapes fall back to prefix + sequence (never the raw code)', () => {
+    expect(supplierSafeCode('PRJ-0042-ACME-EXTRA')).toBe('PRJ-0042');
+    expect(supplierSafeCode('ACME İLAÇ')).toBe('PRJ');
+    expect(supplierSafeCode('')).toBe('PRJ');
   });
 });
 

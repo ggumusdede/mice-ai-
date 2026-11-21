@@ -43,9 +43,11 @@ export function makeCtx(db: Db, tenantId: string, user: User | null, actor: Acto
 /** Context for a logged-in staff user (re-reads the user row so role/authority changes apply immediately). */
 export async function withUserCtx<T>(
   deps: AppDeps,
-  auth: { userId: string; tenantId: string },
+  auth: { userId: string; tenantId: string; tv?: number },
   device: string | null,
   fn: (ctx: Ctx) => Promise<T>,
+  /** internal callers without a JWT (seed) skip the token-version check */
+  opts: { skipTokenVersion?: boolean } = {},
 ): Promise<T> {
   const actor: Actor = { type: 'user', id: auth.userId, device };
   return withTenant(auth.tenantId, actor, async (db) => {
@@ -53,6 +55,8 @@ export async function withUserCtx<T>(
     const { rows } = await db.query(
       `SELECT u.* FROM users u JOIN tenants t ON t.id = u.tenant_id AND t.status = 'active' WHERE u.id = $1`, [auth.userId]);
     if (!rows[0] || !rows[0].active) throw unauthorized('Kullanıcı bulunamadı veya pasif');
+    // session revocation (G-17): password / role / authority change, deactivation or "log out everywhere" bump the version
+    if (!opts.skipTokenVersion && (typeof auth.tv !== 'number' || Number(rows[0].token_version ?? 0) !== auth.tv)) throw unauthorized('Oturum sonlandırıldı; yeniden giriş yapın');
     return fn(makeCtx(db, auth.tenantId, mapUser(rows[0]), actor, deps));
   });
 }

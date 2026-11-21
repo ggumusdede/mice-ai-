@@ -1,6 +1,7 @@
 // §7 Adım 1 — RFQ: 3–5 suppliers (override with recorded reason), drafts sent from the responsible user's own
 // address after approval, one-time supplier link (only SHA-256 stored), open until deadline, read-only until option end.
 import type { CreateRfqsRequest, PublicOfferInput, PublicRfqView, Rfq } from '@mice/shared';
+import { rfqHoursFor } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
 import { badRequest, conflict, gone, notFound } from '../errors.js';
@@ -12,6 +13,7 @@ import { aiGate } from './automation.js';
 import { getItemRow } from './items.js';
 import { getProjectRow, setStep } from './projects.js';
 import { createOfferVersion } from './offers.js';
+import { supplierRef } from './visibility.js';
 
 export const LINK_PLACEHOLDER = '{{TEDARIKCI_LINKI}}';
 /** link stays readable this long after the deadline when no option date is known */
@@ -55,14 +57,20 @@ export async function createRfqs(ctx: Ctx, itemId: string, req: CreateRfqsReques
 
   const deadlineHours = req.deadlineHours ?? rules.rfqCallTaskHours;
   const ratio = deadlineHours / rules.rfqCallTaskHours;
-  const reminderHours = Math.max(1, Math.round(rules.rfqReminderHours * ratio));
-  const callHours = Math.max(reminderHours + 1, Math.round(rules.rfqCallTaskHours * ratio));
+  // §16.5: a per-supplier follow-up override (admin-approved) replaces the tenant-wide hours for that supplier
+  const hoursFor = (supplierId: string) => {
+    const h = rfqHoursFor(rules, supplierId);
+    const reminderHours = Math.max(1, Math.round(h.reminderHours * ratio));
+    return { reminderHours, callHours: Math.max(reminderHours + 1, Math.round(h.callTaskHours * ratio)) };
+  };
   const ownerId = p.owner_id ?? user.id;
   const owner = (await ctx.db.query('SELECT full_name FROM users WHERE id = $1', [ownerId])).rows[0];
   const language = req.language ?? 'tr';
+  const ref = await supplierRef(ctx, p.code); // supplier-facing: no customer name ([Ürün kararı] hideCustomerFromSuppliers)
   const created: Row[] = [];
   const draftIds: string[] = [];
   for (const s of suppliers) {
+    const { reminderHours, callHours } = hoursFor(s.id);
     const rfq = (await ctx.db.query(
       `INSERT INTO rfqs (tenant_id, project_id, service_item_id, supplier_id, status, language, deadline_hours, reminder_hours, call_hours,
          override_reason, created_by)
@@ -72,7 +80,7 @@ export async function createRfqs(ctx: Ctx, itemId: string, req: CreateRfqsReques
     const draft = await aiDraft(ctx, {
       kind: 'rfq', language, senderName: owner?.full_name, recipientName: s.contact_name ?? s.name,
       facts: {
-        projectCode: p.code, item: { kind: item.kind, description: item.description, dateFrom: item.date_from, dateTo: item.date_to, quantity: Number(item.quantity), unit: item.unit, nights: item.nights, specs: item.specs },
+        projectCode: ref, item: { kind: item.kind, description: item.description, dateFrom: item.date_from, dateTo: item.date_to, quantity: Number(item.quantity), unit: item.unit, nights: item.nights, specs: item.specs },
         pax: p.pax, deadlineHours, optionRequested: true, link: LINK_PLACEHOLDER,
       },
     }, { projectId: p.id, to: s.email, status: 'pending_approval', requiresApproval: true, fromUserId: ownerId, entityType: 'rfq', entityId: rfq.id });
@@ -182,7 +190,7 @@ export async function publicRfqView(ctx: Ctx, rfqId: string): Promise<PublicRfqV
   const offers = (await ctx.db.query(
     'SELECT * FROM supplier_offers WHERE service_item_id = $1 AND supplier_id = $2 ORDER BY version', [rfq.service_item_id, rfq.supplier_id])).rows.map(mapOffer);
   return {
-    agencyName: tenant?.name ?? '', projectCode: p.code, supplierName: supplier?.name ?? '',
+    agencyName: tenant?.name ?? '', projectCode: await supplierRef(ctx, p.code), supplierName: supplier?.name ?? '',
     item: {
       kind: item.kind, description: item.description, dateFrom: item.date_from, dateTo: item.date_to, quantity: Number(item.quantity),
       unit: item.unit, nights: item.nights, specs: item.specs ?? {},

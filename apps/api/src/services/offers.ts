@@ -6,7 +6,7 @@ import type {
 } from '@mice/shared';
 import type { FileInput, ParsedOffer } from '@mice/ai';
 import {
-  canNegotiate, daysInclusive, evaluateOffer, lineMultiplier, negotiationDraftViolations, normalizeOffer, splitLine,
+  canNegotiate, daysInclusive, evaluateOffer, lineMultiplier, negotiationDraftViolations, normalizeOffer, seasonalMarkupFor, splitLine,
   type ChannelBenchmark,
 } from '@mice/domain';
 import ExcelJS from 'exceljs';
@@ -15,6 +15,7 @@ import { requireUser } from '../context.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { mapDraft, mapOffer, mapServiceItem, mapSupplier, type Row } from '../lib/mappers.js';
 import { isoDate } from '../lib/dates.js';
+import { assertSafeZip } from '../lib/zip-guard.js';
 import { attachAiActionEntity, logAiAction, recordCorrection } from './ai-log.js';
 import { createDecision } from './decisions.js';
 import { aiDraft } from './drafts.js';
@@ -22,6 +23,7 @@ import { currentFx, toEur, type FxSnapshot } from './fx.js';
 import { getItemRow } from './items.js';
 import { getProjectRow, setStep } from './projects.js';
 import { aiGate } from './automation.js';
+import { supplierRef } from './visibility.js';
 
 export interface OfferInput {
   supplierId: string;
@@ -147,6 +149,7 @@ export interface UploadedFile { filename: string; mimetype: string; buffer: Buff
 
 /** XLSX → CSV text (exceljs) so the model reads a table, not a binary blob. */
 export async function xlsxToCsv(buf: Buffer): Promise<string> {
+  assertSafeZip(buf); // zip-bomb guard (G-18): entry count, real inflated size, ratio — before exceljs inflates anything
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf as unknown as ArrayBuffer);
   const out: string[] = [];
@@ -338,7 +341,9 @@ export async function evaluateItemOffers(ctx: Ctx, item: Row, project: Row): Pro
     } catch {
       continue; // unknown currency etc. — never guess (§3.7)
     }
-    const base = { kind: it.kind, normalized, supplierStatus: s?.status ?? 'candidate', rules, valueAdd: it.valueAdd } as const;
+    // §16.5 scoped supplier × season markup (admin-approved rule); only used when the price class is unknown
+    const seasonal = seasonalMarkupFor(rules.supplierSeasonMarkups, offer.supplierId, item.date_from ? String(item.date_from) : null);
+    const base = { kind: it.kind, normalized, supplierStatus: s?.status ?? 'candidate', rules, valueAdd: it.valueAdd, seasonalMarkup: seasonal?.markup ?? null } as const;
     if (it.kind === 'accommodation') {
       evaluations.push(evaluateOffer({ ...base, channel: await channelBenchmark(ctx, offer, item, fx) }));
     } else {
@@ -387,7 +392,7 @@ export async function negotiate(ctx: Ctx, offerId: string, args: NegotiationArgu
   const draft = await aiDraft(ctx, {
     kind: 'negotiation', language: 'tr', senderName: owner?.full_name, recipientName: supplier.contact_name ?? supplier.name,
     facts: {
-      projectCode: p.code, item: item.description, pax: p.pax, dates: [item.date_from, item.date_to], round: current + 1,
+      projectCode: await supplierRef(ctx, p.code), item: item.description, pax: p.pax, dates: [item.date_from, item.date_to], round: current + 1,
       arguments: args.map((a) => ARG_LABELS[a]), currentOffer: { currency: offer.currency, lines: offer.lines.map((l) => ({ description: l.description, unitPrice: l.unitPrice, quantity: l.quantity })) },
     },
   }, { projectId: p.id, to: supplier.email, status: 'pending_approval', requiresApproval: true, fromUserId: ownerId, entityType: 'supplier_offer', entityId: o.id });

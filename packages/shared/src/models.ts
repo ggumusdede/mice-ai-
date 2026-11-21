@@ -67,6 +67,8 @@ export interface Supplier {
   avgResponseHours: number | null;
   accreditedBy: ID | null;
   accreditedAt: ISODateTime | null;
+  /** VKN / TCKN — e-Fatura (UBL-TR) supplier matching (additive) */
+  taxNumber?: string | null;
 }
 
 export interface CustomerRules {

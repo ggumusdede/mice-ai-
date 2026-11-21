@@ -32,7 +32,7 @@ async function items(ctx: Ctx, projectId: string) {
 }
 
 export async function seedDemoProjects(deps: AppDeps, t: SeededTenant): Promise<void> {
-  const asAdmin = <T>(fn: (ctx: Ctx) => Promise<T>) => withUserCtx(deps, { userId: t.users.admin.id, tenantId: t.tenantId }, 'seed', fn);
+  const asAdmin = <T>(fn: (ctx: Ctx) => Promise<T>) => withUserCtx(deps, { userId: t.users.admin.id, tenantId: t.tenantId }, 'seed', fn, { skipTokenVersion: true });
   const S = t.suppliers;
 
   // 1) offers ready to quote (Marmara Teknoloji, Kadıköy, step 2)

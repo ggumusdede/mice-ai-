@@ -20,6 +20,9 @@ export interface EvaluateInput {
   /** (additive, optional) non-accommodation unit price in EUR on the same basis as `history`.
    *  Defaults to perPersonPerDayEur ?? perPersonEur ?? totalNetExVatEur of the normalized offer. */
   unitPriceEur?: number | null;
+  /** (additive, §16.5) supplier × season markup override (see seasonalMarkupFor). Used ONLY when the price class is
+   *  unknown, instead of the lowest tier. A measured advantage always goes through the tier table. */
+  seasonalMarkup?: number | null;
 }
 
 /** Lowest-tier markup (used when the price class is unknown — never guess a higher margin). */
@@ -77,6 +80,9 @@ export function evaluateOffer(input: EvaluateInput): OfferEvaluation {
   if (input.valueAdd) {
     suggestedMarkup = null; // §17.4: kademe tablosu uygulanmaz
     risks.push('Katma değer kalemi (yalnız satış): kademe tablosu uygulanmaz, satış fiyatını acenta belirler.');
+  } else if (advantage == null && input.seasonalMarkup != null && Number.isFinite(input.seasonalMarkup) && input.seasonalMarkup >= 0) {
+    suggestedMarkup = input.seasonalMarkup;
+    risks.push(`Fiyat sınıfı bilinmiyor; tedarikçi/sezon kuralı uygulandı (markup %${Math.round(input.seasonalMarkup * 1000) / 10}).`);
   } else if (advantage == null) {
     suggestedMarkup = lowestMarkup(rules.markupTiers);
   } else {

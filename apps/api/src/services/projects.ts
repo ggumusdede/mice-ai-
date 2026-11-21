@@ -13,6 +13,7 @@ import { isoDate } from '../lib/dates.js';
 import { evaluateItemOffers } from './offers.js';
 import { loadQuotes } from './quotes.js';
 import { logAiAction } from './ai-log.js';
+import { canSeeFinancials, redactAudit, redactProjectDetail, redactSimilar } from './visibility.js';
 
 export async function getProjectRow(ctx: Ctx, id: string, forUpdate = false): Promise<Row> {
   const { rows } = await ctx.db.query(`SELECT * FROM projects WHERE id = $1 ${forUpdate ? 'FOR UPDATE' : ''}`, [id]);
@@ -203,7 +204,7 @@ export async function projectDetail(ctx: Ctx, id: string): Promise<ProjectDetail
 
   const cal = rules.businessHours;
   const end = p.quote_sent_at ?? ctx.now();
-  return {
+  const detail: ProjectDetail = {
     project,
     customer: customerRow ? mapCustomer(customerRow) : null,
     items,
@@ -220,12 +221,15 @@ export async function projectDetail(ctx: Ctx, id: string): Promise<ProjectDetail
       customerWaitMinutes: p.customer_wait_minutes,
     },
   };
+  // least privilege ([Ürün kararı] fieldRoleCanSeeFinancials): the field role gets no money data
+  return (await canSeeFinancials(ctx)) ? detail : redactProjectDetail(detail);
 }
 
 export async function projectTimeline(ctx: Ctx, id: string): Promise<AuditEntry[]> {
   await getProjectRow(ctx, id);
   const { rows } = await ctx.db.query('SELECT * FROM audit_log WHERE project_id = $1 ORDER BY at ASC, id ASC LIMIT 2000', [id]);
-  return rows.map(mapAudit);
+  const entries = rows.map(mapAudit);
+  return (await canSeeFinancials(ctx)) ? entries : redactAudit(entries);
 }
 
 /** Know-how screen (§4): similar past projects, with what price they were won/lost. */
@@ -247,7 +251,7 @@ export async function similarProjects(ctx: Ctx, id: string): Promise<SimilarProj
      ORDER BY (p.customer_id = $2) DESC NULLS LAST, p.received_at DESC LIMIT 10`,
     [id, p.customer_id, p.event_type, p.pax, p.district],
   );
-  return rows.map((r) => {
+  const out = rows.map((r) => {
     const sale = r.sale != null ? Number(r.sale) : null;
     const cost = r.cost != null ? Number(r.cost) : null;
     return {
@@ -256,6 +260,7 @@ export async function similarProjects(ctx: Ctx, id: string): Promise<SimilarProj
       margin: sale && cost != null ? (sale - cost) / sale : null, lostReason: r.lost_reason,
     };
   });
+  return (await canSeeFinancials(ctx)) ? out : redactSimilar(out);
 }
 
 /** "Bu projeye sor" (§15): answers only from this project's facts (§3.7 — says "veri yok" otherwise). */
@@ -277,7 +282,7 @@ export async function askProject(ctx: Ctx, id: string | null, question: string):
     facts.contracts = detail.contracts.map((c) => ({ status: c.status, supplierId: c.supplierId, diffCount: c.diff.length }));
     facts.alerts = detail.alerts;
     sources.push({ type: 'project', id, label: detail.project.code });
-    if (detail.project.customerId) {
+    if (detail.project.customerId && (await canSeeFinancials(ctx))) {
       const hist = await similarProjects(ctx, id);
       facts.customerHistory = hist;
       for (const h of hist.slice(0, 5)) sources.push({ type: 'project', id: h.projectId, label: h.code });

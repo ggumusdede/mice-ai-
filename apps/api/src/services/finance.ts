@@ -18,6 +18,7 @@ import { currentFx, rateFor, toEur } from './fx.js';
 import { fileToAiInput, xlsxToCsv, type UploadedFile } from './offers.js';
 import { getProjectRow } from './projects.js';
 import { notify } from './notifications.js';
+import { applyUblInvoice, isUblUpload, summary as ublSummary, type UblApplied } from './einvoice.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 export const MAX_BANK_ROWS = 5000;
@@ -52,7 +53,13 @@ export async function recordSupplierInvoice(ctx: Ctx, input: InvoiceRequest): Pr
   const data: Partial<SupplierInvoiceInput> = { ...input };
   let readConfidence: number | null = null;
   let aiActionId: string | null = null;
-  if (input.file || input.text) {
+  // e-Fatura UBL-TR XML: deterministic reader, no AI (confidence 1.0) — services/einvoice.ts
+  let ubl: UblApplied | null = null;
+  if (isUblUpload(input.file)) {
+    ubl = await applyUblInvoice(ctx, input.file!, data);
+    readConfidence = 1;
+    alarms.push(...ubl.alarms);
+  } else if (input.file || input.text) {
     let text = input.text;
     let file;
     if (input.file) {
@@ -124,8 +131,10 @@ export async function recordSupplierInvoice(ctx: Ctx, input: InvoiceRequest): Pr
      VALUES (app_tenant_id(), $1,$2,$3,$4,'supplier_invoice',$5,$6,$7,$8,$9,'open',$10,$11,$12,$13) RETURNING *`,
     [p.id, itemIds[0] ?? null, supplier.id, contract?.id ?? null, data.amount, currency, rateFor(fx, currency), amountEur, data.dueDate ?? null, p.code, data.invoiceNo,
       JSON.stringify({ vatAmount: data.vatAmount ?? null, issueDate: data.issueDate ?? isoDate(ctx.now()), serviceItemIds: itemIds, expectedEur, mismatch, alarms,
-        readConfidence, aiActionId, payableIds: payables.map((e) => e.id), source: input.file ? 'file' : input.text ? 'text' : 'manual' }),
+        readConfidence, aiActionId, payableIds: payables.map((e) => e.id), source: ubl ? 'ubl_xml' : input.file ? 'file' : input.text ? 'text' : 'manual',
+        ...(ubl ? { ubl: ublSummary(ubl.ubl) } : {}) }),
       user.id])).rows[0];
+  if (ubl?.ubl.uuid) await ctx.db.query('UPDATE finance_entries SET ubl_uuid = $2 WHERE id = $1', [row.id, ubl.ubl.uuid]);
   if (aiActionId) await ctx.db.query('UPDATE ai_actions SET entity_type = $2, entity_id = $3 WHERE id = $1', [aiActionId, 'finance_entry', row.id]);
 
   // separately billed supplier commission (§7 Adım 7 komisyon mutabakatı): expected commission receivable

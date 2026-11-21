@@ -1,7 +1,7 @@
 // Wires decision-kind effects and document generators. Called once by buildApp() / the worker.
 // Phase B adds: payment_approval, field_extra, unbilled_payment_escalation, low_supplier_score, closing_overdue effects
 // and program / rooming_list / customer_invoice_draft / supplier_confirmation document generators.
-import type { AiActionType, TenantRules } from '@mice/shared';
+import type { AiActionType } from '@mice/shared';
 import { isPromotable } from '@mice/shared';
 import { registerDecisionEffect, type DecisionEffect } from './decisions.js';
 import { accreditSupplier } from './suppliers.js';
@@ -12,7 +12,7 @@ import { assignProject } from './projects.js';
 import { promoteAction, recordAutomationOutcome } from './automation.js';
 import { acceptConditionRisk, approveContract } from './contracts.js';
 import { verifyOffer } from './offers.js';
-import { setRule } from './rules.js';
+import { applyRuleSuggestionDecision } from './rule-suggestions.js';
 import { forbidden } from '../errors.js';
 import { registerPhaseB } from './phase-b-registry.js';
 
@@ -125,17 +125,9 @@ export function registerAll(): void {
   });
 
   registerDecisionEffect('rule_suggestion', async (ctx, d, input) => {
-    // §6: rule changes are forbidden for AI — only an admin decision applies them
+    // §6: rule changes are forbidden for AI — only an admin decision applies them (§16.5 patch / scoped override, audited)
     if (input.auto || !input.decidedBy) throw forbidden('Kural değişikliği yalnızca yönetici kararıyla', 'AI_FORBIDDEN_ACTION');
-    if (input.action === 'reject') {
-      if (d.entity_id) await ctx.db.query(`UPDATE rule_suggestions SET status = 'rejected' WHERE id = $1`, [d.entity_id]);
-      return ['rule_suggestion_rejected'];
-    }
-    const key = d.detail?.key as keyof TenantRules;
-    const value = input.action === 'edit' && input.edits?.value !== undefined ? input.edits.value : d.detail?.proposedValue;
-    await setRule(ctx.db, key, value, input.decidedBy, `Kural önerisi kararı ${d.id}`);
-    if (d.entity_id) await ctx.db.query(`UPDATE rule_suggestions SET status = 'accepted' WHERE id = $1`, [d.entity_id]);
-    return [`rule_changed:${String(key)}`];
+    return applyRuleSuggestionDecision(ctx, d, input);
   });
 
   registerDecisionEffect('low_confidence_review', async (ctx, d, input) => {

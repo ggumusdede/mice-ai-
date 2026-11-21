@@ -18,6 +18,7 @@ import { currentFx, toEur } from './fx.js';
 import { fileToAiInput, type UploadedFile } from './offers.js';
 import { getProjectRow, setStep } from './projects.js';
 import { getQuote } from './quotes.js';
+import { supplierRef } from './visibility.js';
 
 export async function getContractRow(ctx: Ctx, id: string, forUpdate = false): Promise<Row> {
   const { rows } = await ctx.db.query(`SELECT * FROM contracts WHERE id = $1 ${forUpdate ? 'FOR UPDATE' : ''}`, [id]);
@@ -207,7 +208,7 @@ export async function compareContract(ctx: Ctx, id: string): Promise<Contract> {
     const problems = diff.filter((d) => d.kind !== 'value_add');
     const draft = await aiDraft(ctx, {
       kind: 'revision_request', language: 'tr', recipientName: supplier?.contact_name ?? supplier?.name,
-      facts: { projectCode: p.code, differences: problems.map((d) => d.message), lowConfidence },
+      facts: { projectCode: await supplierRef(ctx, p.code), differences: problems.map((d) => d.message), lowConfidence },
     }, { projectId: p.id, to: supplier?.email ?? null, status: 'pending_approval', requiresApproval: true, fromUserId: p.owner_id ?? ctx.user?.id ?? null, entityType: 'contract', entityId: id });
     await aiGate(ctx, 'revision_request', {
       projectId: p.id, kind: 'contract_diff', badge: diff.some((d) => d.severity === 'error') ? 'critical' : 'suggestion',
@@ -324,7 +325,7 @@ export async function signContract(ctx: Ctx, id: string, input: { signedBy: stri
   // supplier confirmation: DRAFT only — a human with 'confirm_supplier' sends it (§6: AI may never confirm)
   await aiDraft(ctx, {
     kind: 'supplier_confirmation', language: 'tr', recipientName: supplier.contact_name ?? supplier.name,
-    facts: { projectCode: p.code, fields: { startDate: fields.startDate, endDate: fields.endDate, pax: fields.pax, rooms: fields.rooms, totalAmount: supTotal, currency: supCur } },
+    facts: { projectCode: await supplierRef(ctx, p.code), fields: { startDate: fields.startDate, endDate: fields.endDate, pax: fields.pax, rooms: fields.rooms, totalAmount: supTotal, currency: supCur } },
   }, { projectId: p.id, to: supplier.email, status: 'draft', requiresApproval: false, fromUserId: p.owner_id ?? user.id, entityType: 'contract', entityId: id });
 
   const pending = (await ctx.db.query(

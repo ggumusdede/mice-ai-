@@ -24,7 +24,10 @@
     "@mice/shared": "*",
     "@simplewebauthn/server": "^11.0.0",
     "exceljs": "^4.4.0",
+    "fast-xml-parser": "^5.12.1",
     "fastify": "^5.12.8",
+    "imapflow": "^2.12.2",
+    "mailparser": "^3.15.0",
     "nodemailer": "^10.6.1",
     "pdfkit": "^0.15.2",
     "pg": "^8.23.1",
@@ -32,6 +35,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.9.0",
     "@types/nodemailer": "^8.0.2",
     "@types/pdfkit": "^0.17.7",
     "@types/pg": "^8.23.1",

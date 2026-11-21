@@ -94,7 +94,8 @@ export interface BuildMailInput {
 export function buildMail(i: BuildMailInput): MailOptions {
   const messageId = `<${i.outboxId}@${i.messageIdDomain}>`;
   const headers: Record<string, string> = { 'X-MICE-Outbox-Id': i.outboxId };
-  if (i.projectCode) headers['X-MICE-Project'] = i.projectCode;
+  // short reference only (PRJ-0042): the full project code contains the customer name and the header reaches suppliers too
+  if (i.projectCode) headers['X-MICE-Project'] = projectReplyTag(i.projectCode).toUpperCase();
   // RFC 3834: the pre-approved autonomous RFQ reminder / KVKK notice is machine-generated (suppresses auto-replies)
   if (i.autonomous) headers['Auto-Submitted'] = 'auto-generated';
   const replyTo = i.replyAddress && i.projectCode ? [projectReplyAddress(i.replyAddress, i.projectCode), i.from] : undefined;

@@ -27,7 +27,7 @@ export async function listSuppliers(ctx: Ctx, f: { kind?: string; city?: string;
 const COLS: Record<string, string> = {
   name: 'name', kinds: 'kinds', city: 'city', district: 'district', lat: 'lat', lng: 'lng', capacityPax: 'capacity_pax',
   roomCount: 'room_count', halls: 'halls', segment: 'segment', email: 'email', phone: 'phone', contactName: 'contact_name',
-  commission: 'commission', paymentTerms: 'payment_terms',
+  commission: 'commission', paymentTerms: 'payment_terms', taxNumber: 'tax_number',
 };
 const JSON_COLS = new Set(['halls', 'commission']);
 

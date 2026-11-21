@@ -8,6 +8,7 @@ import { dailySummary, markEndedEvents } from './services/operations.js';
 import { createDraft } from './services/drafts.js';
 import { notifyUnbilledPayment } from './services/finance.js';
 import { runOutboxJobs } from './services/delivery.js';
+import { runWeeklyRuleSuggestions } from './services/rule-suggestions.js';
 
 /** Before the follow-up scheduler: state the scheduler depends on. */
 export async function runPreJobs(ctx: Ctx, now: Date): Promise<string[]> {
@@ -28,6 +29,8 @@ export async function runPostJobs(ctx: Ctx, now: Date, followupsDone: { type: st
   if (digests) out.push(`notification_digests:${digests}`);
   // SMTP: deliver queued / retry failed e-mails, notify when given up
   out.push(...(await runOutboxJobs(ctx, now)));
+  // §16.5 weekly rule-suggestion generator (idempotent; admin-only decisions)
+  out.push(...(await runWeeklyRuleSuggestions(ctx, now)));
   return out;
 }
 
