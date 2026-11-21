@@ -11,7 +11,7 @@ import { OutboxEmailProvider } from '../src/services/email.js';
 import { normalizeMsisdn, whatsappTemplatePayload, WhatsAppCloudProvider } from '../src/services/messaging.js';
 import { createNotificationService, isAllowedPushEndpoint, pushPayload, WebPushNotificationService, type PushSender, type PushSendOptions, type PushSubscriptionKeys } from '../src/services/push.js';
 import { ConsoleNotificationService, flushNotificationDigests, notify, setNotificationService } from '../src/services/notifications.js';
-import { withSystemCtx } from '../src/context.js';
+import { withSystemCtx, type Ctx } from '../src/context.js';
 import { redactUrl, trustProxyOption } from '../src/logger.js';
 import { GmailApiProvider } from '../src/services/email-oauth.js';
 
@@ -153,7 +153,7 @@ afterAll(async () => {
   await closeApp({ app, email: null as never });
 });
 
-const sys = <T>(fn: Parameters<typeof withSystemCtx<T>>[3]) => withSystemCtx<T>(app.deps, t.tenantId, { type: 'system', id: null }, fn);
+const sys = <T>(fn: (ctx: Ctx) => Promise<T>) => withSystemCtx<T>(app.deps, t.tenantId, { type: 'system', id: null }, fn);
 const outbox = (id: string) => ownerSql(`SELECT o.*, p.body_enc IS NOT NULL AS has_payload, p.purged_at FROM outbox o LEFT JOIN outbox_payloads p ON p.outbox_id = o.id WHERE o.id = $1`, [id]).then((r) => r[0]);
 
 describe('SMTP provider (mocked transport)', () => {

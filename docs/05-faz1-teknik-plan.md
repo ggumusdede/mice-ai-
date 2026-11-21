@@ -102,61 +102,84 @@ Kur varsayımı: **1 EUR ≈ 50–60 TRY** (Kasım 2026 için planlama varsayım
 | WhatsApp Business API | 10–80 | BSP platform ücreti (0 ile birkaç on EUR arası) + Meta'nın mesaj başı ücreti. Müşteri hizmeti penceresi içindeki yanıtlar genelde ücretsizdir; şablon mesajları kategori ve ülkeye göre ücretlendirilir. **TR fiyatları Meta fiyat tablosundan doğrulanmalı** |
 | SMS (saha ekstra onay linki) | 5–20 | TR SMS sağlayıcısı, düşük hacim |
 | Konuşma tanıma | 1–15 | 100–300 dakika/ay. Dakika başı yaklaşık $0,005–0,03 [Doğrulanmalı] |
-| **Yapay zekâ (Claude)** | **75–250** | Hesap aşağıda (§7) |
+| **Yapay zekâ (Claude)** | **20–100** | Hesap aşağıda (§7); varsayımdır [Doğrulanmalı] |
 | Alan adı, TLS, WAF | 0–30 | |
-| **Toplam** | **≈ €200–900 / ay** | ≈ 10.000–54.000 TRY (kur varsayımıyla) |
+| **Toplam** | **≈ €140–750 / ay** | ≈ 7.000–45.000 TRY (kur varsayımıyla) |
 
 ## 7. Proje başına yapay zekâ maliyeti
 
-**Fiyat girdileri** (Anthropic birinci taraf API liste fiyatı, Kasım 2026 itibarıyla; değişebilir, faturalamadan önce doğrulanmalı):
+> Bu bölüm, yapay zekâ katmanının gerçek çağrı yapısına (`packages/ai/src/claude.ts`) göre yeniden hesaplanmıştır ve önceki sürümdeki "kazanılan proje başına ≈ €3–5,5" tahmininin **yerine geçer**. Eski tahmin, uygulanmayan işleri (gelen mesaj sınıflandırma, kritik alanlarda ikinci okuma) ve tüm tedarikçi tekliflerinin AI ile okunacağını varsayıyordu. Tüm rakamlar **varsayımdır** [Doğrulanmalı].
+
+**Fiyat girdileri** (Anthropic birinci taraf API liste fiyatı, Kasım 2026 itibarıyla; değişebilir, faturalamadan önce güncel fiyat listesinden doğrulanmalı) [Doğrulanmalı]:
 
 | Model | Giriş $/MTok | Çıkış $/MTok | Not |
 |---|---|---|---|
-| `claude-sonnet-5-5` | 2,00 | 10,00 | Önbellek okuma $0,10/MTok |
-| `claude-haiku-5-5` | 0,10 | 0,50 | 100K token üstü istemde daha yüksek fiyat |
+| `claude-sonnet-5-5` (`AI_MODEL`) | 2,00 | 10,00 | Önbellek okuma $0,10/MTok; önbelleğe yazma giriş fiyatından biraz yüksek |
+| `claude-haiku-5-5` (`AI_MODEL_FAST`) | 0,10 | 0,50 | Yalnız sesli komut niyeti (`interpretCommand`); 100K token üstü istemde daha yüksek fiyat |
 
-**Hesaplama varsayımları:**
+Message Batches API liste fiyatının yaklaşık %50'si ile faturalanır [Doğrulanmalı].
 
-- Örnek proje: 80 kişi, 5 kalem, kalem başına 4 tedarikçi, kazanılmış.
-- Düşünme (thinking) token'ları çıkış olarak faturalanır ve tabloya dahildir. Ayıklama işlerinde `effort: low` kullanılır.
-- PDF sayfası yaklaşık 1,5–3 bin token tutar.
+**Kodun bugünkü çağrı yapısı:**
 
-| İş | Adet | Giriş tok. (her biri) | Çıkış tok. (her biri) | Model | Yaklaşık $ |
+- Tüm okuma/ayıklama ve taslaklar Sonnet ile, yapılandırılmış çıktı (`output_config.format` JSON şeması) ve sabit sistem istemi üzerinde istem önbelleği (`cache_control`) ile yapılır.
+- `effort`: talep ayıklama, teklif/sözleşme/fatura okuma ve taslaklar `medium`; "Bu projeye sor", kontrol listesi önerisi, üslup özeti ve sesli komut `low`. Model düşünme (adaptive thinking) yapabilir; düşünme token'ları **çıkış** olarak faturalanır ve aşağıdaki çıkış tahminlerine dahildir.
+- Tedarikçi portal formundan (`/s/rfq/<token>`) gelen teklif **LLM'e gitmez**; yalnızca yapıştırılan e-posta, PDF, Excel (CSV'ye çevrilir) ve görsel okunur. Banka ekstresi deterministiktir (LLM yok).
+- İkinci okuma, gelen mesaj sınıflandırma ve Batch API kullanımı **henüz uygulanmadı**.
+- PDF sayfası yaklaşık 1,5–3 bin giriş token'ı tutar.
+
+**Örnek: tipik kazanılmış proje** (80 kişi, 5 kalem, kalem başına 4 tedarikçi; tekliflerin yaklaşık yarısı portal formuyla gelir):
+
+| İş (`AiService` metodu) | Adet | Giriş tok. (her biri) | Çıkış tok. (her biri) | Model | Yaklaşık $ |
 |---|---|---|---|---|---|
-| Gelen mesaj sınıflandırma / projeye bağlama | 60 | 1.500 | 100 | Haiku | 0,01 |
-| Talep ayıklama | 2 | 4.000 | 1.500 | Sonnet | 0,05 |
-| Tedarikçi teklifi okuma (sürümler dahil) | 26 | 8.000 | 3.000 | Sonnet | 1,20 |
-| Kritik alanlarda ikinci okuma (04 §4 s6) | ~10 | 8.000 | 1.500 | Sonnet | 0,30 |
-| Sözleşme okuma | 4 | 25.000 | 5.000 | Sonnet | 0,40 |
-| Fatura okuma (yalnız PDF; XML'de LLM yok) | 6 | 5.000 | 1.500 | Sonnet | 0,15 |
-| Taslaklar (RFQ, pazarlık, takip, kapak) | 40 | 3.000 (çoğu önbellekte) | 800 | Sonnet | 0,40–0,55 |
-| "Bu projeye sor" / know-how | 15 | 12.000 | 600 | Sonnet | 0,45 |
-| Sesli komut niyeti, kontrol listesi, üslup | — | — | — | Haiku/Sonnet | 0,05 |
-| **Ara toplam** | | | | | **≈ $3,0** |
-| Tekrar denemeler ve hata payı (×1,3) | | | | | **≈ $4,0** |
+| Talep ayıklama (`extractRequest`; müşteri revizyonu dahil) | 2 | 4.000 | 1.500 | Sonnet | 0,05 |
+| Tedarikçi teklifi okuma (`parseSupplierOffer`; e-posta/PDF/Excel, sürümler dahil) | 12 | 8.000 | 3.000 | Sonnet | 0,55 |
+| Sözleşme okuma (`parseContract`) | 3 | 25.000 | 5.000 | Sonnet | 0,30 |
+| Fatura okuma (`parseInvoice`) | 5 | 5.000 | 1.500 | Sonnet | 0,12 |
+| Taslaklar (`draftMessage`: RFQ, pazarlık, takip, kapak, revizyon, konfirmasyon, günlük özet) | 30 | 3.000 (çoğu önbellekte) | 800 | Sonnet | 0,25–0,30 |
+| "Bu projeye sor" (`ask`) | 6 | 12.000 | 600 | Sonnet | 0,18 |
+| Sesli komut niyeti, kontrol listesi, aylık üslup payı | — | — | — | Haiku/Sonnet | 0,02–0,05 |
+| **Toplam** | | | | | **≈ $1,0–1,5** |
 
-**Sonuç:** Kazanılan proje başına **≈ $3–6 (≈ €3–5,5)**. Kaybedilen talepte (sözleşme ve fatura yok) **≈ $1,5–2,5**. Ayda 30 talep (≈ %40 kazanma oranı) için **≈ €75–150**. "Bu projeye sor" yoğun kullanılırsa veya büyük kongre projeleri gelirse **€250**'ye çıkabilir.
+**Tek tutarlı aralık (bu dokümanın ve 07 §3'ün kullandığı değer):**
+
+| Senaryo | Proje başı (USD) | Proje başı (EUR)* | Not |
+|---|---|---|---|
+| Tipik kazanılmış proje | **≈ $1–1,5** | ≈ €0,9–1,4 | Yukarıdaki tablo |
+| Bütçe üst sınırı (×1,3 tekrar deneme/hata payı) | ≈ $2 | ≈ €1,9 | Planlamada bu değer kullanılmalı |
+| Büyük kongre (çok kalem, çok sayfalı PDF teklifler, yoğun "sor") | **≈ $3–5** (payla ≈ $6,5) | ≈ €2,8–6 | |
+| Kaybedilen talep (sözleşme ve fatura yok) | ≈ $0,5–1 | ≈ €0,5–0,9 | |
+
+\* Kur varsayımı 1 USD ≈ 0,85–0,95 EUR [Doğrulanmalı].
+
+**Aylık (tek acenta):** Ayda 30 talep, ≈ %40 kazanma oranı → 12 kazanılan × $1–2 + 18 kaybedilen × $0,5–1 ≈ **$20–55 ≈ €20–50**. Ayda bir büyük kongre ve yoğun "sor" kullanımıyla **≈ €100**'e çıkabilir; §6 tablosu bu aralığı (€20–100) kullanır.
+
+**Ana maliyet sürücüleri** (yaklaşık pay, tipik projede):
+
+1. **Tedarikçi PDF/teklif okuma** (~%40): AI ile okunan teklif sayısı ve sayfa sayısıyla doğrusal artar. Portal formunun kullanım oranı en büyük etkendir.
+2. **Sözleşme okuma** (~%20–25): uzun sözleşme PDF'leri (25 bin+ giriş token'ı).
+3. **"Bu projeye sor" / Q&A** (~%10–15, kullanım alışkanlığına bağlı): her soru proje olgularını (12 bin token civarı) yeniden gönderir; en değişken kalemdir.
+4. Taslaklar (~%20): sayıca çok ama sistem istemi önbellekte olduğundan çıkış ağırlıklıdır.
 
 **Maliyet düşürme kaldıraçları:**
 
-- İstem önbelleği (sabit sistem istemi + şema + üslup örnekleri).
-- Acil olmayan işlerde (kapanış analizi, aylık üslup özeti, değerlendirme koşuları) Message Batches API (yaklaşık %50 indirim).
-- XML e-faturada LLM atlanır.
-- Sınıflandırma Haiku'ya verilir.
-- Effort ayarı iş türü bazında yapılır.
+- **Effort ayarı:** okuma işlerinde `medium` → `low` denemesi, doğruluk test setinde (04) ölçülerek iş türü bazında yapılmalı; düşünme token'ları çıkış fiyatından faturalandığı için en etkili tek ayardır.
+- **Message Batches API** (≈ %50 indirim) acil olmayan belge okuma için: kapanış analizi, aylık üslup özeti, değerlendirme koşuları ve beklemesi kabul edilebilen sözleşme/fatura okuma. Henüz uygulanmadı; eklenmesi önerilir.
+- **İstem önbelleği:** sabit sistem istemleri zaten `cache_control` taşır; "Bu projeye sor"da proje olgularının da önbelleklenecek şekilde sabit sıraya konması tekrar sorularda maliyeti düşürür. Önbellek isabeti `ai_actions.tokens.cacheRead` ile izlenir.
+- **Portal formunu teşvik etmek:** tedarikçiye giden RFQ linki LLM'siz yanıt yoludur.
+- XML e-faturada LLM atlanır (Faz 2).
 
-Gerçek tüketim `ai_actions.tokens_in/out/cost_usd` alanlarında izlenir. Acenta bazında aylık bütçe alarmı kurulur.
+Gerçek tüketim `ai_actions.tokens` (jsonb: `input`, `output`, `cacheRead`, `cacheWrite`) alanından izlenir; maliyet sütunu yoktur, fiyat tablosuyla raporda hesaplanmalıdır. Acenta bazında aylık bütçe alarmı önerilir (henüz yok).
 
 ## 8. SaaS aşamasında acenta başına maliyet (Faz 3)
 
 | Bileşen | Acenta başı aylık (EUR) | Not |
 |---|---|---|
-| Yapay zekâ | 50–350 | Hacme bağlıdır: 20–80 talep/ay |
+| Yapay zekâ | 15–200 | Hacme bağlıdır: 20–80 talep/ay; §7 birim maliyetleriyle, büyük kongre payı dahil [Doğrulanmalı] |
 | WhatsApp (mesaj ücreti; BSP hesabı acenta başınadır) | 10–80 | Acentanın kendi numarası ve WABA hesabı |
 | Depolama ve yedek | 5–20 | |
 | Paylaşımlı altyapı payı (DB, uygulama, izleme) | 20–80 | Çok kiracılı tek kurulum; 10+ acentada birim maliyet düşer |
 | Destek ve operasyon | 30–100 | Kurulum sonrası destek, kural ayarı |
-| **Marjinal toplam** | **≈ €115–630** | |
+| **Marjinal toplam** | **≈ €80–480** | |
 
 **Platform sabit giderleri** (acenta sayısına bölünür):
 
