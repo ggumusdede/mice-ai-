@@ -171,11 +171,13 @@ node e2e/steps6-8.mjs
 ```
 
 **Adım 0–5:** satış intake → yönetici mobil karar kutusu (atama) → kalemler / kısa liste / 3 RFQ → `rfq_send` onayı →
-tedarikçi linkleri (`POST /api/rfqs/:id/link`) → 3 tedarikçi `/s/rfq/<token>` üzerinden teklif verir → yapıştırılan tedarikçi
+tedarikçi linkleri (`POST /api/rfqs/:id/link`) → 3 tedarikçi `/s/rfq/<token>` üzerinden teklif verir (sayfada müşteri adı yok,
+`PRJ-####-<tarih>-<pax>` referansı) → yapıştırılan tedarikçi
 e-postası okunur + doğrulanır → karşılaştırma + pazarlık taslağı → teklif seçimi (proje kodunun mekân kısmı güncellenir) →
 2 seçenekli teklif (zorlanan marj bloğu, sonra düzeltme) → yönetici onayı (Face ID / dev) → gönderim → müşteri `/q/<token>`
 üzerinden kabul (PO) → şablondan sözleşme → karşılaştırma → koşul riski + sözleşme onayı (dev biometrik) → imza → kilit + finans
-kayıtları → boş kutu ("Her şey yolunda") → seed projeler, saha paneli, haftalık rapor.
+kayıtları → boş kutu ("Her şey yolunda") → seed projeler, saha paneli (saha kullanıcısı proje ekranında Finans / teklif
+sekmesi ve kâr bloğu görmez, `/api/finance/entries` 403), haftalık rapor.
 
 **Adım 6–8:** proje API ile karşılaştırılmış sözleşmeye kadar hazırlanır (fatura bilgisi olmadan → sözleşme temiz değil) →
 fatura bilgisi Genel bakış'ta düzeltilir → yeniden karşılaştırma temiz → yönetici onayı (dev biometrik) → imza → imzayla gelen

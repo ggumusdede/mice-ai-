@@ -34,7 +34,7 @@ Dokümanlar repodaki kod sözleşmesine dayanır:
 | 07 | [Mühendislik cevapları](07-muhendislik-cevaplari.md) | §18 (1–17) | 17 sorunun tamamına somut öneri |
 | 08 | [Mobil karar](08-mobil-karar.md) | §19.6, §18.1 | Önce PWA; yerel iOS uygulamasını tetikleyen kriterler |
 
-Ayrıca (diğer mühendislerce eşzamanlı ekleniyor): güvenlik incelemesi — bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md); üretim hazırlığı (Docker/CI) — bkz. ilgili repo dosyaları.
+Ayrıca: güvenlik incelemesi ve kalan risklerin düzeltilmesi (G-01 … G-21, ürün kararı varsayılanları) — bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md); üretim hazırlığı (Docker/CI) — bkz. ilgili repo dosyaları.
 
 ## Uygulama durumu
 
@@ -73,7 +73,9 @@ PRD bölümü / özellik → kodun bugünkü durumu. ✅ uygulandı · 🟡 kıs
 | §18.6, §18.7 | Gerçek e-posta (Gmail API / MS Graph OAuth) ve WhatsApp Business API | 🟡 / ⛔ | SMTP teslimi var (`EMAIL_PROVIDER=smtp`); Gmail/Graph OAuth ⛔; WhatsApp Cloud API gönderimi iskelet, canlı değil (`MESSAGING_PROVIDER`, `services/messaging.ts`); gelen WhatsApp webhook'u ve gelen e-postaların projeye bağlanması ✅ (yukarıda §7 Adım 0) |
 | §18.8 | Sunucu tarafı konuşma tanıma (STT) | ⛔ | Tarayıcı Web Speech API kullanılır |
 | §18.1, 08 | Yerel iOS uygulaması | ⛔ | Faz 1 PWA (08 kriterleri) |
-| — | SSO, yenileme belirteci, işçi lider kilidi, nesne deposu | ⛔ | 01 §1, §3, §6 |
+| — | Oturum iptali (`users.token_version`, şifre değiştirme, "her yerden çıkış"), işçi lider kilidi (advisory lock), XLSX zip bombası koruması, PG hata metni temizliği, çok örnekli hız sınırı deposu (Redis, isteğe bağlı) | ✅ | 09 G-17 … G-21; `010_session_revocation.sql`, `worker-lock.ts`, `lib/zip-guard.ts`, `errors.ts`, `rate-limit-store.ts` |
+| §4, §10, §15, §16 | **[Ürün kararı]** güvenli varsayılanlar (acenta kuralı, Kurallar → "Ürün kararları"): `hideCustomerFromSuppliers` (açık — tedarikçi `PRJ-0042-20270312-80` görür), `fieldRoleCanSeeFinancials` (kapalı — saha kâr / maliyet / finans görmez, sunucuda), `neverAutomateKinds` (müşteri teklifi onayı + marj altı açma asla otomatik), `outboundAutoSendRequiresStandingApproval` (kapalı — terfi edilmiş dış mesajlar yine onaya gelir) | ✅ | 09 G-15, G-16, Ü-1; `services/visibility.ts`, `services/automation.ts` |
+| — | SSO, yenileme belirteci (HttpOnly çerez), nesne deposu | ⛔ | 01 §1, §3, §6 |
 | — | Güvenlik incelemesi; üretim kurulumu (Docker/CI) | — | Eşzamanlı ekleniyor; bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md) ve üretim hazırlığı dosyaları |
 
 ## Okuma kılavuzu
