@@ -1,0 +1,160 @@
+# MICE AI Operations OS — CI: typecheck, unit tests, web build, API integration tests (Postgres 16), Playwright e2e,
+# Docker image builds.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  PLAYWRIGHT_VERSION: '1.63.0'
+
+jobs:
+  checks:
+    name: Typecheck, unit tests, web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Domain unit tests
+        run: npx vitest run
+        working-directory: packages/domain
+      - name: AI unit tests
+        run: npx vitest run
+        working-directory: packages/ai
+      - name: Web unit tests
+        run: npx vitest run
+        working-directory: apps/web
+      - name: Web build
+        run: npx vite build
+        working-directory: apps/web
+
+  api-integration:
+    name: API integration tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mice_test
+          # the test suite connects as postgres (owner, migrations) and mice_app (created by migration 001)
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://mice_app:mice_app@localhost:5432/mice_test
+      TEST_MIGRATION_DATABASE_URL: postgres://postgres@localhost:5432/mice_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm }
+      - run: npm ci
+      - name: Fonts for PDF generation (Turkish characters)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+      - name: API tests (schema dropped + migrated in globalSetup)
+        run: npx vitest run
+        working-directory: apps/api
+
+  e2e:
+    name: Playwright e2e (steps 0-5, 6-8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [checks]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mice
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://mice_app:mice_app@localhost:5432/mice
+      MIGRATION_DATABASE_URL: postgres://postgres@localhost:5432/mice
+      AI_PROVIDER: mock
+      PUBLIC_BASE_URL: http://localhost:4173
+      CORS_ORIGIN: http://localhost:4173
+      WEBAUTHN_ORIGIN: http://localhost:4173
+      BASE_URL: http://localhost:4173
+      SHOTS: ${{ github.workspace }}/e2e/shots
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm }
+      - run: npm ci
+      - name: Install Playwright + Chromium (CI only)
+        run: |
+          npm install --no-save --no-package-lock playwright@${{ env.PLAYWRIGHT_VERSION }}
+          npx playwright install --with-deps chromium
+      - name: Fonts for PDF generation
+        run: sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+      - name: Migrate + seed demo tenant
+        run: |
+          npm run migrate -w apps/api
+          npm run seed -w apps/api -- --reset
+      - name: Build web
+        run: npx vite build
+        working-directory: apps/web
+      - name: Start API (mock AI) and vite preview
+        run: |
+          (cd apps/api && nohup npm start > ../../api.log 2>&1 &)
+          (cd apps/web && nohup npx vite preview --port 4173 --strictPort > ../../web.log 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:4173/api/ready && break
+            sleep 2
+          done
+          curl -fsS http://localhost:4173/api/ready
+      - name: E2E steps 0-5
+        run: node e2e/steps0-5.mjs
+      - name: E2E steps 6-8
+        run: node e2e/steps6-8.mjs
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e/shots
+            api.log
+            web.log
+          retention-days: 7
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [checks]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image (includes typecheck stage)
+        run: docker build -f apps/api/Dockerfile -t mice-api:ci .
+      - name: Build web image
+        run: docker build -f apps/web/Dockerfile -t mice-web:ci .
+      - name: Validate compose file
+        run: docker compose config -q
+        env:
+          POSTGRES_PASSWORD: ci
+          APP_DB_PASSWORD: ci
+          JWT_SECRET: ci-0123456789abcdef0123456789abcdef
+          GUEST_DATA_KEY: ci

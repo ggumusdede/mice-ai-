@@ -75,8 +75,6 @@ services:
       NODE_ENV: production
       MIGRATION_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/mice
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
-      GUEST_DATA_KEY: ${GUEST_DATA_KEY:?set GUEST_DATA_KEY}
     depends_on:
       db: { condition: service_healthy }
 

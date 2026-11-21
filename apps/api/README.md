@@ -61,7 +61,8 @@ Change the `mice_app` password in production: `ALTER ROLE mice_app PASSWORD '…
 - **Signed contracts are locked** — only `status signed→amended` / `superseded_by` may change; changes are amendment rows.
 - AI actors (`app.actor_type='ai'`) can never accredit a supplier or record a signature.
 
-Phase B: create new tables in a new migration and call `SELECT apply_standard_policies('table')` (RLS + no-delete + audit + grants).
+Phase B: create new tables in a new migration and call `SELECT apply_standard_policies('table')` (RLS + no-delete + audit + grants)
+and `SELECT apply_tenant_foreign_keys()` (composite `(tenant_id, col) → (tenant_id, id)` FKs — FK checks bypass RLS; `008`).
 `004_phase_b.sql` adds `notifications`, `style_summaries`, field-extra admin/customer-approval columns, payment
 approval/paid columns and two more DB guards: **a finance entry can only become `approved`/`paid` with a human actor**
 (`finance_money_guard`, §6 money_movement) and **an AI actor can never write `rules`** (`rules_change_guard`).

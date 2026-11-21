@@ -34,7 +34,7 @@ server {
     proxy_set_header X-Request-Id $request_id;
     proxy_read_timeout 180s;  # AI document parsing can take a while
     proxy_buffering off;
-    add_header X-Content-Type-Options "nosniff" always;
+    # the API sets its own security headers (nosniff, CSP for its few HTML pages)
     add_header Cache-Control "no-store" always;
   }
 

@@ -4,7 +4,7 @@ import { buildApp } from '../src/server.js';
 import { loadConfig } from '../src/config.js';
 import { withSystemCtx } from '../src/context.js';
 import { anonymizeGuest } from '../src/services/guests.js';
-import { client, closeApp, login, makeApp, newTenant, ownerSql, resetClock, type TestApp } from './helpers.js';
+import { appSql, client, closeApp, login, makeApp, newTenant, ownerSql, quotableProject, resetClock, type TestApp } from './helpers.js';
 import { signedProject } from './phase-b-helpers.js';
 
 let T: TestApp;
@@ -195,5 +195,43 @@ describe('G-12 security headers', () => {
     expect(r.headers['referrer-policy']).toBe('no-referrer');
     expect(r.headers['cache-control']).toBe('no-store');
     expect(String(r.headers['content-security-policy'])).toContain("default-src 'none'");
+  });
+});
+
+describe('G-14 foreign keys cannot point into another tenant (FK checks bypass RLS)', () => {
+  it('API and direct SQL: a tenant-B row referencing tenant-A ids is rejected', async () => {
+    const A = await newTenant('sec-fk-a');
+    const B = await newTenant('sec-fk-b');
+    const a = client(T.app, await login(T.app, A.users.admin.email));
+    const b = client(T.app, await login(T.app, B.users.admin.email));
+    const qa = await quotableProject(a, A);
+    const qb = await quotableProject(b, B);
+    // field issue with another tenant's supplier id (service did not validate it)
+    const issue = await b.post(`/api/projects/${qb.projectId}/field-issues`, { description: 'x', severity: 'low', supplierId: A.suppliers.moda });
+    expect(issue.status).toBe(400);
+    expect(issue.body.error.code).toBe('INVALID_REFERENCE');
+    // manual offer with another tenant's RFQ id
+    const [rfqA] = await ownerSql(
+      `INSERT INTO rfqs (tenant_id, project_id, service_item_id, supplier_id, status) VALUES ($1,$2,$3,$4,'sent') RETURNING id`,
+      [A.tenantId, qa.projectId, qa.accItemId, A.suppliers.moda]);
+    const off = await b.post(`/api/items/${qb.accItemId}/offers`, { supplierId: B.suppliers.moda, rfqId: rfqA.id, currency: 'EUR', lines: [] });
+    expect(off.status).toBe(400);
+    // direct SQL as mice_app in tenant B: every tenant-scoped FK is checked within the tenant
+    await expect(appSql(B.tenantId, `INSERT INTO tasks (tenant_id, project_id, kind, title, source) VALUES ($1, $2, 'x', 'x', 'rule')`, [B.tenantId, qa.projectId]))
+      .rejects.toThrow(/foreign key/);
+    await expect(appSql(B.tenantId, `INSERT INTO service_items (tenant_id, project_id, kind, description, quantity, unit) VALUES ($1, $2, 'hall', 'x', 1, 'day')`, [B.tenantId, qa.projectId]))
+      .rejects.toThrow(/foreign key/);
+    // catalog: every single-column FK between tenant tables has its (tenant_id, col) partner (new tables: apply_tenant_foreign_keys())
+    const missing = await ownerSql(`
+      SELECT c.conrelid::regclass::text AS t, a.attname AS col FROM pg_constraint c
+        JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+       WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND array_length(c.conkey, 1) = 1 AND a.attname <> 'tenant_id'
+         AND EXISTS (SELECT 1 FROM pg_attribute x WHERE x.attrelid = c.conrelid AND x.attname = 'tenant_id')
+         AND EXISTS (SELECT 1 FROM pg_attribute x WHERE x.attrelid = c.confrelid AND x.attname = 'tenant_id')
+         AND NOT EXISTS (SELECT 1 FROM pg_constraint c2 WHERE c2.conrelid = c.conrelid AND c2.contype = 'f' AND array_length(c2.conkey, 1) = 2
+                           AND c2.confrelid = c.confrelid AND a.attnum = ANY (c2.conkey))`);
+    expect(missing).toEqual([]);
+    // same-tenant references keep working
+    expect((await b.post(`/api/projects/${qb.projectId}/field-issues`, { description: 'y', severity: 'low', supplierId: B.suppliers.moda })).status).toBe(200);
   });
 });

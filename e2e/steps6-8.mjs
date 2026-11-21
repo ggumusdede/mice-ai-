@@ -114,7 +114,11 @@ async function adminDecide(admin, text, { shotName, edits } = {}) {
   if (await reason.count()) await reason.fill('Stratejik müşteri — e2e');
   const dev = sheet.getByRole('button', { name: 'Geliştirici doğrulaması ile onayla' });
   if (await dev.count()) await dev.click();
-  else await sheet.locator('.sheet-actions > button').first().click();
+  else {
+    await sheet.locator('.sheet-actions > button').first().click();
+    // production build (vite preview / nginx): headless WebAuthn fails → the dev fallback appears; use it
+    if (await dev.waitFor({ timeout: 3_000 }).then(() => true, () => false)) await dev.click();
+  }
   await sheet.waitFor({ state: 'detached', timeout: 15_000 }).catch(async () => {
     throw new Error(`decision "${summary}" not closed: ${await sheet.innerText()}`);
   });

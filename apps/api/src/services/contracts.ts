@@ -55,7 +55,8 @@ async function quoteSnapshot(ctx: Ctx, projectId: string, supplierId: string, it
   const { quote, option } = await acceptedQuote(ctx, projectId);
   const lines = option.lines.filter((l) => itemIds.includes(l.serviceItemId));
   const offerIds = [...new Set(lines.map((l) => l.offerId).filter((x): x is string => !!x))];
-  const offers = offerIds.length ? (await ctx.db.query('SELECT * FROM supplier_offers WHERE id = ANY($1)', [offerIds])).rows : [];
+  // deterministic: quote-line order (the first offer supplies the contract terms below — never rely on plan order)
+  const offers = offerIds.length ? (await ctx.db.query('SELECT * FROM supplier_offers WHERE id = ANY($1::uuid[]) ORDER BY array_position($1::uuid[], id)', [offerIds])).rows : [];
   if (offers.some((o) => o.supplier_id !== supplierId)) throw badRequest('Seçilen kalemlerin teklifi bu tedarikçiye ait değil', undefined, 'SUPPLIER_MISMATCH');
   const items = (await ctx.db.query('SELECT * FROM service_items WHERE id = ANY($1)', [itemIds])).rows;
   const offerLines: OfferLine[] = offers.flatMap((o) => o.lines as OfferLine[]);
