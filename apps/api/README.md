@@ -10,7 +10,9 @@ bash scripts/db-start.sh            # from repo root: local Postgres 16 on :5432
 npm run migrate -w apps/api         # apply src/db/migrations/*.sql (tracked in schema_migrations)
 npm run seed -w apps/api            # demo tenant "Demo MICE Acenta" (idempotent); add `-- --reset` to drop & recreate
 npm run dev -w apps/api             # http://localhost:3001  (GET /api/health)
-npm run worker -w apps/api          # follow-ups + phase B jobs (anonymization, digests, event end, daily summaries); `-- --once`
+npm run worker -w apps/api          # follow-ups + phase B jobs (anonymization, digests, event end, daily summaries, e-mail retry); `-- --once`
+npm run migrate:deploy -w apps/api  # deployment: migrate (owner) + `ALTER ROLE mice_app PASSWORD` from APP_DB_PASSWORD
+npm run vapid:generate -w apps/api  # VAPID key pair for Web Push
 npm test -w apps/api                # vitest against mice_test (schema dropped + migrated in globalSetup)
 npx tsc --noEmit -p apps/api
 ```
@@ -39,6 +41,17 @@ Demo logins (password `demo1234`): `admin@demo.test`, `clerk@demo.test` (sales, 
 | `WORKER_INTERVAL_MS` | `300000` | |
 | `AI_PROVIDER`, `ANTHROPIC_API_KEY`, `AI_MODEL`, … | | see `packages/ai/src/factory.ts` |
 | `PDF_FONT_PATH`, `PDF_FONT_BOLD_PATH` | DejaVu/Liberation if present | Unicode TTF for Turkish characters |
+| `LOG_LEVEL` | `info` | pino JSON logs (off in `NODE_ENV=test`); redaction paths in `src/logger.ts` |
+| `TRUST_PROXY` | – | `1` behind nginx/LB (real client IP for rate limits) or proxy CIDR list |
+| `SHUTDOWN_TIMEOUT_MS` | 15000 / 30000 | API / worker hard-exit timeout after SIGTERM |
+| `APP_DB_PASSWORD` | – | `migrate:deploy` sets the `mice_app` password (owner connection) |
+| `EMAIL_PROVIDER` | `outbox` | `smtp` → `SmtpEmailProvider` (nodemailer) |
+| `EMAIL_SEND_MODE` | `immediate` | `queue` → only the worker talks to SMTP |
+| `SMTP_HOST/PORT/SECURE/USER/PASS`, `SMTP_ENVELOPE_FROM`, `SMTP_TLS_REJECT_UNAUTHORIZED`, `SMTP_*_TIMEOUT_MS` | `587`, STARTTLS | |
+| `EMAIL_REPLY_ADDRESS`, `EMAIL_MESSAGE_ID_DOMAIN`, `EMAIL_MAX_ATTEMPTS`, `OUTBOX_DATA_KEY` | –, reply domain, 8, `GUEST_DATA_KEY` | reply linking / retry payload key |
+| `MESSAGING_PROVIDER`, `WHATSAPP_PHONE_NUMBER_ID/TOKEN/API_VERSION` | `outbox` | WhatsApp Cloud API is a skeleton (not live) |
+| `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT` | – | Web Push; absent → console fallback |
+| `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_MINIMAL_PAYLOAD`, `WEB_PUSH_TTL_SECONDS`, `WEB_PUSH_TIMEOUT_MS` | push services, –, 86400, 5000 | SSRF allow-list (suffix match) |
 
 Change the `mice_app` password in production: `ALTER ROLE mice_app PASSWORD '…'`.
 
@@ -67,6 +80,31 @@ and `SELECT apply_tenant_foreign_keys()` (composite `(tenant_id, col) → (tenan
 approval/paid columns and two more DB guards: **a finance entry can only become `approved`/`paid` with a human actor**
 (`finance_money_guard`, §6 money_movement) and **an AI actor can never write `rules`** (`rules_change_guard`).
 
+## Delivery channels & ops (production)
+
+- `src/delivery-config.ts` — `loadDeliveryConfig(env)` (e-mail / messaging / push settings).
+- `src/services/delivery.ts` — `createDeliveryProvider()` → `ChannelRouter` (the `deps.email` used everywhere): `email` →
+  `SmtpEmailProvider` or `OutboxEmailProvider`; `sms` / `whatsapp` → `MessagingProvider` (outbox). `runOutboxJobs(ctx, now)`
+  (worker post-job): delivers queued / retries failed SMTP rows, notifies sender + admins once when a message is given up.
+- `src/services/email-smtp.ts` — `SmtpEmailProvider`: From = the responsible user (§3.3); `buildMail()` sets
+  `Message-ID <outbox-id@domain>`, `In-Reply-To`/`References` (previous message to the same recipient in the project),
+  `X-MICE-Project`, plus-addressed `Reply-To` (`replies+prj-0042@…`), `Auto-Submitted` for autonomous messages. Outbox row
+  (redacted) + `outbox_payloads` (pgcrypto, purged after delivery, not audited); exponential backoff, SMTP 5xx = permanent.
+  `email-oauth.ts` — `GmailApiProvider` / `GraphMailProvider` sketches (not implemented).
+- `src/services/messaging.ts` — `MessagingProvider`, `OutboxMessagingProvider`, `WhatsAppCloudProvider` skeleton,
+  `normalizeMsisdn`, `whatsappTemplatePayload`.
+- `src/services/push.ts` + `routes/push.ts` — `WebPushNotificationService` (`web-push`, VAPID) behind `NotificationService`:
+  `GET /api/push/vapid-public-key`, `POST /api/push/subscribe` (upsert per endpoint, endpoint host allow-list),
+  `POST /api/push/unsubscribe` (active=false — no DELETE). Critical → immediate (urgency high); routine → digest
+  (`topic: mice-digest`). 404/410 → subscription deactivated; push bookkeeping runs in a savepoint (never aborts the request).
+  `NotificationService.deliver(msg, db)` now receives the caller's tenant transaction.
+- `src/routes/health.ts` — `GET /api/health` (liveness + db), `GET /api/ready` (db + all migrations applied + not shutting down).
+- `src/logger.ts` — pino options (redaction paths, token-free URLs), `TRUST_PROXY`. Graceful shutdown in `server.ts` / `worker.ts`.
+- `src/db/bootstrap.ts` — `migrate:deploy`; migration `006_delivery_channels.sql` (outbox delivery columns, `outbox_payloads`,
+  `push_subscriptions`, `GRANT SELECT ON schema_migrations TO mice_app`; tenant FKs added by 008).
+- Container: `apps/api/Dockerfile` (+ `docker/api-entrypoint.sh`: `serve | migrate | worker | seed`), see root README → Dağıtım.
+- Tests: `test/delivery.test.ts` (mocked nodemailer transport and web-push sender).
+
 ## Code map
 
 - `src/server.ts` — `buildApp(opts)` (tests inject `email`, `now`, `rng`, `ai`); `src/worker.ts` — `runFollowupsOnce(deps, now)`.
@@ -82,7 +120,7 @@ approval/paid columns and two more DB guards: **a finance entry can only become 
   (NotificationService), `phase-b-registry.ts` (decision effects), `src/jobs.ts` (worker pre/post jobs).
 - `src/services/*` — business services. Extension points: `registerDecisionEffect(kind, fn)` (`decisions.ts`, wired in
   `registry.ts`), `registerDocumentGenerator(kind, …)` (`documents.ts`), `aiGate()` (`automation.ts`) for every
-  suggest-type AI action, `EmailProvider` (`email.ts`, outbox/console implementation — no SMTP).
+  suggest-type AI action, `EmailProvider` (`email.ts` outbox; SMTP in `email-smtp.ts`, wired by `delivery.ts`).
 
 ## API deviations / additions (all additive to `packages/shared/src/api.ts`)
 
