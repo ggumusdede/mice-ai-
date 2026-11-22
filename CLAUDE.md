@@ -18,7 +18,9 @@ geldikçe geliştirme bu sürümlere göre devam eder.
 5. Onay kapıları karar kutusu (`decisions`) üzerinden; para/sözleşme/teklif onayında biyometrik (WebAuthn) step-up.
 6. AI yetkisi kapalı liste (`packages/shared/src/ai-authority.ts`); yasak işlemler hem kodda hem DB guard'larında engelli;
    AI yalnız `aiGate` / `createAiService` üzerinden; dışarıya giden her mesaj insan onaylı ve insanın adresinden.
-7. İç para birimi EUR; markup (Kâr÷Alış) ve marj (Kâr÷Satış) her yerde ayrı.
+7. Para birimi: her acenta ana para birimini (TL / EUR / USD) kendisi seçer ve değiştirebilir; değişiklik yeni projelere
+   uygulanır, her proje oluşturulduğu andaki ana para birimiyle sabittir, raporlar çevrimle gösterir (ürün sahibi kararı
+   22.11.2026, S-19 — önceki hali: "iç para birimi EUR"). Markup (Kâr÷Alış) ve marj (Kâr÷Satış) her yerde ayrı.
 8. Kurallar/eşikler kodda değil `rules` tablosunda (yönetici değiştirir); `DEFAULT_RULES` yalnız varsayılan.
 9. KVKK: misafir PII şifreli, rıza bazlı saklama, misafir verisi modele gönderilmez.
 
