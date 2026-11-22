@@ -33,6 +33,7 @@ Dokümanlar repodaki kod sözleşmesine dayanır:
 | 06 | [Otomasyon terfisi](06-otomasyon-terfisi.md) | §19.5, §18.12, §16 | Sayaç, 20 temiz onay, 1/20 örneklem, otomatik geri dönüş |
 | 07 | [Mühendislik cevapları](07-muhendislik-cevaplari.md) | §18 (1–17) | 17 sorunun tamamına somut öneri |
 | 08 | [Mobil karar](08-mobil-karar.md) | §19.6, §18.1 | Önce PWA; yerel iOS uygulamasını tetikleyen kriterler |
+| 11 | [Uzman paneli](11-uzman-paneli.md) | PRD v0.5 hazırlığı, 10 hedef | 6 komitenin genel kurulu: birleştirilmiş kararlar (K-01…K-54), v0.5 kapsamı, ürün sahibine sorular (S-01…S-26), ana çatı çelişkileri; komite raporları `panel/` |
 
 Ayrıca: güvenlik incelemesi ve kalan risklerin düzeltilmesi (G-01 … G-21, ürün kararı varsayılanları) — bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md); üretim hazırlığı (Docker/CI) — bkz. ilgili repo dosyaları.
 İş senaryoları kataloğu (102 API senaryosu, PRD § bazında, yeni PRD sürümleriyle genişler) — bkz. [10-senaryolar.md](10-senaryolar.md).
