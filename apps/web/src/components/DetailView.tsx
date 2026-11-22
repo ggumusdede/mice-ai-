@@ -14,7 +14,7 @@ const LABELS: Record<string, string> = {
   prepaymentRate: 'Ön ödeme oranı', depositRate: 'Kapora oranı', dueDate: 'Vade', invoiceNo: 'Fatura no',
   actionType: 'İş türü', consecutiveClean: 'Düzeltmesiz seri', threshold: 'Eşik', question: 'Soru', eventType: 'Etkinlik tipi',
   to: 'Alıcı', subject: 'Konu', body: 'Mesaj', diff: 'Farklar', suppliers: 'Tedarikçiler', userName: 'Kişi', reason: 'Gerekçe',
-  advantage: 'Avantaj', pax: 'Kişi', startDate: 'Başlangıç', endDate: 'Bitiş', options: 'Seçenekler', title: 'Başlık',
+  advantage: 'Avantaj', pax: 'Kişi', startDate: 'Başlangıç', endDate: 'Bitiş', options: 'Seçenekler', title: 'Başlık', totals: 'Toplamlar', optionNo: 'Seçenek no', lines: 'Kalemler', vatEur: 'KDV', accommodationTaxEur: 'Konaklama vergisi', grandTotal: 'Genel toplam', grandTotalEur: 'Genel toplam',
   confidence: 'Güven', field: 'Alan', label: 'Alan', contractValue: 'Sözleşme', quoteValue: 'Teklif', message: 'Açıklama',
   proposedValue: 'Önerilen değer', currentValue: 'Mevcut değer', sampleSize: 'Veri noktası', scope: 'Kapsam', key: 'Kural',
   suggestionKind: 'Öneri türü', months: 'Aylar', tierIndex: 'Kademe no', minAdvantage: 'Min. avantaj', reminderHours: 'Hatırlatma (saat)',
@@ -105,6 +105,26 @@ export function formatValue(key: string, v: unknown): ReactNode {
         </ul>
       );
     }
+    // Rows that themselves contain objects/arrays (e.g. quote options with nested totals) can't be read as a table on a
+    // phone: render them as stacked cards — the item's name as the card title, the rest as aligned label/value rows.
+    const complex = v.some((x) => x && typeof x === 'object' && Object.values(x as Record<string, unknown>).some((y) => y !== null && typeof y === 'object'));
+    if (complex) {
+      return (
+        <div className="dv-cards">
+          {v.map((row, i) => {
+            const r = (row ?? {}) as Record<string, unknown>;
+            const titleKey = ['title', 'name', 'description', 'label'].find((k) => typeof r[k] === 'string' && r[k]);
+            const rest = Object.fromEntries(Object.entries(r).filter(([k]) => k !== titleKey && !(titleKey && k === 'optionNo')));
+            return (
+              <section key={i} className="dv-card">
+                <h4 className="dv-card__title">{titleKey ? String(r[titleKey]) : `${labelFor(key)} ${i + 1}`}</h4>
+                <DetailView data={rest} flat />
+              </section>
+            );
+          })}
+        </div>
+      );
+    }
     const cols = Array.from(new Set(v.flatMap((x) => (x && typeof x === 'object' ? Object.keys(x) : []))))
       .filter((c) => !(/(^id|Id)$/.test(c) && v.every((x) => isUuidish((x as Record<string, unknown>)?.[c]))))
       .slice(0, 6);
@@ -135,18 +155,25 @@ function isUuidish(v: unknown): boolean {
 }
 
 /** Generic, readable rendering of Decision.detail (Record<string, unknown>). */
-export function DetailView({ data, nested = false }: { data: Record<string, unknown>; nested?: boolean }) {
+export function DetailView({ data, nested = false, flat = false }: { data: Record<string, unknown>; nested?: boolean; flat?: boolean }) {
   // internal UUID references (userId, supplierIds, …) mean nothing to the decider
-  const entries = Object.entries(data ?? {}).filter(([k, v]) => !(/(^id|Id|Ids)$/.test(k) && isUuidish(v)));
+  let entries = Object.entries(data ?? {}).filter(([k, v]) => !(/(^id|Id|Ids)$/.test(k) && isUuidish(v)));
+  // `flat`: lift plain nested objects (e.g. totals) into this list so a card reads as one aligned column of figures
+  if (flat) {
+    entries = entries.flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) && !isEvidence(v) ? Object.entries(v as Record<string, unknown>) : [[k, v]]));
+  }
   if (!entries.length) return null;
   return (
-    <dl className={`kv ${nested ? 'kv--nested' : ''}`}>
-      {entries.map(([k, v]) => (
-        <div key={k} className="kv__row">
-          <dt>{labelFor(k)}</dt>
-          <dd>{formatValue(k, v)}</dd>
-        </div>
-      ))}
+    <dl className={`kv ${nested ? 'kv--nested' : ''} ${flat ? 'kv--figures' : ''}`}>
+      {entries.map(([k, v]) => {
+        const block = Array.isArray(v) && v.some((x) => x !== null && typeof x === 'object');
+        return (
+          <div key={k} className={`kv__row ${block ? 'kv__row--block' : ''} ${typeof v === 'number' ? 'kv__row--num' : ''}`}>
+            <dt>{labelFor(k)}</dt>
+            <dd>{formatValue(k, v)}</dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }
