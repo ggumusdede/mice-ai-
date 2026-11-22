@@ -796,3 +796,13 @@ tr.diff th { font-weight: 600; }
 .proj-info .field__hint { margin-top: 4px; }
 .docgen { display: flex; gap: 8px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 0.5px solid var(--border); }
 .docgen .select { flex: 1; min-width: 0; }
+
+/* §8 Veri aktarımı (initial import verification table) */
+.import-issues { margin: 0; padding-left: 1rem; }
+.import-issue--error { color: var(--danger, #b42318); }
+.import-issue--warning { color: var(--warning, #b54708); }
+.import-issue--info { color: var(--muted, #667085); }
+.import-group th { background: var(--neutral-tint); text-align: left; }
+.import-row--error td { background: color-mix(in srgb, #f04438 6%, transparent); }
+.data-import .row-end { gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; }
+.import-commit { border-top: 1px solid var(--border, #e4e7ec); padding-top: 0.75rem; }

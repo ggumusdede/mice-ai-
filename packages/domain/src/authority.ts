@@ -1,8 +1,9 @@
 // §4 + §17.1 Kişi bazlı yetki ve vekâlet
 import type { DecisionKind, Delegation, Role, User } from '@mice/shared';
 
-/** Decision kinds that ONLY the admin can decide (never a delegate): accreditation, rule/threshold/authority changes, automation promotion, rule suggestions, checklist questions. */
-export const ADMIN_ONLY_DECISIONS: DecisionKind[] = ['supplier_accreditation', 'automation_promotion', 'rule_suggestion', 'checklist_question'];
+/** Decision kinds that ONLY the admin can decide (never a delegate): accreditation, rule/threshold/authority changes, automation promotion, rule suggestions, checklist questions.
+ *  low_supplier_score is an accreditation decision too (§7 Adım 8 "akreditasyon kararı yöneticide": its Düzelt passivates the supplier). */
+export const ADMIN_ONLY_DECISIONS: DecisionKind[] = ['supplier_accreditation', 'automation_promotion', 'rule_suggestion', 'checklist_question', 'low_supplier_score'];
 
 /** (additive) Active delegation for `userId` at `now` (startsAt <= now <= endsAt), if any. */
 export function activeDelegation(userId: string, delegations: Delegation[], now: Date): Delegation | null {

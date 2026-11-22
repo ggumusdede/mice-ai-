@@ -86,7 +86,7 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
 
   // ---------------- projects
   app.get('/api/projects', auth, async (req) => {
-    const q = parse(z.object({ q: z.string().optional(), outcome: z.string().optional(), step: z.coerce.number().int().min(0).max(8).optional() }), req.query);
+    const q = parse(z.object({ q: z.string().optional(), outcome: z.string().optional(), step: z.coerce.number().int().min(0).max(8).optional(), historical: z.enum(['exclude', 'include', 'only']).optional() }), req.query);
     return asUser(req, async (ctx) => list(await listProjects(ctx, q)));
   });
   app.get('/api/projects/:id', auth, async (req) => {

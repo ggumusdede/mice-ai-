@@ -14,6 +14,10 @@ export function BottomSheet({
   const titleId = useId();
   const [dragY, setDragY] = useState(0);
   const startY = useRef<number | null>(null);
+  // parents pass inline closures; keep the latest in a ref so a parent re-render (e.g. the inbox poll) does not re-run the
+  // effect below — that used to restore focus and then steal it back to the first control while the user was typing
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -25,7 +29,7 @@ export function BottomSheet({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       } else if (e.key === 'Tab') {
         const f = focusables();
         if (!f.length) return;
@@ -48,7 +52,7 @@ export function BottomSheet({
       document.body.style.overflow = overflow;
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

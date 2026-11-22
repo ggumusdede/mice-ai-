@@ -1,0 +1,4 @@
+Proje kodu;Başlık;Müşteri;Etkinlik türü;Başlangıç;Bitiş;Kişi;Şehir;Semt;Mekân;Sonuç;Kayıp nedeni
+E2E-{{RUN}}-1;Bayi toplantısı (geçmiş);Marmara Teknoloji A.Ş.;toplantı;{{D:-120}};{{D:-118}};80;İstanbul;Kadıköy;Kuzguncuk Konak {{RUN}};kazanıldı;
+E2E-{{RUN}}-2;Lansman (geçmiş);Boğaziçi Enerji {{RUN}} A.Ş.;lansman;{{D:-200}};{{D:-200}};90;İstanbul;Üsküdar;;kaybedildi;Fiyat yüksek bulundu
+E2E-{{RUN}}-3;Çok eski kongre;Marmara Teknoloji A.Ş.;kongre;{{D:-700}};{{D:-698}};200;İstanbul;Şişli;;kazanıldı;

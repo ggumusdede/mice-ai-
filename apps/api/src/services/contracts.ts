@@ -363,7 +363,11 @@ export async function amendContract(ctx: Ctx, id: string, input: { changes: Part
   const oldF = c.fields as ContractFields;
   const before = oldF.totalAmount != null && oldF.currency ? toEur(fx, oldF.totalAmount, oldF.currency) : 0;
   const after = fields.totalAmount != null && fields.currency ? toEur(fx, fields.totalAmount, fields.currency) : before;
-  const sale = (await ctx.db.query(`SELECT COALESCE(sum(amount_eur), 0) AS s FROM finance_entries WHERE contract_id = $1 AND kind = 'receivable' AND status <> 'cancelled'`, [id])).rows[0].s;
+  // sale = NET (ex VAT / accommodation tax) sale of the contract's items in the accepted option — same basis as the supplier
+  // contract total, so margin (Kâr÷Satış) is not overstated by the VAT inside the receivable
+  const sale = (await ctx.db.query(
+    `SELECT COALESCE(sum(ql.unit_price_eur * ql.quantity * GREATEST(COALESCE(ql.nights, 1), 1)), 0) AS s FROM quote_lines ql JOIN quotes q ON q.id = ql.quote_id
+      WHERE q.id = $1 AND ql.option_no = q.accepted_option_no AND ql.service_item_id = ANY($2::uuid[])`, [c.quote_id, c.service_item_ids])).rows[0].s;
   const impact = changeImpact({ costEur: before, saleEur: Number(sale) }, { costEur: after, saleEur: Number(sale) }, rules.targetMarginMin);
   const p = await getProjectRow(ctx, c.project_id);
   await ctx.db.query(

@@ -8,6 +8,7 @@ import { dailySummary, markEndedEvents } from './services/operations.js';
 import { createDraft } from './services/drafts.js';
 import { notifyUnbilledPayment } from './services/finance.js';
 import { runOutboxJobs } from './services/delivery.js';
+import { runCriticalPushFallback } from './services/critical-fallback.js';
 import { runWeeklyRuleSuggestions } from './services/rule-suggestions.js';
 
 /** Before the follow-up scheduler: state the scheduler depends on. */
@@ -27,7 +28,9 @@ export async function runPostJobs(ctx: Ctx, now: Date, followupsDone: { type: st
   out.push(...(await dailySummaryDrafts(ctx, now)));
   const digests = await flushNotificationDigests(ctx, now);
   if (digests) out.push(`notification_digests:${digests}`);
-  // SMTP: deliver queued / retry failed e-mails, notify when given up
+  // §15: critical push not opened in N minutes → WhatsApp / SMS to the admin (idempotent)
+  out.push(...(await runCriticalPushFallback(ctx, now)));
+  // SMTP / OAuth mailbox / WhatsApp / SMS: deliver queued / retry failed messages, notify when given up
   out.push(...(await runOutboxJobs(ctx, now)));
   // §16.5 weekly rule-suggestion generator (idempotent; admin-only decisions)
   out.push(...(await runWeeklyRuleSuggestions(ctx, now)));

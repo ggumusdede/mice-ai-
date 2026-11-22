@@ -61,7 +61,7 @@ function QuoteBuilder() {
   const { isAdmin } = useAuth();
   const { detail, reload } = useProject();
   const { byId } = useSuppliers();
-  const items = detail.items;
+  const items = detail.items.filter((i) => i.status !== 'cancelled'); // cancelled items are never quoted (server: OFFER_REQUIRED)
   const [currency, setCurrency] = useState<string>(detail.customer?.rules.preferredCurrency ?? 'EUR');
   const [options, setOptions] = useState<OptionState[]>(() => {
     const n = Math.max(DEFAULT_RULES.quoteOptionsMin, Math.min(DEFAULT_RULES.quoteOptionsMax, Math.max(...items.map((i) => offersForItem(i).length), 1)));

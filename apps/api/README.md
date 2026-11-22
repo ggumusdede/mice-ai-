@@ -49,11 +49,16 @@ Demo logins (password `demo1234`): `admin@demo.test`, `clerk@demo.test` (sales, 
 | `TRUST_PROXY` | – | `1` behind nginx/LB (real client IP for rate limits) or proxy CIDR list |
 | `SHUTDOWN_TIMEOUT_MS` | 15000 / 30000 | API / worker hard-exit timeout after SIGTERM |
 | `APP_DB_PASSWORD` | – | `migrate:deploy` sets the `mice_app` password (owner connection) |
-| `EMAIL_PROVIDER` | `outbox` | `smtp` → `SmtpEmailProvider` (nodemailer) |
+| `EMAIL_PROVIDER` | `outbox` | `smtp` → `SmtpEmailProvider` (nodemailer); `oauth` → `OAuthEmailProvider` (each user's own Gmail / Microsoft mailbox) |
+| `OAUTH_GOOGLE_CLIENT_ID/SECRET`, `OAUTH_MICROSOFT_CLIENT_ID/SECRET/TENANT`, `MAIL_OAUTH_REDIRECT_BASE`, `MAIL_OAUTH_STATE_TTL_SECONDS`, `MAIL_TOKEN_KEY`, `MAIL_OAUTH_REQUIRE_SAME_ADDRESS`, `MAIL_API_TIMEOUT_MS` | –, `organizations`, `PUBLIC_BASE_URL`, 600, `OUTBOX_DATA_KEY`, 1, 15000 | per-user mailbox connect flow (any `EMAIL_PROVIDER`) |
+| `EMAIL_OAUTH_FALLBACK`, `EMAIL_OAUTH_HOLD_MAX_HOURS` | `outbox`, 72 | `oauth` + sender not connected: `smtp` \| `outbox` \| `hold` (queued + sender notified) |
 | `EMAIL_SEND_MODE` | `immediate` | `queue` → only the worker talks to SMTP |
 | `SMTP_HOST/PORT/SECURE/USER/PASS`, `SMTP_ENVELOPE_FROM`, `SMTP_TLS_REJECT_UNAUTHORIZED`, `SMTP_*_TIMEOUT_MS` | `587`, STARTTLS | |
 | `EMAIL_REPLY_ADDRESS`, `EMAIL_MESSAGE_ID_DOMAIN`, `EMAIL_MAX_ATTEMPTS`, `OUTBOX_DATA_KEY` | –, reply domain, 8, `GUEST_DATA_KEY` | reply linking / retry payload key |
-| `MESSAGING_PROVIDER`, `WHATSAPP_PHONE_NUMBER_ID/TOKEN/API_VERSION` | `outbox` | WhatsApp Cloud API is a skeleton (not live) |
+| `MESSAGING_PROVIDER`, `WHATSAPP_PHONE_NUMBER_ID/TOKEN/API_VERSION/TIMEOUT_MS` | `outbox` | `whatsapp_cloud` → live Cloud API sending (`LiveMessagingProvider`) |
+| `WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_TEMPLATE_{FIELD_EXTRA,QUOTE_REMINDER,CRITICAL_ALERT}[_LANGUAGE]`, `WHATSAPP_TEMPLATE_FIELD_EXTRA_URL_BUTTON`, `MESSAGING_MAX_ATTEMPTS` | `tr`, `field_extra_approval` / `quote_reminder` / `critical_alert`, 0, 6 | Meta-approved template names (docs/07 §7) |
+| `SMS_PROVIDER`, `SMS_API_URL/USER/PASSWORD`, `SMS_SENDER`, `SMS_ENCODING`, `SMS_IYS_FILTER`, `SMS_TIMEOUT_MS` | `none`, …, `TR`, `0`, 10000 | `http` → generic TR gateway (Netgsm-style REST JSON; vendor [Doğrulanmalı]) |
+| `CRITICAL_FALLBACK`, `CRITICAL_FALLBACK_MAX_AGE_HOURS` | on, 24 | §15 fallback kill switch (`off`); minutes = rule `criticalPushFallbackMinutes` (15, 0 = off) |
 | `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_TENANT`, `WHATSAPP_MAX_BYTES` | –, –, `demo`, 1 MB | inbound WhatsApp webhook (no secret → every POST is 401, no token → GET 403) |
 | `INBOUND_EMAIL_SECRET`, `INBOUND_EMAIL_TENANT` | –, `demo` | env HMAC secret, used ONLY for that tenant when it has no `inbound_channels` row |
 | `INBOUND_REPLAY_WINDOW_SECONDS`, `INBOUND_EMAIL_MAX_BYTES`, `INBOUND_ATTACHMENT_MAX_BYTES`, `INBOUND_MAX_ATTACHMENTS`, `INBOUND_ATTACHMENTS_TOTAL_MAX_BYTES`, `INBOUND_RATE_LIMIT` | 300 s, 25 MB, 10 MB, 10, 20 MB, 300/min | |
@@ -127,9 +132,37 @@ approval/paid columns and two more DB guards: **a finance entry can only become 
   `Message-ID <outbox-id@domain>`, `In-Reply-To`/`References` (previous message to the same recipient in the project),
   `X-MICE-Project`, plus-addressed `Reply-To` (`replies+prj-0042@…`), `Auto-Submitted` for autonomous messages. Outbox row
   (redacted) + `outbox_payloads` (pgcrypto, purged after delivery, not audited); exponential backoff, SMTP 5xx = permanent.
-  `email-oauth.ts` — `GmailApiProvider` / `GraphMailProvider` sketches (not implemented).
-- `src/services/messaging.ts` — `MessagingProvider`, `OutboxMessagingProvider`, `WhatsAppCloudProvider` skeleton,
-  `normalizeMsisdn`, `whatsappTemplatePayload`.
+- **Per-user OAuth mailboxes** (`EMAIL_PROVIDER=oauth`; migration `016_outbound_integrations.sql`) — *implemented, unit-tested
+  with mocked HTTP, NOT tested against live Google / Microsoft accounts.* `services/mail-accounts.ts`: connect flow
+  `GET /api/mail/oauth/:provider/start` (JWT → `{url}`; HMAC-signed `state` {tenant, user, provider, nonce, exp}, TTL 10 min;
+  PKCE S256 verifier kept server-side encrypted in `mail_oauth_states`, single use), `GET /api/mail/oauth/:provider/callback`
+  (state signature / expiry / provider / single use checked before any token request; code + verifier exchange; mailbox
+  address from userinfo / Graph `/me` must equal the user's login e-mail; always 302 to `/?mail_oauth=connected|error&reason=…`),
+  `GET /api/mail/accounts`, `POST /api/mail/accounts/:id/disconnect` (own or admin; status `disconnected`, tokens emptied, Google
+  revoke; no DELETE). Tables: `user_mail_accounts` (audited, no secrets), `user_mail_tokens` (pgcrypto `MAIL_TOKEN_KEY`, not
+  audited), `mail_oauth_states` (not audited). `OAuthTokenStore`: cached access token, refresh grant (rotation stored),
+  `invalid_grant` → `needs_reauth` + user notified, transient → backoff (`next_refresh_at`). `email-oauth.ts`:
+  `OAuthEmailProvider` → `GmailApiProvider` (`users/me/messages/send` raw RFC 822 + `threadId`) / `GraphMailProvider`
+  (MIME `POST /me/messages` + `/send`; `internetMessageId` / `conversationId` stored); MIME from `buildMail()` (same Message-ID /
+  In-Reply-To / References / X-MICE-Project / Reply-To as SMTP); 401 → forced refresh + one retry; 429/5xx → worker retry; sender
+  without mailbox → `EMAIL_OAUTH_FALLBACK` (`smtp` / `outbox` delegate, `hold` = queued + notified, delivered after connecting).
+  Web: profile sheet "E-posta hesabını bağla (Google / Microsoft)" (`components/MailAccountConnect.tsx`).
+- `src/services/messaging.ts` — `MessagingProvider`, `OutboxMessagingProvider`, `normalizeMsisdn`, payload builders, and — *implemented,
+  mocked-HTTP tested, NOT tested against a live WABA / SMS account* — `WhatsAppCloudProvider` (Graph `/{phone-number-id}/messages`,
+  Bearer only), `HttpSmsProvider` (generic TR gateway: JSON `{msgheader, encoding, iysfilter, messages:[{msg, no}]}`, Basic auth,
+  `{code:'00', jobid}`; codes 20/30/40/50/51/70 permanent, 80/85/1xx + 429/5xx retried — Netgsm-style, vendor [Doğrulanmalı]),
+  `LiveMessagingProvider` (redacted outbox row + encrypted retry payload, worker retry with backoff). Routing: field-extra approval
+  (resolved from the draft) → WhatsApp template `field_extra_approval` (body params customer, project code, description, amount,
+  sender name; button 0 quick reply payload `extra_approve:<token>` = the inbound handler's format; optional URL button 1 `/e/{{1}}`),
+  inside the 24 h window an interactive reply button with the same id; `quote_followup` drafts on WhatsApp → `quote_reminder`;
+  plain WhatsApp text only inside the window; permanent WhatsApp failure → one SMS; no WhatsApp → SMS; nothing live → outbox as before.
+  `applyWhatsAppStatuses`: the inbound webhook's `statuses[]` set `outbox.delivery_status` sent → delivered → read (never downgraded)
+  or `failed` (sender + admin notified by `runOutboxJobs`).
+- **§15 critical fallback** — `services/critical-fallback.ts` (worker post-job): critical notifications of admins not opened within
+  rule `criticalPushFallbackMinutes` (default 15) and younger than 24 h, whose decision is still open → ONE WhatsApp (`critical_alert`
+  template) / SMS to `users.notify_phone` per pass; `fallback_at` set in the same transaction (`SKIP LOCKED`, idempotent). Opened =
+  service worker POSTs the signed `ackUrl` from the push payload (`POST /api/push/ack/:token`) or `POST /api/notifications/:id/ack`.
+  Own number: `GET/POST /api/me/notify-phone`. Internal alert from `system` (not a message on behalf of a human).
 - `src/services/push.ts` + `routes/push.ts` — `WebPushNotificationService` (`web-push`, VAPID) behind `NotificationService`:
   `GET /api/push/vapid-public-key`, `POST /api/push/subscribe` (upsert per endpoint, endpoint host allow-list),
   `POST /api/push/unsubscribe` (active=false — no DELETE). Critical → immediate (urgency high); routine → digest
@@ -140,7 +173,8 @@ approval/paid columns and two more DB guards: **a finance entry can only become 
 - `src/db/bootstrap.ts` — `migrate:deploy`; migration `006_delivery_channels.sql` (outbox delivery columns, `outbox_payloads`,
   `push_subscriptions`, `GRANT SELECT ON schema_migrations TO mice_app`; tenant FKs added by 008).
 - Container: `apps/api/Dockerfile` (+ `docker/api-entrypoint.sh`: `serve | migrate | worker | seed`), see root README → Dağıtım.
-- Tests: `test/delivery.test.ts` (mocked nodemailer transport and web-push sender).
+- Tests: `test/delivery.test.ts` (mocked nodemailer transport and web-push sender), `test/integrations-mail.test.ts`,
+  `test/integrations-messaging.test.ts` (all HTTP mocked via `setIntegrationFetch`).
 
 ## Inbound e-mail / WhatsApp, e-Fatura (migration `011_inbound_channels.sql`)
 
@@ -185,7 +219,7 @@ projeye ait?" notification. Attachments: allow-list pdf/xlsx/csv/txt/xml/png/jpg
 **WhatsApp** — text from a known customer contact (phone normalized E.164) or a number that already opened a project → attached to
 its open project (same classifier/task); otherwise → intake (channel whatsapp). Quick-reply / interactive button payload
 `extra_approve:<one-time token>` → `publicApproveExtra` (same as `/e/<token>`), refused when the sender number differs from the
-extra's `customer_phone`. Media are not downloaded (needs the Graph media API) — stored as a note. Status callbacks are ignored.
+extra's `customer_phone`. Media are not downloaded (needs the Graph media API) — stored as a note. Status callbacks update the outbox delivery receipt (`statuses` in the response).
 
 **IMAP (`src/inbound-imap.ts`)** — `INBOUND_EMAIL_MODE=imap npm run inbound:imap -w apps/api`: imapflow, UNSEEN → mailparser → the
 same router → `\Seen` (or move to `IMAP_PROCESSED_MAILBOX`); failures stay UNSEEN and are retried. One instance per mailbox.

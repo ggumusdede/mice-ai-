@@ -275,3 +275,45 @@ export interface UnreflectedTotals {
 }
 export type CloseProjectResponse = Project & { surveyUrl: string | null; effects: string[] };
 export interface GenerateDocumentRequest { kind: 'program' | 'rooming_list' | 'pnl' }
+
+// ---------- §8 İlk veri yükü (initial historical import, ADDITIVE; admin only) ----------
+// GET   /api/import/templates/:entity?format=xlsx|csv   -> template file (header + example row)
+// GET   /api/import/batches                             -> List<ImportBatch>
+// POST  /api/import/batches          body {label?}      -> ImportBatch
+// GET   /api/import/batches/:id                         -> ImportBatchDetail
+// POST  /api/import/batches/:id/files  multipart {entity, file} | body {entity, fileName, csv | dataBase64} -> ImportBatchDetail
+// PATCH /api/import/rows/:id         body {input}       -> ImportBatchDetail   (inline edit; review → pending, revalidated)
+// POST  /api/import/batches/:id/review body ImportReviewRequest -> ImportBatchDetail
+// POST  /api/import/batches/:id/revalidate              -> ImportBatchDetail
+// POST  /api/import/batches/:id/commit                  -> ImportBatchDetail (approved rows → live tables, one transaction)
+// POST  /api/import/batches/:id/abandon body {reason?}  -> ImportBatch
+// GET   /api/projects?historical=exclude|include|only   (default exclude: imported past projects never show in active lists)
+export type ImportEntityName = 'suppliers' | 'customers' | 'projects' | 'service_lines' | 'price_points' | 'channel_prices';
+export type ImportRowStatusName = 'ok' | 'warning' | 'error';
+export type ImportReview = 'pending' | 'approved' | 'rejected';
+export interface ImportIssueView { code: string; severity: 'error' | 'warning' | 'info'; message: string; field?: string }
+export interface ImportBatch {
+  id: ID; label: string | null; status: 'open' | 'committed' | 'abandoned';
+  summary: ImportSummary; createdBy: ID; createdAt: string; committedAt: string | null; committedBy: ID | null;
+  abandonedAt: string | null; abandonReason: string | null;
+}
+export interface ImportSummary {
+  rows: number; ok: number; warning: number; error: number; pending: number; approved: number; rejected: number;
+  byEntity: Partial<Record<ImportEntityName, { rows: number; ok: number; warning: number; error: number; approved: number; pending: number }>>;
+  committed?: Partial<Record<ImportEntityName, { created: number; linked: number }>>;
+  windowMonths?: number; windowStart?: string;
+}
+export interface ImportFile { id: ID; entity: ImportEntityName; fileName: string; rowCount: number; unknownHeaders: string[]; createdAt: string }
+export interface ImportRow {
+  id: ID; fileId: ID; entity: ImportEntityName; rowNo: number; input: Record<string, string | number | null>;
+  data: Record<string, unknown>; status: ImportRowStatusName; issues: ImportIssueView[]; review: ImportReview;
+  resolved: Record<string, unknown>; committedEntityId: ID | null; committedAction: 'created' | 'linked' | null;
+}
+export interface ImportBatchDetail { batch: ImportBatch; files: ImportFile[]; rows: ImportRow[] }
+export interface ImportReviewRequest {
+  action: 'approve' | 'reject' | 'reset';
+  rowIds?: ID[];
+  /** bulk: every row of these statuses (error rows are never approved) */
+  statuses?: ImportRowStatusName[];
+  entity?: ImportEntityName;
+}

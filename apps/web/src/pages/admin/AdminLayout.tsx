@@ -15,6 +15,7 @@ export function AdminLayout() {
     ['kontrol-listesi', t.admin.checklist],
     ['tedarikciler', t.admin.suppliers],
     ['musteriler', t.admin.customers],
+    ['veri-aktarimi', 'Veri aktarımı'],
   ] as const;
   return (
     <div className="page">

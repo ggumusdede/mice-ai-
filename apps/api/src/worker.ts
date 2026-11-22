@@ -32,7 +32,9 @@ export const RFQ_REMINDER_TEMPLATE: Record<string, (v: { contact: string; code: 
 async function buildState(ctx: Ctx, now: Date): Promise<FollowupState> {
   const q = (sql: string) => ctx.db.query(sql).then((r) => r.rows);
   const rfqs = await q(`SELECT id, status, sent_at, reminder_sent_at, call_task_created_at, reminder_hours, call_hours FROM rfqs WHERE status = 'sent'`);
-  const quotes = await q(`SELECT id, status, sent_at, option_until, last_followup_at FROM quotes WHERE status = 'sent'`);
+  // a lost / closed project gets no customer follow-up (§7 Adım 4: kaybedildi kaydı takibi bitirir)
+  const quotes = await q(`SELECT q.id, q.status, q.sent_at, q.option_until, q.last_followup_at FROM quotes q JOIN projects p ON p.id = q.project_id
+                          WHERE q.status = 'sent' AND p.outcome = 'open'`);
   const offers = await q(`SELECT o.id, o.option_until, o.alarmed_at, (si.selected_offer_id = o.id) AS selected FROM supplier_offers o
                           JOIN service_items si ON si.id = o.service_item_id JOIN projects p ON p.id = o.project_id
                           WHERE o.superseded_by IS NULL AND o.option_until IS NOT NULL AND p.outcome IN ('open','won') AND si.status <> 'confirmed'`);

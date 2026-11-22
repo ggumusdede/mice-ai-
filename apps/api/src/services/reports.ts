@@ -73,7 +73,7 @@ export async function weeklyReport(ctx: Ctx, weekStart?: string): Promise<Weekly
   // won / lost (outcome transitions recorded in the audit log during the week)
   const outcomes = (await ctx.db.query(
     `SELECT DISTINCT ON (entity_id) entity_id, after->>'outcome' AS outcome, after->>'lost_reason' AS lost_reason FROM audit_log
-      WHERE entity = 'projects' AND at >= $1 AND at < $2 AND after->>'outcome' IN ('won','lost')
+      WHERE entity = 'projects' AND at >= $1 AND at < $2 AND after->>'outcome' IN ('won','lost') AND COALESCE((after->>'historical')::boolean, false) = false
         AND (before IS NULL OR before->>'outcome' IS DISTINCT FROM after->>'outcome') ORDER BY entity_id, at DESC`, [from, to])).rows;
   const lostReasons = new Map<string, number>();
   for (const o of outcomes.filter((x) => x.outcome === 'lost')) {

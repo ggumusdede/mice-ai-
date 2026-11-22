@@ -12,6 +12,7 @@ import { errorMessage } from '../api/client';
 import { useOfflineQueue } from '../lib/OfflineQueueProvider';
 import { PushToggle } from './PushToggle';
 import { PasswordChange } from './PasswordChange';
+import { MailAccountConnect } from './MailAccountConnect';
 
 interface NavItem { to: string; label: string; icon: IconName; roles?: Role[]; end?: boolean }
 
@@ -118,6 +119,7 @@ export function AppShell() {
         ) : null}
         <div className="stack">
           <PushToggle />
+          <MailAccountConnect />
           <PasswordChange />
           {webauthnSupported() ? (
             <input

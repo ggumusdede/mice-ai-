@@ -96,6 +96,11 @@ export interface TenantRules {
   /** §16.5 scoped overrides (default empty → behaviour unchanged) */
   supplierSeasonMarkups: SupplierSeasonMarkup[];
   supplierRfqHours: SupplierRfqHours[];
+  /** §15 / docs/07 §1: a critical push not opened within N minutes → WhatsApp / SMS fallback to the admin (0 = off) */
+  criticalPushFallbackMinutes: number;
+  /** §8 İlk veri yükü: only projects / prices closed within the last N months are imported (older rows are flagged and
+   *  excluded). PRD: "yalnızca son 12–18 ayın kapanmış projeleri". Admin changes it in Kurallar. */
+  initialImportWindowMonths: number;
 }
 
 export const DEFAULT_RULES: TenantRules = {
@@ -139,6 +144,8 @@ export const DEFAULT_RULES: TenantRules = {
   quoteOptionsMax: 3,
   supplierSeasonMarkups: [],
   supplierRfqHours: [],
+  criticalPushFallbackMinutes: 15,
+  initialImportWindowMonths: 18,
 };
 
 export type RuleKey = keyof TenantRules;

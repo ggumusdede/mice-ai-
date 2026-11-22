@@ -88,7 +88,7 @@ describe('delivery config & pure helpers', () => {
     expect(isPermanentSmtpError(new Error('ECONNRESET'))).toBe(false);
   });
 
-  it('messaging: E.164 normalisation and WhatsApp template payload (skeleton not live)', async () => {
+  it('messaging: E.164 normalisation and WhatsApp template payload', async () => {
     expect(normalizeMsisdn('0532 123 45 67')).toBe('+905321234567');
     expect(normalizeMsisdn('5321234567')).toBe('+905321234567');
     expect(normalizeMsisdn('+49 151 2345678')).toBe('+491512345678');
@@ -98,8 +98,9 @@ describe('delivery config & pure helpers', () => {
     expect((p.template as any).components).toHaveLength(2);
     const wa = new WhatsAppCloudProvider({ phoneNumberId: '123', token: null, apiVersion: 'v21.0' });
     expect(wa.buildRequest({ tenantId: 't', channel: 'whatsapp', from: 'a', to: '+905321234567', body: '', template: { name: 'x', language: 'tr', params: [] } }).url).toBe('https://graph.facebook.com/v21.0/123/messages');
-    await expect(wa.send(null as never, { tenantId: 't', channel: 'whatsapp', from: 'a', to: 'b', body: '' })).rejects.toThrow(/not live/);
-    await expect(new GmailApiProvider({ accessToken: async () => null }).send(null as never, null as never)).rejects.toThrow(/not implemented/);
+    // live implementation (integrations-*.test.ts); without a token it refuses instead of calling Meta
+    await expect(wa.send(null as never, { tenantId: 't', channel: 'whatsapp', from: 'a', to: 'b', body: '' })).rejects.toThrow(/not configured/);
+    expect(new GmailApiProvider().name).toBe('gmail_api');
   });
 
   it('push endpoint SSRF guard, payload, URL redaction, trust proxy', () => {

@@ -44,7 +44,7 @@ export function isAllowedPushEndpoint(endpoint: string, allowedHosts: string[]):
 export function pushPayload(msg: PushMessage, minimal: boolean): string {
   const title = minimal ? 'MICE OS' : msg.title;
   const body = minimal ? (msg.priority === 'digest' ? 'Rutin bildirim özetiniz hazır' : 'Karar kutunuzda yeni bir iş var') : msg.body ?? '';
-  return JSON.stringify({ title, body, url: msg.url ?? '/', priority: msg.priority, tag: msg.priority === 'digest' ? 'mice-digest' : undefined });
+  return JSON.stringify({ title, body, url: msg.url ?? '/', priority: msg.priority, tag: msg.priority === 'digest' ? 'mice-digest' : undefined, ack: msg.ackUrl });
 }
 
 const MAX_FAILURES = 10;

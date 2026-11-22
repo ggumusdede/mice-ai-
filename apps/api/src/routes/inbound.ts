@@ -112,7 +112,7 @@ export async function inboundRoutes(app: FastifyInstance): Promise<void> {
     }
     const payload = whatsappWebhookSchema.parse(jsonOf(raw));
     const r = await processWhatsAppWebhook(app.deps, payload, cfg.whatsapp);
-    return { ok: true, processed: r.processed, ignored: r.ignored };
+    return { ok: true, processed: r.processed, ignored: r.ignored, statuses: r.statuses ?? 0 };
   });
 }
 

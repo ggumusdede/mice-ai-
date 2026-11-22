@@ -19,7 +19,7 @@
 **Öneri:**
 
 1. Faz 1 PWA olarak ilerlesin.
-2. Kritik bildirimler (opsiyon bitimi, acil ödeme, sözleşme riski) **iki kanaldan** gitsin: Web Push, yanıt gelmezse 15 dakika sonra WhatsApp veya SMS.
+2. Kritik bildirimler (opsiyon bitimi, acil ödeme, sözleşme riski) **iki kanaldan** gitsin: Web Push, yanıt gelmezse 15 dakika sonra WhatsApp veya SMS. *(Uygulandı: kural `criticalPushFallbackMinutes`, `services/critical-fallback.ts`; yöneticinin profilindeki yedek telefonuna; canlı hesaplarla test edilmedi.)*
 3. Push teslim ve açılma oranı ölçülsün.
 4. Native uygulama ihtiyacı 08'deki kriterlerle değerlendirilsin. Küçük bir SwiftUI uygulamasının tahmini maliyeti: 1 iOS geliştirici × 5–8 hafta + Apple Developer Program yıllık ücreti [Doğrulanmalı] + bakım.
 
@@ -151,7 +151,7 @@ Bu sınırlar avukat değerlendirmesine ve aydınlatma metinlerine girdi olmalı
 4. **AI önerisi (Haiku):** Bağlanamayan mesaj için aday projeler önerilir. Güven eşik altıysa kullanıcıya "Bu mail hangi projeye ait?" kartı gelir.
 
 - Kişisel mailler: Yalnızca bilinen müşteri/tedarikçi alan adlarından gelen veya proje etiketi taşıyan mailler içe alınır. Kullanıcı "hariç tut" kuralı tanımlayabilir (gizlilik).
-- (Hedef tasarım; kullanıcı bazlı OAuth henüz yok — bugün `outbox` + isteğe bağlı SMTP "send as" rölesi, `services/email-smtp.ts`; OAuth taslağı `services/email-oauth.ts`.) Belirteçler önerilen `mail_accounts.refresh_token_enc` alanında zarf şifrelemesiyle saklanır. Kullanıcı ayrıldığında erişim iptal edilir ve sorumluluk yeni kullanıcıya devredilir.
+- **Kod durumu:** kullanıcı bazlı OAuth gönderimi uygulandı (`EMAIL_PROVIDER=oauth`, `services/email-oauth.ts`, `services/mail-accounts.ts`, migration `016`); **canlı Google / Microsoft hesaplarıyla henüz test edilmedi.** Bağlanan posta kutusu kullanıcının giriş adresiyle aynı olmalı (`MAIL_OAUTH_REQUIRE_SAME_ADDRESS`). Belirteçler `user_mail_tokens` tablosunda pgcrypto ile (`MAIL_TOKEN_KEY`, anahtar DB dışında) saklanır, denetim kaydına girmez. Kullanıcı ayrıldığında hesap `disconnected` yapılır (silinmez), Google belirteci iptal edilir; bağlı olmayan kullanıcı için `EMAIL_OAUTH_FALLBACK` = `smtp` / `outbox` / `hold`. Gelen posta için Gmail `users.watch` / Graph abonelikleri ⛔. [Doğrulanmalı] Gmail'in istemcinin verdiği Message-ID'yi koruduğu; Exchange Online değiştirirse Graph'ın `internetMessageId` değeri saklanır.
 
 ---
 
@@ -167,7 +167,20 @@ Bu sınırlar avukat değerlendirmesine ve aydınlatma metinlerine girdi olmalı
 | Ön koşullar | Meta Business hesabı doğrulaması (işletme belgeleri), görünen ad onayı, ödeme yöntemi. **2–6 hafta sürebilir**, bu yüzden Faz 1'in ilk haftasında başlatılmalı |
 | Şablon onayı | Şablonlar Meta tarafından incelenir (genelde dakikalar ile 1 gün arası). Faz 1 şablonları: eksik bilgi sorusu, teklif hazır (link), opsiyon hatırlatma, saha ekstra onay linki. TR, EN ve RU sürümleri ayrı şablondur |
 | Projeye bağlama | Gelen mesaj → `inbound_messages(channel='whatsapp')` → Haiku sınıflandırma. Telefon numarası müşteri kontağıyla eşleşir |
+| Kod durumu | Gönderim uygulandı (`MESSAGING_PROVIDER=whatsapp_cloud`, `services/messaging.ts`); **canlı WABA ile test edilmedi.** Pencere dışında yalnız onaylı şablon; pencere içinde (son 24 saatte numaradan gelen mesaj) onaylı taslak metni / etkileşimli buton. Kalıcı hata (ör. WhatsApp kullanıcısı değil) → SMS. Durum webhook'u → `outbox.delivery_status` |
 | İnsan imzası | Gönderim yalnızca onaylı taslaktan yapılır. Mesaj acentanın işletme hesabından gider; "kişinin kendi adresi" ilkesi WhatsApp'ta işletme numarası + imza satırında kişinin adı olarak uygulanır [Ürün kararı] |
+
+**Meta şablon onayı — adımlar (canlıya geçmeden önce):**
+
+1. Meta Business hesabı doğrulaması, WABA + telefon numarası, görünen ad onayı; Business Manager → Sistem kullanıcısı → `whatsapp_business_messaging` izinli kalıcı belirteç → `WHATSAPP_TOKEN`; numaranın kimliği → `WHATSAPP_PHONE_NUMBER_ID`; uygulama gizli anahtarı → `WHATSAPP_APP_SECRET`, webhook doğrulama → `WHATSAPP_VERIFY_TOKEN` (`/api/inbound/whatsapp`, alan `messages` — durum bildirimleri de bu alandan gelir).
+2. WhatsApp Manager → Mesaj şablonları → oluştur (kategori **Utility**), her dil ayrı şablon (TR / EN / RU; adlar `WHATSAPP_TEMPLATE_*`):
+   - `field_extra_approval`: gövde `Merhaba {{1}}, {{2}} etkinliğiniz için "{{3}}" ek hizmeti {{4}}. Onaylıyorsanız aşağıdaki butona dokunun. — {{5}}` (1 müşteri, 2 proje kodu, 3 açıklama, 4 tutar, 5 saha sorumlusunun adı); buton 0 **Hızlı yanıt** "Onaylıyorum" (yük `extra_approve:<token>` gönderimde verilir); isteğe bağlı buton 1 **URL** `https://<alan>/e/{{1}}` → `WHATSAPP_TEMPLATE_FIELD_EXTRA_URL_BUTTON=1`.
+   - `quote_reminder`: `Merhaba {{1}}, {{2}} teklifimizin opsiyonu {{3}} tarihinde doluyor. — {{4}}`.
+   - `critical_alert` (acentanın kendi yöneticisine): `MICE OS: {{1}} kritik bildirim yanıt bekliyor: {{2}}. Karar kutusu: {{3}}`.
+3. Parametre sayısı / buton sırası koddaki ile birebir aynı olmalı (aksi hâlde Meta 132000 hatası verir, mesaj kalıcı hata sayılır ve SMS'e düşer).
+4. Onay süresi genelde dakikalar–1 gün; reddedilirse metni sadeleştirip yeniden gönderin [Doğrulanmalı: güncel Meta politikası, TR fiyatı].
+
+**SMS:** `SMS_PROVIDER=http` genel bir TR ağ geçidi (Netgsm REST v2 tarzı JSON) uygular; **seçilecek satıcı (Netgsm / İleti Merkezi / …), istek biçimi, hata kodları, BTK başlık (gönderici adı) kaydı ve İYS gereksinimi doğrulanmalı [Doğrulanmalı]**; farklıysa yalnız `smsRequest` / yanıt ayrıştırma uyarlanır.
 
 ---
 

@@ -17,6 +17,9 @@ export interface EmailMessage {
   autonomous?: boolean;
   /** project the message belongs to (reply linking / threading in the SMTP provider; derived from draftId when absent) */
   projectId?: string | null;
+  /** sms / whatsapp only: a pre-approved WhatsApp template the live messaging provider may use outside the 24 h window
+   *  (field-extra approval / quote reminder are also derived from the draft; critical_alert is passed by the §15 fallback) */
+  waTemplate?: { key: 'field_extra' | 'quote_reminder' | 'critical_alert'; params: string[]; buttonPayload?: string; urlSuffix?: string } | null;
 }
 
 export interface EmailProvider {

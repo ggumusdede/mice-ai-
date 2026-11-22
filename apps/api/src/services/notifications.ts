@@ -6,6 +6,32 @@ import type { Decision, Role } from '@mice/shared';
 import { localParts, zonedTimeToUtc } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import type { Db } from '../db/pool.js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { purposeKey } from '../lib/signed-token.js';
+
+/** Signed acknowledge token for one notification (no login needed: it can only mark that notification as opened).
+ *  Compact (< 100 chars, Fastify's path-parameter limit): hex(tenant) . hex(notification) . 128-bit HMAC. */
+export function pushAckToken(secret: string, tenantId: string, notificationId: string): string {
+  const body = `${tenantId.replace(/-/g, '')}.${notificationId.replace(/-/g, '')}`;
+  return `${body}.${createHmac('sha256', purposeKey(secret, 'push-ack')).update(body).digest().subarray(0, 16).toString('base64url')}`;
+}
+const uuidOf = (h: string) => `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+export function verifyPushAckToken(secret: string, token: string): { tenantId: string; notificationId: string } | null {
+  const m = /^([0-9a-f]{32})\.([0-9a-f]{32})\.([A-Za-z0-9_-]{22})$/.exec(token);
+  if (!m) return null;
+  const expected = Buffer.from(createHmac('sha256', purposeKey(secret, 'push-ack')).update(`${m[1]}.${m[2]}`).digest().subarray(0, 16).toString('base64url'));
+  const given = Buffer.from(m[3]);
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  return { tenantId: uuidOf(m[1]), notificationId: uuidOf(m[2]) };
+}
+
+/** Marks a notification opened (push click / in-app) — stops the §15 WhatsApp / SMS fallback. */
+export async function ackNotification(db: Db, id: string, via: 'push_click' | 'api', now: Date, userId?: string): Promise<boolean> {
+  const r = await db.query(
+    `UPDATE notifications SET read_at = COALESCE(read_at, $2), status = CASE WHEN status = 'sent' THEN 'read' ELSE status END, acked_via = COALESCE(acked_via, $3)
+      WHERE id = $1 AND ($4::uuid IS NULL OR user_id = $4)`, [id, now, via, userId ?? null]);
+  return (r.rowCount ?? 0) > 0;
+}
 
 export type NotificationPriority = 'critical' | 'routine';
 
@@ -25,6 +51,9 @@ export interface PushMessage {
   tenantId: string; userId: string; title: string; body: string | null; priority: 'critical' | 'digest';
   /** page opened on notificationclick (default: the decision inbox) */
   url?: string;
+  /** critical: notification row id + signed acknowledge link (the service worker POSTs it on click, §15 fallback) */
+  notificationId?: string;
+  ackUrl?: string;
 }
 
 export interface NotificationService {
@@ -83,13 +112,16 @@ export async function notify(ctx: Ctx, n: NotificationInput): Promise<number> {
   const users = await recipients(ctx, n);
   for (const userId of users) {
     const critical = n.priority === 'critical';
-    await ctx.db.query(
+    const row = (await ctx.db.query(
       `INSERT INTO notifications (tenant_id, user_id, project_id, priority, title, body, entity_type, entity_id, status, deliver_after, sent_at)
-       VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+       VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [userId, n.projectId ?? null, n.priority, n.title, n.body ?? null, n.entityType ?? null, n.entityId ?? null,
         critical ? 'sent' : 'pending', critical ? now : nextDigestSlot(now, tz), critical ? now : null],
-    );
-    if (critical) await service.deliver({ tenantId: ctx.tenantId, userId, title: n.title, body: n.body ?? null, priority: 'critical', url: '/' }, ctx.db);
+    )).rows[0];
+    if (critical) {
+      const ackUrl = `/api/push/ack/${pushAckToken(ctx.deps.config.jwtSecret, ctx.tenantId, row.id)}`;
+      await service.deliver({ tenantId: ctx.tenantId, userId, title: n.title, body: n.body ?? null, priority: 'critical', url: '/', notificationId: row.id, ackUrl }, ctx.db);
+    }
   }
   return users.length;
 }

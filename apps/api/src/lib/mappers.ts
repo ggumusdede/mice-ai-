@@ -55,7 +55,7 @@ export function mapProject(r: Row): Project {
     ownerId: r.owner_id, venueName: r.venue_name, receivedAt: iso(r.received_at)!, quoteSentAt: iso(r.quote_sent_at),
     targetBusinessDays: Number(r.target_business_days), targetOverrideReason: r.target_override_reason,
     customerWaitMinutes: r.customer_wait_minutes, eventEndedAt: iso(r.event_ended_at), closedAt: iso(r.closed_at),
-    createdAt: iso(r.created_at)!,
+    createdAt: iso(r.created_at)!, historical: r.historical === true,
   };
 }
 

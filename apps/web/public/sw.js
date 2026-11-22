@@ -4,7 +4,7 @@
  * - /api/* is never cached (field-panel writes are queued in IndexedDB by the app itself,
  *   because iOS Safari has no Background Sync; the app flushes the queue on 'online').
  * - Web Push (§15): 'push' shows the notification (critical → requireInteraction, digest replaces the previous digest
- *   via tag); 'notificationclick' focuses an open app window on the decision inbox or opens it.
+ *   via tag); 'notificationclick' acknowledges a critical notification (signed ack link) and focuses / opens the decision inbox.
  */
 const CACHE = 'mice-shell-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/icon-180.png', '/icon-192.png'];
@@ -82,7 +82,7 @@ self.addEventListener('push', (event) => {
       tag: data.tag || undefined,
       renotify: !!data.tag,
       requireInteraction: critical,
-      data: { url },
+      data: { url, ack: typeof data.ack === 'string' && data.ack.startsWith('/api/push/ack/') ? data.ack : null },
     }),
   );
 });
@@ -90,6 +90,9 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  // §15: opening a critical notification acknowledges it (stops the WhatsApp / SMS fallback)
+  const ack = event.notification.data && event.notification.data.ack;
+  if (ack) fetch(ack, { method: 'POST' }).catch(() => {});
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {

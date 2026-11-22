@@ -211,7 +211,8 @@ function GuestsCard() {
                     <td>{date(g.arrival)}</td>
                     <td>{date(g.departure)}</td>
                     <td>
-                      {g.consentReuse && !g.consentWithdrawnAt ? <Pill tone="success">{t.ops.consentYes}</Pill> : <Pill>{t.ops.consentNo}</Pill>}
+                      {g.consentWithdrawnAt ? <Pill tone="warning">{t.ops.consentWithdrawn}</Pill> : g.consentReuse ? <Pill tone="success">{t.ops.consentYes}</Pill> : <Pill>{t.ops.consentNo}</Pill>}
+                      {g.consentWithdrawnAt ? <div className="muted small">{date(g.consentWithdrawnAt)}</div> : null}
                       {g.retentionUntil && !g.consentReuse ? <div className="muted small">Saklama: {date(g.retentionUntil)}</div> : null}
                     </td>
                   </tr>

@@ -105,7 +105,7 @@ export async function signedProject(page, opts = {}) {
     for (const d of open) await must(page, 'POST', `/decisions/${d.id}/decide`, { action: 'approve', biometric: { method: 'dev' }, reason: 'e2e' });
   }
   const me = (await must(page, 'GET', '/auth/me')).user;
-  await must(page, 'POST', `/contracts/${c.id}/sign`, { signedBy: me.fullName, scanFileName: 'sozlesme-imzali.pdf' });
+  await must(page, 'POST', `/contracts/${c.id}/sign`, { signedBy: me.id, scanFileName: 'sozlesme-imzali.pdf' });
   p.contractId = c.id;
   p.code = (await must(page, 'GET', `/projects/${p.projectId}`)).project.code;
   return p;
@@ -133,3 +133,17 @@ export async function openDecisions(page, filter = () => true) {
 }
 
 export { apiAs };
+
+/** Approves the open rfq_send decision(s) of a project (API, admin) and returns one-time supplier links for the item's sent RFQs. */
+export async function rfqLinks(page, projectId, itemId) {
+  for (const d of (await must(page, 'GET', `/decisions?projectId=${projectId}&status=open`)).items.filter((x) => x.kind === 'rfq_send')) {
+    await must(page, 'POST', `/decisions/${d.id}/decide`, { action: 'approve' });
+  }
+  const item = (await must(page, 'GET', `/projects/${projectId}`)).items.find((i) => i.id === itemId);
+  const out = [];
+  for (const r of item.rfqs.filter((x) => ['sent', 'responded'].includes(x.status))) {
+    const l = await must(page, 'POST', `/rfqs/${r.id}/link`);
+    out.push({ rfqId: r.id, supplierId: r.supplierId, url: l.supplierLink });
+  }
+  return out;
+}

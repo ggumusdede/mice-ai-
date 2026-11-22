@@ -16,7 +16,7 @@ import { sha256Hex } from '../../lib/crypto.js';
 import type { Row } from '../../lib/mappers.js';
 import { AppError } from '../../errors.js';
 import { runIntake } from '../intake.js';
-import { normalizeMsisdn } from '../messaging.js';
+import { applyWhatsAppStatuses, normalizeMsisdn } from '../messaging.js';
 import { notify } from '../notifications.js';
 import { publicApproveExtra } from '../operations.js';
 import { claimInbound, customerFollowUp, loadResult, recordInboundFailure, updateInbound, type InboundFields, type InboundResult } from './common.js';
@@ -92,13 +92,19 @@ async function tenantForPhoneNumberId(cfg: WaCfg, phoneNumberId: string | undefi
   return null;
 }
 
-export interface WhatsAppWebhookResult { processed: InboundResult[]; ignored: number }
+export interface WhatsAppWebhookResult { processed: InboundResult[]; ignored: number; /** outbox delivery receipts applied */ statuses?: number }
 
 /** Signature must have been verified by the caller. */
 export async function processWhatsAppWebhook(deps: AppDeps, payload: WhatsAppWebhook, cfg: WaCfg): Promise<WhatsAppWebhookResult> {
-  const out: WhatsAppWebhookResult = { processed: [], ignored: 0 };
+  const out: WhatsAppWebhookResult = { processed: [], ignored: 0, statuses: 0 };
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
+      // delivery receipts of our outbound messages (sent / delivered / read / failed) → outbox (counted as not-processed messages)
+      if (change.field === 'messages' && change.value.statuses?.length) {
+        const st = change.value.statuses;
+        const tenantId = await tenantForPhoneNumberId(cfg, change.value.metadata?.phone_number_id);
+        if (tenantId) out.statuses! += await withSystemCtx(deps, tenantId, { type: 'system', id: null }, (ctx) => applyWhatsAppStatuses(ctx.db, st));
+      }
       if (change.field !== 'messages' || !change.value.messages?.length) {
         out.ignored += 1; // delivery statuses etc.
         continue;

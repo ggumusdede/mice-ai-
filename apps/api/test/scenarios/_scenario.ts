@@ -526,7 +526,15 @@ async function loadItems(w: World, p: P): Promise<void> {
 async function refreshOffers(w: World, p: P): Promise<void> {
   const d = await p.detail();
   const keyOf = Object.fromEntries(Object.entries(w.t.suppliers).map(([k, id]) => [id, k]));
-  for (const it of d.items) for (const o of it.offers) p.offers[`${it.kind}:${keyOf[o.supplierId]}`] = o.id;
+  const ver: Record<string, number> = {};
+  for (const it of d.items) {
+    for (const o of it.offers) {
+      const k = `${it.kind}:${keyOf[o.supplierId]}`;
+      if (o.supersededBy || (ver[k] ?? 0) > o.version) continue; // latest version only
+      ver[k] = o.version;
+      p.offers[k] = o.id;
+    }
+  }
 }
 
 /** Minimal multipart builder (file + string fields). */

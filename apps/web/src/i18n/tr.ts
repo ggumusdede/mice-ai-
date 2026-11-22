@@ -193,7 +193,7 @@ export const tr = {
   },
   ops: {
     calendar: 'Görev takvimi', guests: 'Misafirler / rooming', roomingLink: 'Rooming formu linki oluştur',
-    consent: 'Rıza', consentYes: 'Rıza verdi', consentNo: 'Rıza yok', extras: 'Saha ekstraları',
+    consent: 'Rıza', consentYes: 'Rıza verdi', consentNo: 'Rıza yok', consentWithdrawn: 'Rıza geri çekildi', extras: 'Saha ekstraları',
     customerApproval: 'Müşteri onayı', approvedBy: (n: string) => `Onaylayan: ${n}`, waitingApproval: 'Müşteri onayı bekleniyor',
     reflect: 'Müşteriye yansıt', notReflect: 'Yansıtma', notReflectReason: 'Yansıtmama gerekçesi (zorunlu)',
     reflected: 'Yansıtıldı', notReflected: 'Yansıtılmadı', needsAdmin: 'Yönetici onayı gerekli', withinLimit: 'Limit içinde',
@@ -279,7 +279,7 @@ export const tr = {
     aiConfidenceThreshold: 'Yapay zekâ güven eşiği', guestDataRetentionDays: 'Misafir verisi saklama (gün)',
     lowSupplierScore: 'Düşük tedarikçi skoru eşiği', accommodationTaxRate: 'Konaklama vergisi',
     quoteOptionsMin: 'Teklif min seçenek', quoteOptionsMax: 'Teklif max seçenek', projectCodePrefix: 'Proje kodu öneki',
-    supplierSeasonMarkups: 'Tedarikçi/sezon markup', supplierRfqHours: 'Tedarikçi RFQ süreleri',
+    criticalPushFallbackMinutes: 'Kritik bildirim yedek kanal (dk, 0 = kapalı)', supplierSeasonMarkups: 'Tedarikçi/sezon markup', supplierRfqHours: 'Tedarikçi RFQ süreleri',
   } as Record<string, string>,
   publicPages: {
     poweredBy: 'MICE AI Operations OS ile', invalidLink: 'Bu bağlantı geçersiz veya süresi dolmuş.',

@@ -1,0 +1,6 @@
+Proje kodu;Tür;Açıklama;Tedarikçi;Tedarikçi VKN;Tarih (başlangıç);Tarih (bitiş);Miktar;Birim;Gece;Para birimi;Birim alış (KDV hariç);Birim satış (KDV hariç);Oda tipi;Pansiyon
+2025-101;konaklama;Oda (DBL, BB);Kuzguncuk Konak Otel;;10.03.2026;12.03.2026;25;oda/gece;2;EUR;110,00;132,00;DBL;BB
+2025-101;salon;Toplantı salonu;;4445556667;10.03.2026;;2;gün;;EUR;2.900,00;3.480,00;;
+2025-101;transfer;Havalimanı transferi;İstanbul VIP Transfer;;10.03.2026;;4;araç;;TRY;3.500,00;3.000,00;;
+2025-102;salon;Lansman salonu;Moda Sahil Otel;;15.09.2025;;1;gün;;EUR;3.100,00;3.700,00;;
+2025-999;salon;Salon;Moda Sahil Otel;;;;1;gün;;EUR;100;120;;

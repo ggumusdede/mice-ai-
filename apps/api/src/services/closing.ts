@@ -17,6 +17,7 @@ import { currentFx, toEur } from './fx.js';
 import { getProjectRow } from './projects.js';
 import { loadQuotes } from './quotes.js';
 import { money, pct, renderPdf } from './pdf.js';
+import { supplierProjectCount } from './initial-import.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -170,7 +171,7 @@ async function updateSupplierScores(ctx: Ctx, p: Row): Promise<string[]> {
   const out: string[] = [];
   for (const sid of suppliers) {
     const s = (await ctx.db.query('SELECT * FROM suppliers WHERE id = $1', [sid])).rows[0];
-    const projects = Number((await ctx.db.query(`SELECT count(DISTINCT project_id)::int AS n FROM contracts WHERE supplier_id = $1`, [sid])).rows[0].n);
+    const projects = await supplierProjectCount(ctx, sid); // contracts + §8 imported historical projects
     const contractErrors = Number((await ctx.db.query(
       `SELECT COALESCE(sum((SELECT count(*) FROM jsonb_array_elements(c.diff) x WHERE x->>'severity' = 'error')), 0)::int AS n FROM contracts c WHERE c.supplier_id = $1`, [sid])).rows[0].n);
     const fieldIssues = Number((await ctx.db.query(`SELECT count(*)::int AS n FROM field_issues WHERE supplier_id = $1`, [sid])).rows[0].n);

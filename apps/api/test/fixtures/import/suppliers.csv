@@ -1,0 +1,5 @@
+Tedarikçi adı;VKN;Şehir;Semt;Hizmet türleri;Statü;Segment;E-posta
+Kuzguncuk Konak Otel;4445556667;İstanbul;Üsküdar;konaklama, salon, yiyecek-içecek;aday;butik;satis@kuzguncuk.example.com
+Moda Sahil Otel;;İstanbul;Kadıköy;konaklama, salon;akredite;4*;
+Beykoz Koru Otel;7778889990;İstanbul;Beykoz;konaklama, salon;akredite;5*;satis@beykoz.example.com
+Hatalı Tedarikçi;12345;İstanbul;;uzay gemisi;;;

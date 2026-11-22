@@ -7,7 +7,7 @@ import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
 import { badRequest, notFound } from '../errors.js';
 import {
-  mapAudit, mapContract, mapCustomer, mapDocument, mapProject, mapRfq, mapServiceItem, mapTask, type Row,
+  mapAudit, mapContract, mapOffer, mapCustomer, mapDocument, mapProject, mapRfq, mapServiceItem, mapTask, type Row,
 } from '../lib/mappers.js';
 import { isoDate } from '../lib/dates.js';
 import { evaluateItemOffers } from './offers.js';
@@ -40,9 +40,12 @@ export async function projectCode(ctx: Ctx, p: { seq: number; customer_id: strin
   return formatProjectCode({ prefix: rules.projectCodePrefix, seq: p.seq, customer, date: p.start_date, pax: p.pax, venue: p.venue_name });
 }
 
-export async function listProjects(ctx: Ctx, f: { q?: string; outcome?: string; step?: number }): Promise<Project[]> {
+export async function listProjects(ctx: Ctx, f: { q?: string; outcome?: string; step?: number; historical?: 'exclude' | 'include' | 'only' }): Promise<Project[]> {
   const params: unknown[] = [];
   const where: string[] = [];
+  // §8: imported past projects never show in active lists unless asked for
+  if ((f.historical ?? 'exclude') === 'exclude') where.push('NOT historical');
+  else if (f.historical === 'only') where.push('historical');
   if (f.q) {
     params.push(`%${f.q}%`);
     where.push(`(code ILIKE $${params.length} OR title ILIKE $${params.length} OR customer_name ILIKE $${params.length})`);
@@ -152,6 +155,9 @@ export async function projectDetail(ctx: Ctx, id: string): Promise<ProjectDetail
 
   const alerts: ProjectAlert[] = [];
   const items: ServiceItemDetail[] = [];
+  const supersededOffers = itemRows.length
+    ? (await ctx.db.query('SELECT * FROM supplier_offers WHERE service_item_id = ANY($1) AND superseded_by IS NOT NULL ORDER BY created_at', [itemRows.map((r) => r.id)])).rows.map(mapOffer)
+    : [];
   for (const it of itemRows) {
     const ev = await evaluateItemOffers(ctx, it, p);
     const lines = refOption?.lines.filter((l) => l.serviceItemId === it.id) ?? [];
@@ -161,7 +167,8 @@ export async function projectDetail(ctx: Ctx, id: string): Promise<ProjectDetail
     const selSupplier = selectedOffer ? ev.suppliers.find((s) => s.id === selectedOffer.supplierId) : null;
     items.push({
       ...mapServiceItem(it),
-      offers: ev.offers,
+      // current versions + superseded ones (§17.5: a revision never deletes the earlier version; the UI lists them as "önceki sürümler")
+      offers: [...ev.offers, ...supersededOffers.filter((o) => o.serviceItemId === it.id)],
       evaluations: ev.evaluations,
       rfqs: rfqRows.filter((r) => r.service_item_id === it.id).map(mapRfq),
       selectedSupplierName: selSupplier?.name ?? null,
@@ -242,7 +249,8 @@ export async function similarProjects(ctx: Ctx, id: string): Promise<SimilarProj
            AND q.version = (SELECT max(version) FROM quotes q2 WHERE q2.project_id = p.id)) AS sale,
        (SELECT sum(ql.unit_cost_eur * ql.quantity * GREATEST(COALESCE(ql.nights,1),1)) FROM quotes q JOIN quote_lines ql ON ql.quote_id = q.id
          WHERE q.project_id = p.id AND q.status <> 'superseded' AND ql.option_no = COALESCE(q.accepted_option_no, 1)
-           AND q.version = (SELECT max(version) FROM quotes q2 WHERE q2.project_id = p.id)) AS cost
+           AND q.version = (SELECT max(version) FROM quotes q2 WHERE q2.project_id = p.id)) AS cost,
+       p.historical_sale_eur, p.historical_cost_eur
      FROM projects p
      WHERE p.id <> $1 AND (
        ($2::uuid IS NOT NULL AND p.customer_id = $2)
@@ -252,8 +260,9 @@ export async function similarProjects(ctx: Ctx, id: string): Promise<SimilarProj
     [id, p.customer_id, p.event_type, p.pax, p.district],
   );
   const out = rows.map((r) => {
-    const sale = r.sale != null ? Number(r.sale) : null;
-    const cost = r.cost != null ? Number(r.cost) : null;
+    // §8 imported past projects carry their verified totals (no quotes in the system)
+    const sale = r.sale != null ? Number(r.sale) : r.historical_sale_eur != null ? Number(r.historical_sale_eur) : null;
+    const cost = r.cost != null ? Number(r.cost) : r.historical_cost_eur != null ? Number(r.historical_cost_eur) : null;
     return {
       projectId: r.id, code: r.code, customerName: r.customer_name, eventType: r.event_type, pax: r.pax, outcome: r.outcome,
       totalSaleEur: sale != null ? Math.round(sale * 100) / 100 : null,

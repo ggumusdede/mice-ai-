@@ -13,10 +13,25 @@ import { promoteAction, recordAutomationOutcome } from './automation.js';
 import { acceptConditionRisk, approveContract } from './contracts.js';
 import { verifyOffer } from './offers.js';
 import { applyRuleSuggestionDecision } from './rule-suggestions.js';
-import { forbidden } from '../errors.js';
+import { badRequest, forbidden } from '../errors.js';
+import { negotiationDraftViolations } from '@mice/domain';
 import { registerPhaseB } from './phase-b-registry.js';
 
 let registered = false;
+
+/** §7 Adım 2 "Rakip tedarikçi fiyatı argüman olarak kullanılmaz" also holds for the human correction ("Düzelt") of a
+ *  negotiation draft — the AI draft is checked when generated (offers.ts), the edited text is checked here. */
+async function assertNoCompetitorArgument(ctx: Parameters<DecisionEffect>[0], d: Parameters<DecisionEffect>[1], edits?: Record<string, unknown>): Promise<void> {
+  const text = [edits?.subject, edits?.body].filter((x): x is string => typeof x === 'string').join('\n');
+  if (!text) return;
+  const offerId = d.detail?.offerId as string | undefined;
+  const others = offerId ? (await ctx.db.query(
+    `SELECT DISTINCT s.name FROM supplier_offers so JOIN suppliers s ON s.id = so.supplier_id
+      WHERE so.service_item_id = (SELECT service_item_id FROM supplier_offers WHERE id = $1)
+        AND so.supplier_id <> (SELECT supplier_id FROM supplier_offers WHERE id = $1)`, [offerId])).rows.map((r) => r.name as string) : [];
+  const violations = negotiationDraftViolations(text, others);
+  if (violations.length) throw badRequest(`Pazarlık mesajında rakip referansı olamaz (§7 Adım 2): ${violations.join('; ')}`, { violations }, 'NEGOTIATION_RULE_VIOLATION');
+}
 
 /** approve/edit → approve the draft (with edits) and send it from the responsible user's address; reject → discard. */
 const draftEffect: DecisionEffect = async (ctx, d, input) => {
@@ -27,6 +42,7 @@ const draftEffect: DecisionEffect = async (ctx, d, input) => {
     if (d.kind === 'negotiation_message') await ctx.db.query(`UPDATE negotiation_rounds SET status = 'rejected' WHERE draft_id = $1`, [draftId]);
     return ['draft_discarded'];
   }
+  if (d.kind === 'negotiation_message' && input.action === 'edit') await assertNoCompetitorArgument(ctx, d, input.edits);
   await approveDraft(ctx, draftId, input.decidedBy, input.action === 'edit' ? input.edits : undefined);
   const out = ['draft_approved'];
   const draft = await getDraftRow(ctx, draftId);

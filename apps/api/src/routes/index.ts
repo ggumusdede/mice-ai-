@@ -10,6 +10,8 @@ import { publicPhaseBRoutes } from './public-b.js';
 import { healthRoutes } from './health.js';
 import { pushRoutes } from './push.js';
 import { inboundRoutes, inboundStaffRoutes } from './inbound.js';
+import { importRoutes } from './import.js';
+import { integrationRoutes } from './integrations.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/health (liveness + db status), GET /api/ready (readiness)
@@ -28,4 +30,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // inbound e-mail / WhatsApp webhooks (signature-authenticated, raw body, own rate limit) + staff inbox views
   await app.register(inboundRoutes);
   await app.register(inboundStaffRoutes);
+  // outbound integrations: per-user mailbox OAuth, §15 notification acknowledge / fallback phone
+  await app.register(integrationRoutes);
+  // §8 initial historical data import (admin only)
+  await app.register(importRoutes);
 }

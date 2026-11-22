@@ -257,3 +257,16 @@ export async function scenario(name, fn, { cleanup } = {}) {
 export function getBrowser() {
   return browser;
 }
+
+/**
+ * Time travel for preconditions the HTTP contract cannot express (e.g. an RFQ deadline in the past). Runs SQL as the migration
+ * superuser via psql (MIGRATION_DATABASE_URL, default postgres://postgres@localhost:5432/mice). Returns null when psql is missing.
+ */
+export async function sql(statement) {
+  const { spawnSync } = await import('node:child_process');
+  const url = process.env.MIGRATION_DATABASE_URL ?? 'postgres://postgres@localhost:5432/mice';
+  const r = spawnSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-At', '-c', statement], { encoding: 'utf8' });
+  if (r.error) return null;
+  if (r.status !== 0) throw new Error(`psql: ${r.stderr}`);
+  return r.stdout.trim();
+}

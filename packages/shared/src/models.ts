@@ -158,6 +158,8 @@ export interface Project {
   eventEndedAt: ISODateTime | null;
   closedAt: ISODateTime | null;
   createdAt: ISODateTime;
+  /** §8 İlk veri yükü: imported past project (never in active lists / worker; feeds know-how and price history) */
+  historical?: boolean;
 }
 
 export interface InboundMessage {

@@ -15,6 +15,7 @@ const SCALAR_KEYS: (keyof TenantRules)[] = [
   'optionExpiryWarningDays', 'quoteOptionsMin', 'quoteOptionsMax', 'rfqMinSuppliers', 'rfqMaxSuppliers', 'rfqReminderHours', 'rfqCallTaskHours',
   'maxNegotiationRounds', 'fieldExtraPerItemLimitTry', 'fieldExtraPerProjectLimitTry', 'unbilledPaymentEscalationDays', 'closingDeadlineDays',
   'automationPromotionThreshold', 'automationSampleRate', 'aiConfidenceThreshold', 'lowSupplierScore', 'guestDataRetentionDays', 'accommodationTaxRate',
+  'criticalPushFallbackMinutes',
 ];
 
 /** [Ürün kararı] boolean rules (docs/09 G-15 … G-17); defaults are the conservative option. */
