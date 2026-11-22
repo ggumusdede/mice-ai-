@@ -233,6 +233,7 @@ function mapTx(r: Row): BankTransaction {
     id: r.id, tenantId: r.tenant_id, bookedAt: r.booked_at, amount: Number(r.amount), currency: r.currency, description: r.description,
     counterparty: r.counterparty, matchedEntryId: r.matched_entry_id, matchConfidence: r.match_confidence != null ? Number(r.match_confidence) : null,
     status: r.status, payerUserId: r.payer_user_id,
+    fxRate: r.fx_rate != null ? Number(r.fx_rate) : null, eurTryRate: r.eur_try_rate != null ? Number(r.eur_try_rate) : null, rateSource: r.rate_source ?? null,
   };
 }
 

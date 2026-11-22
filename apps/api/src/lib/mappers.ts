@@ -158,8 +158,15 @@ export function mapFinance(r: Row): FinanceEntry {
     id: r.id, tenantId: r.tenant_id, projectId: r.project_id, serviceItemId: r.service_item_id, supplierId: r.supplier_id,
     kind: r.kind, amount: Number(r.amount), currency: r.currency, amountEur: Number(r.amount_eur), dueDate: r.due_date,
     status: r.status, reference: r.reference, invoiceNo: r.invoice_no, meta: r.meta ?? {}, createdAt: iso(r.created_at)!,
+    fxEvidence: {
+      actualFxRate: num(r.actual_fx_rate), eurTryRate: num(r.eur_try_rate), rateSource: r.rate_source ?? null, valueDate: r.value_date ?? null,
+      paid: r.paid_at || r.paid_amount != null
+        ? { amount: num(r.paid_amount), currency: r.paid_currency ?? null, fxRate: num(r.paid_fx_rate), eurTryRate: num(r.paid_eur_try_rate), rateSource: r.paid_rate_source ?? null }
+        : null,
+    },
   };
 }
+const num = (v: unknown): number | null => (v == null ? null : Number(v));
 
 export function mapChecklist(r: Row): ChecklistQuestion {
   return { id: r.id, tenantId: r.tenant_id, eventType: r.event_type, question: r.question, field: r.field, status: r.status, source: r.source };

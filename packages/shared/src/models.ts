@@ -485,6 +485,11 @@ export interface FinanceEntry {
   invoiceNo: string | null;
   meta: Record<string, unknown>;
   createdAt: ISODateTime;
+  /** (additive) actual-rate evidence (Q5): rate the document / payment was made at; null fields = not proven */
+  fxEvidence?: {
+    actualFxRate: number | null; eurTryRate: number | null; rateSource: string | null; valueDate: ISODate | null;
+    paid: { amount: number | null; currency: Currency | null; fxRate: number | null; eurTryRate: number | null; rateSource: string | null } | null;
+  };
 }
 
 export interface BankTransaction {
@@ -499,6 +504,10 @@ export interface BankTransaction {
   matchConfidence: number | null;
   status: 'unmatched' | 'suggested' | 'matched' | 'ignored';
   payerUserId: ID | null;
+  /** (additive, Q5) actual rate of the line: derived from the matched amounts or carried from the invoice; null = not proven */
+  fxRate?: number | null;
+  eurTryRate?: number | null;
+  rateSource?: string | null;
 }
 
 export interface FieldExtra {
@@ -610,4 +619,67 @@ export interface InboundMessageSummary {
   intakeProjectId: ID | null;
   fieldExtraId: ID | null;
   attachments: { filename: string; size: number; accepted: boolean; reason?: string; usedFor?: string }[];
+}
+
+// ---------- Evidence-based realized FX (§7 Adım 7–8; ürün sahibi kararı Q5) ----------
+/** A project money movement with the ACTUAL rate used (never today's rate). Rates: 1 EUR = x <currency>; 1 EUR = x TRY. */
+export type FxMovementType = 'customer_invoice' | 'supplier_invoice' | 'collection' | 'payment';
+export type FxRateSource =
+  | 'currency' // EUR movement: EUR value exact
+  | 'efatura' // UBL PricingExchangeRate
+  | 'invoice' // rate printed on / entered from the invoice
+  | 'bank_derived' // bank line amount ÷ matched invoice amount
+  | 'payment_record' // rate / TL amount entered when marking paid
+  | 'payment_derived' // paid amount ÷ settled entry amount
+  | 'import' // historical movement from the initial import
+  | 'manual'
+  | 'missing';
+export interface FxMovement {
+  id: ID;
+  type: FxMovementType;
+  date: ISODate | null;
+  /** positive amount in the original currency */
+  amount: number;
+  currency: Currency;
+  /** 1 EUR = eurRate <currency> at this movement (EUR → 1; TRY → eurTryRate). null = unknown */
+  eurRate?: number | null;
+  /** 1 EUR = eurTryRate TRY at this movement. null = unknown */
+  eurTryRate?: number | null;
+  rateSource: FxRateSource;
+  /** cash movement: the invoice (movement id) it settles */
+  settles?: ID | null;
+  label?: string | null;
+}
+export interface FxEvidence {
+  movementId: ID; type: FxMovementType; date: ISODate | null; amount: number; currency: Currency;
+  eurRate: number | null; eurTryRate: number | null; rateSource: FxRateSource; label: string | null; settles: ID | null;
+  /** full movement value at its own actual rate (null = rate unknown — "bilmiyorum") */
+  eur: number | null; try: number | null;
+  /** part of the movement counted in the totals (invoice: the part not yet replaced by cash; cash: whole) */
+  countedEur: number | null; countedTry: number | null;
+  /** 'settled' = invoice fully replaced by its cash; 'open' = (partly) unsettled invoice; 'cash' = settles an invoice; 'unbilled' = cash without invoice */
+  usage: 'settled' | 'open' | 'cash' | 'unbilled' | 'partly_unbilled';
+}
+export type RealizedFxReasonCode = 'no_movements' | 'rate_missing' | 'no_revenue' | 'no_cost' | 'unsettled_invoices' | 'unbilled_cash' | 'no_fx_evidence';
+export interface RealizedFx {
+  /** none = no money movement yet ("henüz gerçekleşen hareket yok"); partial = see reasons; complete = invoiced, settled, every rate proven */
+  status: 'none' | 'partial' | 'complete';
+  revenue: { eur: number | null; try: number | null };
+  cost: { eur: number | null; try: number | null };
+  profit: { eur: number | null; try: number | null };
+  /** Kâr ÷ Satış — null when a side has no movement */
+  margin: { eur: number | null; try: number | null };
+  /** Kâr ÷ Alış — null when a side has no movement */
+  markup: { eur: number | null; try: number | null };
+  /** weighted average EUR/TRY of customer collections / supplier payments / every counted movement */
+  avgCollectionRate: number | null;
+  avgPaymentRate: number | null;
+  projectAvgRate: number | null;
+  /** EUR/TRY of the accepted quote (fx_date) */
+  quoteRate: number | null;
+  /** profit at actual rates − profit at quote-time rates (+ = kur kazancı, − = kur kaybı) */
+  fxGainLoss: { eur: number | null; try: number | null };
+  evidence: FxEvidence[];
+  missingRates: { movementId: ID; type: FxMovementType; currency: Currency; need: ('EUR' | 'TRY')[] }[];
+  reasons: { code: RealizedFxReasonCode; message: string }[];
 }
