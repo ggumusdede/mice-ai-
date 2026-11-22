@@ -75,3 +75,16 @@ describe('§8 initial import — row validation', () => {
     expect(historicalProjectCode(' 2025 034 ')).toBe('H-2025-034');
   });
 });
+
+describe('finance_movements (Q5: historical movements with their actual rate)', () => {
+  const opts = { today: '2026-11-20', windowMonths: 18 };
+  it('derives the rate from rate / TL / EUR equivalents; flags missing evidence; refuses future dates', () => {
+    const a = normalizeImportRow('finance_movements', { project_code: 'X', type: 'tahsilat', date: '20.03.2026', amount: '370.000,00', currency: 'TL', eur_amount: '10.000' }, opts);
+    expect(a.data).toMatchObject({ type: 'collection', currency: 'TRY', eurRate: 37, eurTryRate: 37 });
+    expect(a.issues).toEqual([]);
+    const b = normalizeImportRow('finance_movements', { project_code: 'X', type: 'müşteri faturası', date: '12.03.2026', amount: '10000', currency: 'EUR' }, opts);
+    expect(b.issues.map((i) => i.code)).toEqual(['FX_EVIDENCE_MISSING']);
+    const c = normalizeImportRow('finance_movements', { project_code: 'X', type: 'havale?', date: '12.12.2026', amount: '1', currency: 'EUR', rate: '36' }, opts);
+    expect(c.issues.map((i) => i.code)).toEqual(expect.arrayContaining(['UNKNOWN_MOVEMENT_TYPE', 'FUTURE_DATE']));
+  });
+});

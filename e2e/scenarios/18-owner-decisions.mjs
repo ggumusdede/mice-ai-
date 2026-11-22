@@ -45,7 +45,7 @@ await scenario('18-owner-decisions', async () => {
     expect(overflow <= 1, `no horizontal scroll at 390 px (${overflow})`);
     await mobile.locator('.tp details summary').first().click();
     await mobile.getByText(REASON).first().waitFor();
-    await mobile.getByLabel('Dönem').selectOption('3m');
+    await mobile.getByRole('combobox', { name: 'Dönem' }).selectOption('3m');
     await mobile.locator('.tp__card').first().waitFor();
     await shot(mobile, 'team-performance-mobile', true);
   });
