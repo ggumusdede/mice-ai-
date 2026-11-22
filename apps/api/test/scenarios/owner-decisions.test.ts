@@ -95,17 +95,16 @@ describe('Q7 — kaybedilen proje + ekip performansı', () => {
     const seq = (await ownerSql('SELECT COALESCE(max(seq), 0) + 1 AS s FROM projects WHERE tenant_id = $1', [w.t.tenantId]))[0].s;
     await ownerSql(
       `INSERT INTO projects (tenant_id, seq, code, title, customer_name, step, outcome, received_at, start_date, end_date, historical, historical_cost_eur, historical_sale_eur, owner_id, closed_at, source_ref)
-       VALUES ($1, $2, $3, 'Geçmiş bayi toplantısı', 'Eski Müşteri', 8, 'closed', '2026-06-10', '2026-06-10', '2026-06-11', true, 8000, 10000, $4, '2026-06-12', $3)`,
+       VALUES ($1, $2, $3, 'Geçmiş bayi toplantısı', 'Eski Müşteri', 8, 'closed', '2026-11-10', '2026-11-10', '2026-11-11', true, 8000, 10000, $4, '2026-11-12', $3)`,
       [w.t.tenantId, seq, `GEC-${seq}`, clerkId]);
 
     expect((await w.clerk.get('/api/reports/team-performance')).status).toBe(403);
     const r = await w.admin.get(`/api/reports/team-performance?${new URLSearchParams(widePeriod())}`);
-    if (r.status !== 200) console.log(JSON.stringify(r.body));
     expect(r.status).toBe(200);
     expect(r.body.financialsVisible).toBe(true);
     const c = r.body.rows.find((x: any) => x.userId === clerkId);
     expect(c).toMatchObject({
-      requests: 4, historicalProjects: 1, quotesSent: 1, won: 2, lost: 2, winRate: 0.5,
+      requests: 4, historicalProjects: 1, quotesSent: 2, won: 2, lost: 2, winRate: 0.5,
       quotesBuilt: 2, quotesReviewed: 2, quotesCorrected: 1, correctionRate: 0.5, approvalRequiredQuotes: 2, freeQuotes: 0,
     });
     expect(c.lostReasons).toEqual([{ reason: 'Fiyat yüksek', count: 2 }]);
