@@ -362,6 +362,35 @@ manual offer form and the supplier portal still accept percent values (≤ 100).
   admin unreflected totals), document generator in the side panel, survey link after closing, field panel today / next 7 days,
   mobile tab bar with "Yeni talep".
 
+## Evidence-based realized FX — EUR + TL (ürün sahibi kararı Q5, migration `017_realized_fx.sql`)
+
+Internal currency stays EUR (`amount_eur`, `fx_rate`, `currentFx` unchanged). Added: the ACTUAL rate of every money movement
+and realized TL reporting, every number provable.
+- **Data (new nullable columns only):** `finance_entries.actual_fx_rate / eur_try_rate / rate_source / value_date` (invoice /
+  imported movement), `paid_amount / paid_currency / paid_fx_rate / paid_eur_try_rate / paid_rate_source` (payment record),
+  `bank_transactions.fx_rate / eur_try_rate / rate_source`, `fx_rates.rate_type` (+ `created_by`, unique per
+  tenant/currency/type/date). Convention: 1 EUR = x <currency>; `eur_try_rate`: 1 EUR = x TL.
+- **Capture:** e-Fatura `PricingExchangeRate` of an EUR invoice (`efatura`); `eurTryRate` / `tryAmount` on
+  `POST /api/finance/supplier-invoices` and `/customer-invoices` (`invoice`); `mark-paid` body `{paidAmount, paidCurrency,
+  eurTryRate?, tryAmount?}` (`payment_record`; TL paid for an EUR entry without a rate → `payment_derived` = TL ÷ EUR); a bank
+  line matched to an entry in ANOTHER currency → `bank_derived` (TL line ÷ EUR invoice). A movement made WITHOUT conversion
+  (EUR paid / collected in EUR, TL for a TL invoice) gets its missing rate from the TCMB rate of its **value date**
+  (`fillRatesFromTable`; weekend / holiday → the last bulletin before it, at most 10 days back; rule `fxRateTypeForReporting`,
+  default `tcmb_forex_buying`), source `tcmb`, note "TCMB <date> <type>". Nothing in the window → evidence gap (no guessing).
+- **TCMB store:** `POST /api/fx/tcmb-import {date?}` (today.xml or `kurlar/YYYYMM/DDMMYYYY.xml`; 404 = no bulletin →
+  `TCMB_NO_BULLETIN`; idempotent, first stored value kept), `POST /api/fx/rates {rows | csv}` (manual / CSV:
+  `tarih;para birimi;tür;kur`), `GET /api/fx/rates` (admin / finance). Daily job: `npm run fx:tcmb -w @mice/api [-- --date=… --to=…]`
+  for all tenants (after 15:30 Istanbul). Network via `services/integrations-http.ts` (mocked in tests).
+- **Domain:** `realizedFx(movements, {quoteRates})` (`packages/domain/src/realized-fx.ts`): cash replaces the invoice it settles
+  (named, else FIFO), open remainder at the invoice's own rate, unbilled cash at its own rate; outputs revenue / cost / profit in
+  EUR and TL, margin and markup separately per currency (null while a side has no movement — no "−%100"), weighted average
+  collection / payment / project EUR/TL, FX gain/loss vs the quote-time rate (on the obligations), collection-day ↔ payment-day
+  TL effect, `evidence[]`, `missingRates[]`, `reasons[]`, status `none | partial | complete`.
+- **API:** `ProjectDetail.profit.realizedFx` (legacy `realized` unchanged), `GET /api/projects/:id/realized-fx`,
+  `ClosingCheck.planVsActual.realizedFx / plannedTry`; the evidence FX gain/loss is the "Kur farkı (… kanıtlı)" deviation; the
+  P&L PDF adds the EUR | TL table, average rates and the evidence table. Field role without `fieldRoleCanSeeFinancials`: no
+  `realizedFx`, closing check without money, `realized-fx` 403.
+
 ## §16.5 Rule suggestions and §18.9 evaluation set
 
 - Generator: `services/rule-suggestions.ts` collects learning data (accommodation `price_history` × `channel_prices` on the
@@ -419,7 +448,12 @@ web `Yönetim → Veri aktarımı` (`apps/web/src/pages/admin/DataImportPage.tsx
   actor = the admin and `import_batch_id` on every live row (`suppliers`, `customers`, `projects`, `service_items`,
   `price_history`, `channel_prices`; the audit `after` carries it). Projects: `historical = true`, code `H-<source code>`,
   negative `seq` (the live `PRJ-####` counter is untouched), outcome `closed` (won) / `lost`, `closed_at` set, step 8,
-  `historical_cost_eur` / `historical_sale_eur` from the lines (current recorded FX — [Doğrulanmalı] historical rates).
+  `historical_cost_eur` / `historical_sale_eur` from the lines (current recorded FX) — **unless** the optional
+  `finance_movements` file ("Finansal hareketler": invoice / collection / payment rows with rate, TL or EUR equivalent,
+  `017`) is imported for the project: then the totals come from the evidence-based realized EUR (each movement at its own
+  rate) and the project gets the same EUR + TL realized profit as a live one; without movements the project is flagged
+  `no_fx_evidence` ("kur kanıtı yok"). Imported movements are closed bookkeeping (`status = matched`, invoice no only in
+  `meta.invoiceNo` → never bank-match candidates, never re-exported to Mikro); a cash row's "Kapattığı fatura no" links it.
   Lines → `service_items` (`specs.historical`) + `price_history` (`realized` for won, `negotiated` for lost projects, `verified`,
   `created_at` = service date). Accreditation ticked in review goes through the decision box: an admin-only
   `supplier_accreditation` card is created and decided by the committing admin via `decide()`.
