@@ -1,3 +1,4 @@
+import { RealizedFxBlock } from '../../components/RealizedFxBlock';
 import { useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
@@ -45,6 +46,12 @@ export function ClosingTab() {
               <ProfitBlock title={t.closing.planned} value={res.data.planVsActual.planned} />
               <ProfitBlock title={t.closing.actual} value={res.data.planVsActual.actual} />
             </div>
+            {res.data.planVsActual.realizedFx ? (
+              <>
+                <hr className="divider" />
+                <RealizedFxBlock title={`${t.closing.actual} (EUR + TL)`} value={res.data.planVsActual.realizedFx} plannedTry={res.data.planVsActual.plannedTry} />
+              </>
+            ) : null}
             {res.data.planVsActual.deviations.length ? (
               <>
                 <h3 className="section-title">{t.closing.deviations}</h3>

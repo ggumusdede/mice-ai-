@@ -78,11 +78,15 @@ await scenario('04-candidate', async () => {
     await shot(team, 'quote-blocked-candidate', true);
   });
 
-  await step('Accreditation requested → admin accredits from the inbox (mobile)', async () => {
-    await team.goto(`${BASE}/yonetim/tedarikciler`);
-    const row = team.locator('tr', { hasText: NAME });
-    await row.getByRole('button', { name: 'Akredite et' }).click();
+  await step('Accreditation requested from the blocked quote ("Akreditasyon iste", Q6) → admin accredits from the inbox (mobile)', async () => {
+    const builder = team.locator('.card', { hasText: 'Teklif oluşturucu' }).first();
+    await builder.locator('.callout').getByRole('button', { name: `Akreditasyon iste: ${NAME}` }).click();
     await team.locator('.toast', { hasText: 'karar kutusuna' }).waitFor();
+    // idempotent: a second request reuses the open card
+    const again = await must(team, 'POST', `/suppliers/${candidateId}/request-accreditation`, {});
+    expect(again.created === false, 'open accreditation card reused');
+    const cards = (await must(boss, 'GET', '/decisions')).items.filter((d) => d.kind === 'supplier_accreditation' && d.entityId === candidateId);
+    expect(cards.length === 1 && cards[0].requiredRole === 'admin', 'one admin-only accreditation card');
     const admin = await as('admin@demo.test', 'admin-mobile', true);
     await adminDecide(admin, `${NAME} akredite edilsin mi?`, { shotName: 'inbox-accreditation' });
     const s = (await must(boss, 'GET', `/suppliers/${candidateId}`));

@@ -11,7 +11,7 @@ await scenario('10-customer-quote', async () => {
     const p = await arrangeOffers(boss, await createProject(boss, { customer: `PO Zorunlu ${RUN}` }));
     await sentQuote(boss, p);
     await openTab(boss, p.projectId, 'quote');
-    const card = boss.locator('.card', { hasText: /^v1/ }).first();
+    const card = boss.locator('.card', { hasText: /^Rev\.1/ }).first();
     await card.getByText('Gönderildi').first().waitFor();
     expect(!(await card.getByText(/Açıldı:/).count()), 'not opened yet');
     const cust = await newPage('customer-po', true);
@@ -58,6 +58,6 @@ await scenario('10-customer-quote', async () => {
     const d = await must(boss, 'GET', `/projects/${p.projectId}`);
     expect(d.project.outcome === 'won', `won on online approval (${d.project.outcome})`);
     await openTab(boss, p.projectId, 'quote');
-    await boss.locator('.card', { hasText: /^v1/ }).getByText(/Açıldı:/).waitFor();
+    await boss.locator('.card', { hasText: /^Rev\.1/ }).getByText(/Açıldı:/).waitFor();
   });
 });

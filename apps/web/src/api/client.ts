@@ -6,7 +6,7 @@ import type {
   ClosingCheck, ComparisonResponse, Contract, CreateRfqsRequest, Customer, DailySummary, Decision, DecideResponse,
   DecisionInput, Delegation, DelegationInput, FieldExtra, FieldExtraInput, FieldIssue, FieldIssueInput, FinanceEntry,
   GeneratedDocument, Guest, InboundMessageSummary, IntakeRequest, IntakeResponse, List, LoginRequest, LoginResponse, ManualOfferInput,
-  MeResponse, MessageDraft, NegotiationArgument, Project, ProjectDetail, PublicExtraView, PublicOfferInput,
+  MarkPaidRequest, MeResponse, MessageDraft, NegotiationArgument, Project, ProjectDetail, PublicExtraView, PublicOfferInput,
   PublicQuoteView, PublicRfqView, PublicRoomingSubmit, PublicRoomingView, PublicSurveySubmit, PublicSurveyView, Quote,
   Rfq, RulesResponse, ServiceItem, ServiceItemInput, SimilarProject, Supplier, SupplierInvoiceInput, SupplierOffer,
   SupplierRanking, Task, TenantRules, User, UserStats, WeeklyReport, TeamPerformanceReport, AccreditationRequestResponse,
@@ -268,7 +268,7 @@ export const api = {
       post<{ entry: FinanceEntry; alarms: string[] }>('/finance/supplier-invoices', fileForm(file, meta as Record<string, string>)),
     paymentRequest: (entryId: string) => post<FinanceEntry>('/finance/payment-requests', { entryId }),
     /** a human records the bank payment of an approved request (the system never pays, §6) */
-    markPaid: (entryId: string, b: { paidAt?: string; reference?: string } = {}) => post<FinanceEntry>(`/finance/entries/${enc(entryId)}/mark-paid`, b),
+    markPaid: (entryId: string, b: MarkPaidRequest = {}) => post<FinanceEntry>(`/finance/entries/${enc(entryId)}/mark-paid`, b),
     bankStatement: (file: File) => post<BankStatementImportResult>('/finance/bank-statements', fileForm(file)),
     bankTransactions: (status?: BankTransaction['status']) => items(get<List<BankTransaction>>('/finance/bank-transactions', { status })),
     matchBankTransaction: (id: string, entryId: string) => post<BankTransaction>(`/finance/bank-transactions/${enc(id)}/match`, { entryId }),

@@ -309,3 +309,54 @@ describe('§8 initial import — tenant isolation', () => {
     await expect(appSql(tb.tenantId, `INSERT INTO import_batches (tenant_id, created_by) VALUES ($1, $2)`, [t.tenantId, t.users.admin.id])).rejects.toThrow();
   });
 });
+
+describe('§8 initial import — finansal hareketler (Q5: kanıtlı EUR + TL kâr)', () => {
+  it('movements with their actual rates give the historical project evidence-based EUR + TL profit; without a rate → "kur kanıtı yok"', async () => {
+    const b = (await admin.post('/api/import/batches', { label: 'fx' })).body;
+    const up = (entity: string, csv: string) => admin.post(`/api/import/batches/${b.id}/files`, { entity, fileName: `${entity}.csv`, csv });
+    expect((await up('customers', 'Müşteri adı;VKN\nKur Test A.Ş.;9998887776\n')).status).toBe(200);
+    await up('projects', [
+      'Proje kodu;Müşteri;Başlangıç;Bitiş;Sonuç',
+      'FX-1;Kur Test A.Ş.;10.03.2026;12.03.2026;kazanıldı',
+      'FX-2;Kur Test A.Ş.;10.04.2026;12.04.2026;kazanıldı',
+    ].join('\n'));
+    await up('service_lines', [
+      'Proje kodu;Tür;Açıklama;Miktar;Birim;Para birimi;Birim alış (KDV hariç);Birim satış (KDV hariç)',
+      'FX-1;salon;Salon;1;gün;EUR;8000;10000',
+      'FX-2;salon;Salon;1;gün;EUR;8000;10000',
+    ].join('\n'));
+    const d = (await up('finance_movements', [
+      'Proje kodu;Hareket türü;Tarih (valör);Tutar;Para birimi;Kur (1 EUR = ? TL);TL karşılığı;EUR karşılığı;Belge no;Kapattığı fatura no',
+      'FX-1;müşteri faturası;12.03.2026;10.000,00;EUR;36,00;;;SF-1;',
+      'FX-1;tahsilat;20.03.2026;370.000,00;TL;;;10.000,00;DK-1;SF-1',
+      'FX-1;tedarikçi faturası;12.03.2026;288.000,00;TL;36,00;;;AF-1;',
+      'FX-1;ödeme;25.03.2026;288.000,00;TL;38,40;;;DK-2;AF-1',
+      'FX-1;tahsilat;20.12.2026;1,00;EUR;;;;;',
+    ].join('\n'))).body;
+    const mv = d.rows.filter((r: any) => r.entity === 'finance_movements');
+    expect(mv[1].data).toMatchObject({ type: 'collection', currency: 'TRY', eurTryRate: 37, eurRate: 37 });
+    expect(codes(mv[4])).toContain('FUTURE_DATE');
+    await admin.post(`/api/import/batches/${b.id}/review`, { action: 'approve', statuses: ['ok', 'warning'] });
+    await admin.post(`/api/import/batches/${b.id}/review`, { action: 'reject', rowIds: [mv[4].id] });
+    const c = await admin.post(`/api/import/batches/${b.id}/commit`);
+    expect(c.status).toBe(200);
+    expect(c.body.batch.summary.committed.finance_movements).toEqual({ created: 4, linked: 0 });
+    const [p1] = await ownerSql(`SELECT id, historical_cost_eur, historical_sale_eur FROM projects WHERE tenant_id = $1 AND source_ref = 'FX1'`, [t.tenantId]);
+    const r = (await admin.get(`/api/projects/${p1.id}/realized-fx`)).body;
+    expect(r.status).toBe('complete');
+    expect(r.revenue).toEqual({ eur: 10000, try: 370000 });
+    expect(r.cost).toEqual({ eur: 7500, try: 288000 });
+    expect(r.profit).toEqual({ eur: 2500, try: 82000 });
+    expect(r.evidence.every((e: any) => ['import'].includes(e.rateSource))).toBe(true);
+    // historical totals come from the evidence, not from today's FX of the lines
+    expect(Number(p1.historical_cost_eur)).toBe(7500);
+    expect(Number(p1.historical_sale_eur)).toBe(10000);
+    // imported entries are closed bookkeeping: never bank-match candidates, never re-exported to Mikro
+    expect((await ownerSql(`SELECT count(*)::int AS n FROM finance_entries WHERE project_id = $1 AND (status <> 'matched' OR invoice_no IS NOT NULL)`, [p1.id]))[0].n).toBe(0);
+    // FX-2 without movements: current behaviour, flagged "kur kanıtı yok"
+    const [p2] = await ownerSql(`SELECT id FROM projects WHERE tenant_id = $1 AND source_ref = 'FX2'`, [t.tenantId]);
+    const r2 = (await admin.get(`/api/projects/${p2.id}/realized-fx`)).body;
+    expect(r2.status).toBe('none');
+    expect(r2.reasons.map((x: any) => x.code)).toEqual(['no_movements', 'no_fx_evidence']);
+  });
+});

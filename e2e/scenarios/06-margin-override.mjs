@@ -49,7 +49,7 @@ await scenario('06-margin', async () => {
     expect(q.status === 'approved', `approved (${q.status})`);
     expect(JSON.stringify(q).includes(REASON), 'override reason stored on the quote');
     await openTab(team, p.projectId, 'quote');
-    await team.locator('.card', { hasText: new RegExp(`^v${quote.version}`) }).getByText('Onaylandı').waitFor();
+    await team.locator('.card', { hasText: new RegExp(`^Rev\\.${quote.version}`) }).getByText('Onaylandı').waitFor();
     await shot(team, 'quote-override-approved', true);
   });
 });

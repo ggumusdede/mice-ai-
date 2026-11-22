@@ -175,6 +175,16 @@ export function RulesPage() {
               </label>
             ))}
           </fieldset>
+          <label className={`field ${changed.includes('fxRateTypeForReporting') ? 'field--changed' : ''}`}>
+            <span className="field__label">TL raporlamada kur türü (EUR'ya çevrimsiz ödeme / tahsilat: valör günü TCMB kuru)</span>
+            <select className="input select" disabled={!isAdmin} value={rules.fxRateTypeForReporting ?? 'tcmb_forex_buying'}
+              onChange={(e) => setRules({ ...rules, fxRateTypeForReporting: e.target.value as TenantRules['fxRateTypeForReporting'] })}>
+              <option value="tcmb_forex_buying">TCMB döviz alış (varsayılan, VUK değerleme)</option>
+              <option value="tcmb_forex_selling">TCMB döviz satış</option>
+              <option value="tcmb_banknote_buying">TCMB efektif alış</option>
+              <option value="tcmb_banknote_selling">TCMB efektif satış</option>
+            </select>
+          </label>
         </div>
       </Card>
 

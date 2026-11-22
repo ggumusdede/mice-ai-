@@ -12,22 +12,50 @@ export function MarkPaidAction({ entry, onDone }: { entry: FinanceEntry; onDone:
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState('');
   const [paidAt, setPaidAt] = useState(todayISO());
+  // Q5: what was actually paid and the proof of its rate (rate or TL amount); EUR paid in EUR → no rate (TCMB value-date rate)
+  const [paidCurrency, setPaidCurrency] = useState<FinanceEntry['currency']>(entry.currency);
+  const [paidAmount, setPaidAmount] = useState(String(entry.amount));
+  const [rate, setRate] = useState('');
+  const [tryAmount, setTryAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!open) return <Button size="sm" variant="secondary" icon="check" onClick={() => setOpen(true)}>{t.finance.markPaid}</Button>;
+  const num = (s: string) => (s.trim() ? Number(s.replace(',', '.')) : undefined);
+  const converted = paidCurrency !== entry.currency;
   return (
     <div className="inline-form">
       <label className="sr-only" htmlFor={`ref-${entry.id}`}>{t.finance.paymentRef}</label>
       <input id={`ref-${entry.id}`} className="input input--sm" placeholder={t.finance.paymentRef} value={ref} onChange={(e) => setRef(e.target.value)} />
       <label className="sr-only" htmlFor={`pd-${entry.id}`}>{t.finance.paidAt}</label>
       <input id={`pd-${entry.id}`} className="input input--sm" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+      <div className="row row--wrap">
+        <label className="sr-only" htmlFor={`pc-${entry.id}`}>{t.finance.paidCurrency}</label>
+        <select id={`pc-${entry.id}`} className="input input--sm select" value={paidCurrency}
+          onChange={(e) => { const c = e.target.value as FinanceEntry['currency']; setPaidCurrency(c); if (c === entry.currency) setPaidAmount(String(entry.amount)); else setPaidAmount(''); }}>
+          {[...new Set([entry.currency, 'EUR', 'TRY'])].map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label className="sr-only" htmlFor={`pa-${entry.id}`}>{t.finance.paidAmount}</label>
+        <input id={`pa-${entry.id}`} className="input input--sm" inputMode="decimal" placeholder={t.finance.paidAmount} value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} />
+        <label className="sr-only" htmlFor={`pr-${entry.id}`}>{t.finance.eurTryRate}</label>
+        <input id={`pr-${entry.id}`} className="input input--sm" inputMode="decimal" placeholder={t.finance.eurTryRate} value={rate} onChange={(e) => setRate(e.target.value)} />
+        {paidCurrency !== 'TRY' ? (
+          <>
+            <label className="sr-only" htmlFor={`pt-${entry.id}`}>{t.finance.tryAmount}</label>
+            <input id={`pt-${entry.id}`} className="input input--sm" inputMode="decimal" placeholder={t.finance.tryAmount} value={tryAmount} onChange={(e) => setTryAmount(e.target.value)} />
+          </>
+        ) : null}
+      </div>
+      <p className="muted small">{converted ? t.finance.rateHintConverted : t.finance.rateHintSame}</p>
       <div className="row">
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>{t.common.cancel}</Button>
         <Button size="sm" busy={busy} onClick={async () => {
           setBusy(true);
           setError(null);
           try {
-            onDone(await api.finance.markPaid(entry.id, { reference: ref.trim() || undefined, paidAt: paidAt || undefined }));
+            onDone(await api.finance.markPaid(entry.id, {
+              reference: ref.trim() || undefined, paidAt: paidAt || undefined,
+              paidCurrency, paidAmount: num(paidAmount), eurTryRate: num(rate), tryAmount: paidCurrency !== 'TRY' ? num(tryAmount) : undefined,
+            }));
             setOpen(false);
           } catch (e) {
             setError(errorMessage(e));

@@ -8,6 +8,7 @@ import { useToast } from '../../components/Toast';
 import { Button, DocStatusPill, ProfitBlock } from '../../components/ui';
 import { useProject } from './ProjectContext';
 import { useCanSeeFinancials } from '../../lib/visibility';
+import { RealizedFxBlock } from '../../components/RealizedFxBlock';
 
 const ENTITY_LABEL: Record<string, string> = {
   projects: 'Proje', service_items: 'Hizmet kalemi', supplier_offers: 'Tedarikçi teklifi', price_history: 'Fiyat geçmişi', rfqs: 'RFQ',
@@ -78,7 +79,10 @@ export function SidePanel() {
         <section className="card card--padded">
           <ProfitBlock title={t.profit.expected} value={detail.profit.expected} />
           <hr className="divider" />
-          <ProfitBlock title={t.profit.realized} value={detail.profit.realized} />
+          {/* Q5: evidence-based realized EUR + TL ("—" until a real money movement); legacy EUR block when the API has no realizedFx */}
+          {detail.profit.realizedFx !== undefined
+            ? <RealizedFxBlock title={t.profit.realized} value={detail.profit.realizedFx} />
+            : <ProfitBlock title={t.profit.realized} value={detail.profit.realized} />}
         </section>
       ) : null}
 

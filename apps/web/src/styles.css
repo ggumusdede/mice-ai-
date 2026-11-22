@@ -827,3 +827,17 @@ tr.diff th { font-weight: 600; }
 .tp__table { display: none; }
 .tp__lost + .tp__lost { margin-top: 8px; }
 @media (min-width: 760px) { .tp__table { display: block; } .tp__cards { display: none; } }
+
+/* Q5 kanıtlı gerçekleşen kâr: EUR | TL side by side (stacks under 360px) */
+.fx-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fx-col { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.fx-col__head { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.fx-col__profit { font-size: 20px; }
+.fx-kv { display: grid; gap: 2px; margin: 4px 0 0; }
+.fx-kv > div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.fx-kv dt { color: var(--text-2); }
+.fx-kv dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+.fx-kv--rates { margin-top: 6px; }
+.fx-reasons { margin: 4px 0; padding-left: 18px; color: var(--text-2); }
+.link-button { background: none; border: 0; padding: 4px 0; color: var(--accent); cursor: pointer; text-align: left; min-height: 32px; }
+@media (max-width: 360px) { .fx-cols { grid-template-columns: 1fr; } }

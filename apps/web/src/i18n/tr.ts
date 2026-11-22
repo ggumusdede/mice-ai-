@@ -106,6 +106,17 @@ export const tr = {
   profit: {
     expected: 'Beklenen kâr', realized: 'Gerçekleşen kâr', cost: 'Alış', sale: 'Satış', profit: 'Kâr',
     margin: 'Marj (Kâr ÷ Satış)', markup: 'Markup (Kâr ÷ Alış)', marginShort: 'Marj', markupShort: 'Markup',
+    // Q5 kanıtlı gerçekleşen kur
+    noMovements: 'Henüz gerçekleşen hareket yok', partial: 'Kısmi', complete: 'Kanıtlı',
+    eur: 'EUR', try: 'TL', avgCollection: 'Ort. tahsilat kuru', avgPayment: 'Ort. ödeme kuru', projectAvg: 'Proje ort. kuru', quoteRate: 'Teklif kuru',
+    fxGainLoss: 'Kur farkı (gerçekleşen − teklif kuru)', timingFx: 'Tahsilat ↔ ödeme günü kur farkı', evidence: 'Kanıt',
+    evidenceCount: (n: number) => `${n} hareket`, rateUnknown: 'kur yok',
+    type: { customer_invoice: 'Müşteri faturası', supplier_invoice: 'Tedarikçi faturası', collection: 'Tahsilat', payment: 'Ödeme' } as Record<string, string>,
+    usage: { settled: 'tahsil/ödendi (yerine nakit sayıldı)', open: 'açık kısım fatura kuruyla', cash: 'nakit', unbilled: 'faturasız', partly_unbilled: 'kısmen faturasız' } as Record<string, string>,
+    source: {
+      currency: 'EUR (kur gerekmez)', efatura: 'e-Fatura kuru', invoice: 'fatura kuru', bank_derived: 'banka', payment_record: 'ödeme kaydı',
+      payment_derived: 'ödeme kaydı (tutarlardan)', import: 'aktarım', tcmb: 'TCMB', manual: 'elle', missing: 'kur yok',
+    } as Record<string, string>,
   },
   projects: {
     title: 'Projeler', searchPlaceholder: 'Kod, müşteri, başlık veya PO no ara', stepFilter: 'Adım', outcomeFilter: 'Sonuç',
@@ -223,7 +234,10 @@ export const tr = {
     customerInvoiceDraft: 'Müşteri faturası taslağı üret', alarms: 'Alarmlar', noEntries: 'Kayıt yok.',
     paymentRequested: 'Ödeme talebi oluşturuldu; onay yöneticide.', kind: 'Tür', reference: 'Referans',
     uploadInvoice: 'Fatura dosyası (e-fatura / PDF)',
-    markPaid: 'Ödendi olarak işaretle', paymentRef: 'Banka işlem referansı', markedPaid: 'Ödeme kaydedildi (bankada insan tarafından yapıldı).',
+    markPaid: 'Ödendi olarak işaretle', paymentRef: 'Banka işlem referansı',
+    paidCurrency: 'Ödenen para birimi', paidAmount: 'Ödenen tutar', eurTryRate: 'Kur (1 EUR = ? TL)', tryAmount: 'TL karşılığı',
+    rateHintSame: 'Çevrim yapılmadıysa kur girmeyin: TL karşılığı ödeme günü TCMB kuruyla hesaplanır. Dekonttaki kur / TL tutarı varsa girin.',
+    rateHintConverted: 'Çevrimli ödeme: kur boşsa ödenen tutar ÷ borç tutarından türetilir (banka kuru).', markedPaid: 'Ödeme kaydedildi (bankada insan tarafından yapıldı).',
     paidAt: 'Ödeme tarihi', commissions: 'Komisyonlar', reconcile: 'Mutabakat yap', reconciled: 'Mutabakat tamam',
     commissionInvoiceNo: 'Komisyon fatura no', noCommissions: 'Komisyon kaydı yok.',
     customerInvoice: 'Müşteri faturası (Mikro’da kesilen)', customerInvoiceHint: 'Muhasebe faturayı Mikro’da keser; buraya fatura numarasını ve tutarı kaydedin.',

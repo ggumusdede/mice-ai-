@@ -26,7 +26,7 @@ await scenario('01-revision', async () => {
     await openTab(clerk, p.projectId, 'quote');
     const current = clerk.locator('.steps__item[aria-current="step"]');
     expect((await current.innerText()).includes('Tedarikçi seçimi ve RFQ'), `current step is 1 (${await current.innerText()})`);
-    await clerk.locator('.card', { hasText: /^v1/ }).getByText('Revizyon istendi').waitFor();
+    await clerk.locator('.card', { hasText: /^Rev\.1/ }).getByText('Revizyon istendi').waitFor();
     const tasks = (await must(clerk, 'GET', '/tasks?status=open')).items.filter((t) => t.projectId === p.projectId && t.kind === 'quote_revision');
     expect(tasks.length === 1 && /Kişi sayısı/.test(tasks[0].title), `revision task lists the pax change (${tasks.map((t) => t.title)})`);
     await shot(clerk, 'project-back-to-rfq', true);
@@ -47,8 +47,8 @@ await scenario('01-revision', async () => {
     expect(q2.version === 2, `new quote version v2 (got v${q2.version})`);
     if (q2.status === 'pending_approval') await adminDecide(admin, new RegExp(`${p.code.split('-').slice(0, 2).join('-')}.* v2:`), { shotName: 'inbox-quote-v2' });
     await openTab(clerk, p.projectId, 'quote');
-    await clerk.locator('.card', { hasText: /^v1/ }).getByText('Yenisi var').waitFor();
-    const v2 = clerk.locator('.card', { hasText: /^v2/ }).first();
+    await clerk.locator('.card', { hasText: /^Rev\.1/ }).getByText('Yenisi var').waitFor();
+    const v2 = clerk.locator('.card', { hasText: /^Rev\.2/ }).first();
     await v2.getByRole('button', { name: 'Müşteriye gönder' }).click();
     link2 = await v2.locator('.copy-link__url').innerText({ timeout: 20_000 });
     expect(/\/q\/[\w-]+$/.test(link2) && link2 !== p.quoteLink, 'new approval link for v2');
@@ -69,7 +69,7 @@ await scenario('01-revision', async () => {
     await cust.getByText('Onayınız alındı. Teşekkürler!').first().waitFor();
     await cust.context().close();
     await openTab(clerk, p.projectId, 'quote');
-    await clerk.locator('.card', { hasText: /^v2/ }).getByText('Kabul edildi').waitFor();
+    await clerk.locator('.card', { hasText: /^Rev\.2/ }).getByText('Kabul edildi').waitFor();
     await clerk.locator('.project__meta').getByText('Kazanıldı').waitFor();
     await shot(clerk, 'project-quote-v2-accepted', true);
     void BASE;

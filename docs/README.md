@@ -43,6 +43,8 @@ PRD bölümü / özellik → kodun bugünkü durumu. ✅ uygulandı · 🟡 kıs
 
 | PRD | Özellik | Durum | Kod / not |
 |---|---|---|---|
+| §4 / §16.7 (Q7) | Ekip performansı raporu (kişi bazlı karar verisi, dönem seçimli) | ✅ | `services/reports.ts` `teamPerformance`, `/yonetim/ekip-performansi` |
+| §7 Adım 3–4 (Q6, Q8, Q9) | Akreditasyon talebi, PO ≠ proje kodu (Referans), hızlı revizyon (Rev.N) | ✅ | `suppliers.ts` `requestAccreditation`, `quotes.ts` `reviseQuote`, `QuoteTab.tsx` |
 | §3.1, §3.5 | Tek doğru kaynak, belgeler veriden; değişiklik yayılımı | ✅ | `services/documents.ts`, `documents-b.ts`; `003` `propagate_staleness`, `doc_kinds_for`, `documents_send_guard`, `quotes_send_guard` |
 | §3.2, §15 | Onay kapıları, karar kutusu, Face ID step-up | ✅ | `services/decisions.ts`, `registry.ts`, `phase-b-registry.ts`; `domain/authority.ts` `requiresBiometric`; `auth/webauthn.ts`. Geliştirme biyometrisi yalnız `ALLOW_DEV_BIOMETRIC` |
 | §3.3 | İnsan imzası, kullanıcının kendi adresinden gönderim | ✅ / 🟡 | Kural uygulanıyor (`services/drafts.ts` `sendDraft`); her mesaj `outbox`'a yazılır. SMTP "send as" (`EMAIL_PROVIDER=smtp`) ve **kullanıcı bazlı Gmail API / Microsoft Graph OAuth** (`EMAIL_PROVIDER=oauth`, `services/email-oauth.ts`, `mail-accounts.ts`, `016`): imzalı + süreli state, PKCE, şifreli belirteç, yenileme, bağlantı kesme; bağlı olmayan kullanıcı için SMTP / outbox / bekletme. **Uygulandı, canlı hesaplarla test edilmedi** (yalnız sahte HTTP ile) |
