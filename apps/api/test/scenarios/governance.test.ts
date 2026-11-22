@@ -54,15 +54,17 @@ describe('Yönetişim', () => {
     expect((await ownerSql('SELECT status FROM suppliers WHERE id = $1', [w.supplier('moda')]))[0].status).toBe('accredited');
   });
 
-  it('G-03 [Ürün sorusu] §7.3 × §17.1 hedef marj altı teklifi vekil gerekçeyle açabiliyor (PRD: "yalnızca yönetici") — mevcut davranış', async () => {
-    // PRD §7.3 "yalnızca yönetici gerekçe yazarak açar"; §17.1 vekilin yasakları yalnız akreditasyon + kural/eşik/yetki.
-    // Uygulama margin_override'ı vekile açık bırakıyor (viaDelegation işaretli). Ürün sahibine soruldu (docs/10 Açık sorular).
+  it('G-03 §7.3 × §17.1 [ürün sahibi kararı] vekil marj altı teklifi açabilir ama açma kararı yalnız acenta yöneticisinin onayına sunulur', async () => {
     const w = await makeWorld(S, 'g3');
     await w.admin.post('/api/delegations', { delegateId: w.user('ops').id, startsAt: '2026-11-19T00:00:00Z', endsAt: '2026-12-31T00:00:00Z' });
-    const p = await w.flow().intake(REQUEST_TEXT, { customer: 'trusted' }).offers(OFFERS).quote(undefined, { markup: 0.04 });
-    const c = await w.card('margin_override', { entityId: p.quote.id, who: 'ops' });
-    const r = await w.decide(c, 'approve', { who: 'ops', reason: 'Yönetici ulaşılamıyor, müşteri bekliyor' });
-    expect(r.body.decision.viaDelegation).toBe(true);
+    const p = await w.flow().as('ops').intake(REQUEST_TEXT, { customer: 'trusted' }).offers(OFFERS).quote(undefined, { markup: 0.04 });
+    // vekil teklifi hazırlayıp açabildi; marj altı kararı onun kutusunda yok, yöneticinin kutusunda
+    expect(await w.cards({ kind: 'margin_override', entityId: p.quote.id, who: 'ops' })).toHaveLength(0);
+    const c = await w.card('margin_override', { entityId: p.quote.id, who: 'admin' });
+    const denied = await w.ops.post(`/api/decisions/${c.id}/decide`, { action: 'approve', reason: 'Yönetici ulaşılamıyor', biometric: { method: 'dev' } });
+    expect(denied.status).toBe(403);
+    const r = await w.decide(c, 'approve', { who: 'admin', reason: 'Stratejik müşteri' });
+    expect(r.body.decision.viaDelegation).toBe(false);
   });
 
   it('G-04 §16 otomasyon terfisi: 20 düzeltmesiz onaydan sonra "otomatik yapayım mı?"; düzeltme sayacı sıfırlar; terfi → otomatik + ~1/20 örneklem; hatalı örneklem → otomatik geri dönüş', async () => {

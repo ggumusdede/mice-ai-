@@ -99,6 +99,19 @@ describe('Adım 4 — müşteri onayı', () => {
     expect((await w.admin.post(`/api/projects/${p.id}/close`, {})).body).toMatchObject({ outcome: 'lost', step: 8 });
   });
 
+  it('S4-09 §7.4 [ürün sahibi kararı] kaybedilen proje "lost" + neden olarak kalır; müşteri linki artık kabul/revizyon almaz', async () => {
+    const w = await makeWorld(S, 's4e');
+    const p = await sent(w);
+    await p.flow().as('clerk').lost('Fiyat yüksek bulundu');
+    const acc = await w.pub.post(`/api/public/quotes/${p.quoteToken}/accept`, { optionNo: 1, approverName: 'Müşteri', poNumber: 'PO-1' });
+    expect(acc.status).toBe(409);
+    expect(acc.body.error.code).toBe('QUOTE_NO_LONGER_VALID');
+    const rev = await w.pub.post(`/api/public/quotes/${p.quoteToken}/revision`, { message: 'Kişi sayısı 90 olsun' });
+    expect(rev.body.error.code).toBe('QUOTE_NO_LONGER_VALID');
+    const proj = await w.admin.get(`/api/projects/${p.id}`);
+    expect(proj.body.project).toMatchObject({ outcome: 'lost', lostReason: 'Fiyat yüksek bulundu' });
+  });
+
   it('S4-08 §7.4 kaybedilen projede gönderilmiş teklif için takip taslağı üretilmez', async () => {
     const w = await makeWorld(S, 's4d');
     const p = await sent(w);

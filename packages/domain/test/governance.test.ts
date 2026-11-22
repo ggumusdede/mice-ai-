@@ -94,7 +94,7 @@ describe('authority & delegation (§17.1)', () => {
     expect(canDecide({ id: 'a', role: 'admin' }, { kind: 'supplier_accreditation', requiredRole: 'admin' }, [], now)).toEqual({ allowed: true, viaDelegation: false });
   });
   it('delegate may approve payments and contracts within the date range (flagged)', () => {
-    for (const kind of ['payment_approval', 'contract_approval', 'quote_approval', 'margin_override'] as DecisionKind[]) {
+    for (const kind of ['payment_approval', 'contract_approval', 'quote_approval'] as DecisionKind[]) {
       expect(canDecide(clerk, { kind, requiredRole: 'admin' }, [delegation], now)).toEqual({ allowed: true, viaDelegation: true });
     }
   });

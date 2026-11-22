@@ -390,7 +390,7 @@ export async function reconcileCommission(ctx: Ctx, entryId: string, input: { in
  *    KDV, Toplam, Döviz, Kur (1 EUR = kur), Açıklama;
  *  - cari kod: customers 120.<shortCode>, suppliers 320.<SUPPLIERSLUG(12)> (TDHP alıcılar / satıcılar);
  *  - supplier invoices = "Alış Faturası", customer invoices = "Satış Faturası", commission invoices = "Satış Faturası (komisyon)";
- *  - date filter on the invoice date (meta.issueDate, else created_at).
+ *  - date filter on the invoice date (meta.issueDate, else created_at); rows sorted newest → oldest (ürün sahibi kararı).
  */
 export async function mikroExport(ctx: Ctx, from?: string, to?: string): Promise<{ fileName: string; data: Buffer; rows: number }> {
   assertFinance(ctx);
@@ -400,7 +400,7 @@ export async function mikroExport(ctx: Ctx, from?: string, to?: string): Promise
       WHERE e.kind IN ('supplier_invoice','customer_invoice','commission') AND e.status <> 'cancelled' AND e.invoice_no IS NOT NULL
         AND ($1::date IS NULL OR COALESCE((e.meta->>'issueDate')::date, e.created_at::date) >= $1::date)
         AND ($2::date IS NULL OR COALESCE((e.meta->>'issueDate')::date, e.created_at::date) <= $2::date)
-      ORDER BY COALESCE((e.meta->>'issueDate')::date, e.created_at::date), e.invoice_no`, [from ?? null, to ?? null]);
+      ORDER BY COALESCE((e.meta->>'issueDate')::date, e.created_at::date) DESC, e.created_at DESC, e.invoice_no /* ürün sahibi kararı v0.4 S-Q3: yeniden eskiye */`, [from ?? null, to ?? null]);
   const wb = new ExcelJS.Workbook();
   wb.creator = 'MICE AI Operations OS';
   const ws = wb.addWorksheet('Mikro Aktarım');

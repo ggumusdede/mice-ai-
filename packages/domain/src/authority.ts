@@ -2,8 +2,10 @@
 import type { DecisionKind, Delegation, Role, User } from '@mice/shared';
 
 /** Decision kinds that ONLY the admin can decide (never a delegate): accreditation, rule/threshold/authority changes, automation promotion, rule suggestions, checklist questions.
+ *  margin_override: ürün sahibi kararı (v0.4 S-G03) — vekil hedef marj altı teklifi hazırlayıp açabilir, ama açma kararı yalnız
+ *  acenta yöneticisinin (admin) onayına sunulur.
  *  low_supplier_score is an accreditation decision too (§7 Adım 8 "akreditasyon kararı yöneticide": its Düzelt passivates the supplier). */
-export const ADMIN_ONLY_DECISIONS: DecisionKind[] = ['supplier_accreditation', 'automation_promotion', 'rule_suggestion', 'checklist_question', 'low_supplier_score'];
+export const ADMIN_ONLY_DECISIONS: DecisionKind[] = ['supplier_accreditation', 'automation_promotion', 'rule_suggestion', 'checklist_question', 'low_supplier_score', 'margin_override'];
 
 /** (additive) Active delegation for `userId` at `now` (startsAt <= now <= endsAt), if any. */
 export function activeDelegation(userId: string, delegations: Delegation[], now: Date): Delegation | null {

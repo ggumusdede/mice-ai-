@@ -355,8 +355,16 @@ export async function publicQuoteView(ctx: Ctx, id: string): Promise<PublicQuote
   };
 }
 
+async function assertProjectOpenForCustomer(ctx: Ctx, projectId: string): Promise<void> {
+  const { rows } = await ctx.db.query(`SELECT outcome FROM projects WHERE id = $1`, [projectId]);
+  const outcome = rows[0]?.outcome as string | undefined;
+  if (outcome && outcome !== 'open' && outcome !== 'won') throw conflict('Bu teklif artık geçerli değil', 'QUOTE_NO_LONGER_VALID');
+}
+
 export async function publicAccept(ctx: Ctx, id: string, input: { optionNo: number; approverName: string; poNumber?: string }): Promise<{ ok: true; firm: boolean }> {
   const q = await publicQuoteRow(ctx, id);
+  // Ürün sahibi kararı (v0.4 S-Q2): kaybedilen proje "lost" olarak kalır (kayıp nedeniyle); müşteri linki artık kabul/revizyon almaz.
+  await assertProjectOpenForCustomer(ctx, q.project_id);
   if (q.status !== 'sent') throw conflict('Bu teklif zaten yanıtlandı', 'QUOTE_ALREADY_ANSWERED');
   if (q.option_until && q.option_until < isoDate(ctx.now())) throw conflict('Teklifin opsiyon süresi doldu', 'QUOTE_OPTION_EXPIRED');
   const quote = await getQuote(ctx, id);
@@ -409,6 +417,7 @@ const REVISION_FIELDS: { key: 'startDate' | 'endDate' | 'pax' | 'roomsSgl' | 'ro
 
 /** §7 Adım 4 revizyon: diff list; dates/pax changed → back to step 1, price only → step 2. */
 export async function publicRevision(ctx: Ctx, id: string, message: string): Promise<{ ok: true; targetStep: 1 | 2; diff: unknown[] }> {
+  await assertProjectOpenForCustomer(ctx, (await publicQuoteRow(ctx, id)).project_id);
   const q = await publicQuoteRow(ctx, id);
   if (!message?.trim()) throw badRequest('Revizyon mesajı boş olamaz', undefined, 'MESSAGE_REQUIRED');
   if (q.status !== 'sent') throw conflict('Bu teklif zaten yanıtlandı', 'QUOTE_ALREADY_ANSWERED');

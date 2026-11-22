@@ -17,7 +17,7 @@ import { mapDraft, mapOffer, mapServiceItem, mapSupplier, type Row } from '../li
 import { isoDate } from '../lib/dates.js';
 import { assertSafeZip } from '../lib/zip-guard.js';
 import { attachAiActionEntity, logAiAction, recordCorrection } from './ai-log.js';
-import { createDecision } from './decisions.js';
+import { createDecision, expireDecisionsFor } from './decisions.js';
 import { aiDraft } from './drafts.js';
 import { currentFx, toEur, type FxSnapshot } from './fx.js';
 import { getItemRow } from './items.js';
@@ -82,7 +82,11 @@ export async function createOfferVersion(ctx: Ctx, item: Row, input: OfferInput)
       input.fieldConfidence ? JSON.stringify(input.fieldConfidence) : null, input.rawText ?? null, input.fileName ?? null,
       input.verifiedBy ?? null, input.verifiedBy ? ctx.now() : null, round, input.aiActionId ?? null, ctx.user?.id ?? null],
   )).rows[0];
-  if (prev && !prev.superseded_by) await ctx.db.query('UPDATE supplier_offers SET superseded_by = $2 WHERE id = $1', [prev.id, row.id]);
+  if (prev && !prev.superseded_by) {
+    await ctx.db.query('UPDATE supplier_offers SET superseded_by = $2 WHERE id = $1', [prev.id, row.id]);
+    // a superseded version can no longer be verified (OFFER_SUPERSEDED) — its open review card would stay in the inbox forever
+    await expireDecisionsFor(ctx, 'supplier_offer', prev.id, ['low_confidence_review']);
+  }
   if (prev && item.selected_offer_id === prev.id) {
     // the selected version was revised → the item now points at the newest version (documents become stale via trigger)
     await ctx.db.query('UPDATE service_items SET selected_offer_id = $2 WHERE id = $1', [item.id, row.id]);

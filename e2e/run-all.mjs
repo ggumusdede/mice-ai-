@@ -1,7 +1,7 @@
 // Runs every browser e2e script sequentially against ALREADY RUNNING servers (api :3001 AI_PROVIDER=mock, web :5173) and prints a
 // summary table (pass / fail / skip, duration). Non-zero exit when any script fails.
 //
-//   node e2e/run-all.mjs                    # all: steps0-5, steps6-8, scenarios/*.mjs
+//   node e2e/run-all.mjs                    # all: steps0-5, steps6-8, other top-level e2e/*.mjs, scenarios/*.mjs
 //   node e2e/run-all.mjs 03 delegation      # only scripts whose file name contains one of the arguments
 //   E2E_TIMEOUT_S=600 VERBOSE=1 …           # per-script timeout (default 600 s); VERBOSE=1 streams each script's output
 //
@@ -15,9 +15,11 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const filters = process.argv.slice(2);
 const timeoutS = Number(process.env.E2E_TIMEOUT_S ?? 600);
+const TOP_ORDER = ['steps0-5.mjs', 'steps6-8.mjs']; // flows first, then any other top-level e2e script (e.g. import.mjs), then scenarios
+const top = readdirSync(here).filter((f) => f.endsWith('.mjs') && f !== 'run-all.mjs')
+  .sort((a, b) => (TOP_ORDER.indexOf(a) + 1 || 99) - (TOP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
 const scripts = [
-  join(here, 'steps0-5.mjs'),
-  join(here, 'steps6-8.mjs'),
+  ...top.map((f) => join(here, f)),
   ...readdirSync(join(here, 'scenarios')).filter((f) => f.endsWith('.mjs')).sort().map((f) => join(here, 'scenarios', f)),
 ].filter((s) => !filters.length || filters.some((f) => s.includes(f)));
 

@@ -205,7 +205,7 @@ sonunda betik / sonuç (PASS · FAIL · SKIP) / süre tablosu basar, herhangi bi
 # API'yi gelen e-posta sırrı ve stdout log dosyasıyla başlatın (senaryo 14 ve 15 bunları kullanır)
 AI_PROVIDER=mock INBOUND_EMAIL_SECRET=e2e-sirri npm start -w apps/api > /tmp/api.log 2>&1 &
 (cd apps/web && npx vite) &
-INBOUND_EMAIL_SECRET=e2e-sirri API_LOG=/tmp/api.log node e2e/run-all.mjs      # hepsi (~6–8 dk)
+INBOUND_EMAIL_SECRET=e2e-sirri API_LOG=/tmp/api.log node e2e/run-all.mjs      # hepsi (~6–8 dk; e2e/*.mjs + scenarios/*)
 node e2e/run-all.mjs 03 kvkk                     # yalnız dosya adında "03" veya "kvkk" geçenler
 node e2e/scenarios/05-stale-documents.mjs        # tek senaryo; VERBOSE=1 run-all çıktısını akıtır, E2E_TIMEOUT_S (600)
 ```
@@ -218,7 +218,7 @@ node e2e/scenarios/05-stale-documents.mjs        # tek senaryo; VERBOSE=1 run-al
   e-postalarını konsola yazar) okur; verilmezse ekip tarafı geri çekmeye düşer ve not düşer. **Senaryo 9** RFQ son tarihini geçmişe
   almak için `psql` kullanır (`MIGRATION_DATABASE_URL`, varsayılan `postgres://postgres@localhost:5432/mice`); psql yoksa o adımı atlar.
 - Senaryo 11 ve 12 kuralları değiştirir ve sonunda geri alır; senaryo 7 karar kutusunu tamamen boşaltır ("Her şey yolunda").
-- Senaryo listesi ve ne doğruladıkları: [`e2e/SCENARIOS.md`](e2e/SCENARIOS.md).
+- Senaryo listesi ve ne doğruladıkları: [`docs/10-senaryolar.md` → Tarayıcı senaryoları](docs/10-senaryolar.md#tarayıcı-senaryoları) (kopyası `e2e/SCENARIOS.md`).
 
 ## Dağıtım (Docker, CI, iletişim kanalları, operasyon)
 

@@ -79,6 +79,7 @@ PRD bölümü / özellik → kodun bugünkü durumu. ✅ uygulandı · 🟡 kıs
 | §4, §10, §15, §16 | **[Ürün kararı]** güvenli varsayılanlar (acenta kuralı, Kurallar → "Ürün kararları"): `hideCustomerFromSuppliers` (açık — tedarikçi `PRJ-0042-20270312-80` görür), `fieldRoleCanSeeFinancials` (kapalı — saha kâr / maliyet / finans görmez, sunucuda), `neverAutomateKinds` (müşteri teklifi onayı + marj altı açma asla otomatik), `outboundAutoSendRequiresStandingApproval` (kapalı — terfi edilmiş dış mesajlar yine onaya gelir) | ✅ | 09 G-15, G-16, Ü-1; `services/visibility.ts`, `services/automation.ts` |
 | — | SSO, yenileme belirteci (HttpOnly çerez), nesne deposu | ⛔ | 01 §1, §3, §6 |
 | §4–§17 | İş senaryoları (API düzeyi, akıcı senaryo kurgusu) | ✅ | `apps/api/test/scenarios/*.test.ts`, `_scenario.ts`; katalog ve açık sorular [10-senaryolar.md](10-senaryolar.md) |
+| §15, §4–§17 | Tarayıcı senaryoları (17 Playwright senaryosu + `e2e/run-all.mjs` özet tablosu) | ✅ | `e2e/scenarios/*.mjs`, `e2e/lib/*.mjs`; [10-senaryolar.md → Tarayıcı senaryoları](10-senaryolar.md#tarayıcı-senaryoları) |
 | — | Güvenlik incelemesi; üretim kurulumu (Docker/CI) | — | Eşzamanlı ekleniyor; bkz. [09-guvenlik-incelemesi.md](09-guvenlik-incelemesi.md) ve üretim hazırlığı dosyaları |
 
 ## Okuma kılavuzu
