@@ -6,7 +6,7 @@
 // rendered live by `roomingListXlsx()` for the requesting user: clear names / e-mail / phone only for roles with
 // `view_guest_pii`, masked labels for everyone else.
 import ExcelJS from 'exceljs';
-import type { ProfitSummary } from '@mice/shared';
+import type { ProfitSummary, RealizedFx } from '@mice/shared';
 import { roleCan } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { conflict } from '../errors.js';
@@ -16,7 +16,7 @@ import { computeClosingCheck } from './closing.js';
 import { registerDocumentGenerator } from './documents.js';
 import { currentFx, toEur } from './fx.js';
 import { listGuests } from './guests.js';
-import { money, pct, renderPdf } from './pdf.js';
+import { money, pct, renderPdf, type PdfSpec } from './pdf.js';
 import { getProjectRow } from './projects.js';
 import { supplierRef } from './visibility.js';
 
@@ -123,6 +123,9 @@ export interface RealizedPnl {
   suppliers: { supplier: string; contractEur: number; invoicedEur: number; differenceEur: number }[];
   customerInvoicedEur: number;
   extras: { totalEur: number; reflectedEur: number; unreflectedEur: number };
+  /** (additive, Q5) evidence-based realized EUR + TRY, average rates, FX gain/loss and the evidence table */
+  realizedFx?: RealizedFx | null;
+  plannedTry?: { cost: number; sale: number; profit: number } | null;
 }
 
 export async function realizedPnl(ctx: Ctx, projectId: string): Promise<RealizedPnl | null> {
@@ -144,10 +147,11 @@ export async function realizedPnl(ctx: Ctx, projectId: string): Promise<Realized
        FROM field_extras WHERE project_id = $1 AND admin_status <> 'rejected'`, [projectId])).rows[0];
   const fx = await currentFx(ctx.db);
   const toEurTry = (v: unknown) => (fx.rates.TRY ? r2(toEur(fx, Number(v), 'TRY')) : 0);
-  if (!check.planVsActual.planned && !check.planVsActual.actual && !suppliers.length) return null;
+  if (!check.planVsActual.planned && !check.planVsActual.actual && !suppliers.length && check.planVsActual.realizedFx?.status !== 'complete' && check.planVsActual.realizedFx?.status !== 'partial') return null;
   return {
     planned: check.planVsActual.planned, actual: check.planVsActual.actual, deviations: check.planVsActual.deviations, suppliers,
     customerInvoicedEur: r2(cust), extras: { totalEur: toEurTry(ex.total), reflectedEur: toEurTry(ex.refl), unreflectedEur: toEurTry(ex.unrefl) },
+    realizedFx: check.planVsActual.realizedFx ?? null, plannedTry: check.planVsActual.plannedTry ?? null,
   };
 }
 
@@ -162,6 +166,57 @@ export function planVsActualRows(r: RealizedPnl): string[][] {
   return [
     row('Alış (maliyet)', (s) => s.costEur, eur), row('Satış', (s) => s.saleEur, eur), row('Kâr', (s) => s.profitEur, eur),
     row('Marj (Kâr ÷ Satış)', (s) => s.margin, pct, false), row('Markup (Kâr ÷ Alış)', (s) => s.markup, pct, false),
+  ];
+}
+
+const RATE_SOURCE_TR: Record<string, string> = {
+  currency: 'EUR (kur gerekmez)', efatura: 'e-Fatura kuru', invoice: 'fatura kuru', bank_derived: 'banka (tutarlardan)', payment_record: 'ödeme kaydı',
+  payment_derived: 'ödeme kaydı (tutarlardan)', import: 'aktarım', tcmb: 'TCMB', manual: 'elle', missing: 'KUR YOK',
+};
+const TYPE_TR: Record<string, string> = { customer_invoice: 'Müşteri faturası', supplier_invoice: 'Tedarikçi faturası', collection: 'Tahsilat', payment: 'Ödeme' };
+
+/** PDF sections (Q5): realized EUR + TRY side by side, average rates, FX lines and the evidence table (every number provable). */
+export function realizedFxSections(r: RealizedPnl): PdfSpec['sections'] {
+  const fx = r.realizedFx;
+  if (!fx) return [];
+  const try_ = (n: number | null | undefined) => (n == null ? '—' : money(n, 'TRY'));
+  const eur = (n: number | null | undefined) => (n == null ? '—' : money(n, 'EUR'));
+  const p = (n: number | null | undefined) => (n == null ? '—' : pct(n));
+  const rate = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('tr-TR', { maximumFractionDigits: 4 }));
+  return [
+    {
+      kind: 'table',
+      table: {
+        title: `Gerçekleşen (kanıtlı kurlarla) — ${fx.status === 'complete' ? 'tam' : fx.status === 'partial' ? 'KISMİ' : 'hareket yok'}`,
+        columns: [{ label: '', width: 175 }, { label: 'EUR', width: 110, align: 'right' }, { label: 'TL', width: 110, align: 'right' }, { label: 'Plan (TL, teklif kuru)', width: 110, align: 'right' }],
+        rows: [
+          ['Alış (maliyet)', eur(fx.cost.eur), try_(fx.cost.try), try_(r.plannedTry?.cost)],
+          ['Satış', eur(fx.revenue.eur), try_(fx.revenue.try), try_(r.plannedTry?.sale)],
+          ['Kâr', eur(fx.profit.eur), try_(fx.profit.try), try_(r.plannedTry?.profit)],
+          ['Marj (Kâr ÷ Satış)', p(fx.margin.eur), p(fx.margin.try), '—'],
+          ['Markup (Kâr ÷ Alış)', p(fx.markup.eur), p(fx.markup.try), '—'],
+          ['Kur farkı (gerçekleşen − teklif kuru)', eur(fx.fxGainLoss.eur), try_(fx.fxGainLoss.try), '—'],
+          ['Tahsilat günü - ödeme günü kur farkı', '—', try_(fx.collectionVsPaymentFx.try), '—'],
+          ['Ort. tahsilat kuru (EUR/TL)', '', rate(fx.avgCollectionRate), ''],
+          ['Ort. ödeme kuru (EUR/TL)', '', rate(fx.avgPaymentRate), ''],
+          ['Proje ortalama kuru (EUR/TL)', '', rate(fx.projectAvgRate), rate(fx.quoteRate)],
+        ],
+      },
+    },
+    {
+      kind: 'table',
+      table: {
+        title: 'Kanıt: para hareketleri (her biri kendi gerçek kuruyla)',
+        columns: [{ label: 'Tarih / tür', width: 120 }, { label: 'Tutar', width: 95, align: 'right' }, { label: 'Kur / kaynak', width: 130 }, { label: 'EUR', width: 80, align: 'right' }, { label: 'TL', width: 80, align: 'right' }],
+        rows: fx.evidence.map((e) => [
+          `${e.date ?? '—'} ${TYPE_TR[e.type] ?? e.type}${e.usage === 'settled' ? ' (tahsil/ödendi)' : ''}`,
+          money(e.amount, e.currency),
+          `${rate(e.eurTryRate)} · ${e.rateNote ?? RATE_SOURCE_TR[e.rateSource] ?? e.rateSource}`,
+          eur(e.eur), try_(e.try),
+        ]),
+      },
+    },
+    ...(fx.reasons.length ? [{ kind: 'text' as const, title: 'Eksik / kısmi', lines: fx.reasons.map((x) => x.message) }] : []),
   ];
 }
 

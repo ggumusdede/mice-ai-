@@ -5,7 +5,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import type { BankTransaction, Currency, FinanceEntry, SupplierInvoiceInput } from '@mice/shared';
-import { matchBankTransaction, parseBankCsv, roleCan, slugTr } from '@mice/domain';
+import { deriveMovementRates, matchBankTransaction, parseBankCsv, roleCan, slugTr } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
@@ -135,6 +135,10 @@ export async function recordSupplierInvoice(ctx: Ctx, input: InvoiceRequest): Pr
         ...(ubl ? { ubl: ublSummary(ubl.ubl) } : {}) }),
       user.id])).rows[0];
   if (ubl?.ubl.uuid) await ctx.db.query('UPDATE finance_entries SET ubl_uuid = $2 WHERE id = $1', [row.id, ubl.ubl.uuid]);
+  // Q5: actual rate evidence — e-Fatura PricingExchangeRate (TRY per 1 unit of the document currency) or the rate / TL equivalent entered
+  const ublEurTry = ubl && currency === 'EUR' ? ubl.ubl.exchangeRate : null;
+  await recordInvoiceRate(ctx, row.id, { amount: data.amount, currency, issueDate: data.issueDate ?? isoDate(ctx.now()),
+    eurTryRate: ublEurTry ?? data.eurTryRate ?? null, tryAmount: data.tryAmount ?? null, source: ublEurTry ? 'efatura' : 'invoice' });
   if (aiActionId) await ctx.db.query('UPDATE ai_actions SET entity_type = $2, entity_id = $3 WHERE id = $1', [aiActionId, 'finance_entry', row.id]);
 
   // separately billed supplier commission (§7 Adım 7 komisyon mutabakatı): expected commission receivable
@@ -156,11 +160,19 @@ export async function recordSupplierInvoice(ctx: Ctx, input: InvoiceRequest): Pr
     await logAiAction(ctx, { actionType: 'internal_alarm_task', projectId: p.id, entityType: 'finance_entry', entityId: row.id, result: { confidence: 1, model: 'rules', data: { alarms } } });
     if (mismatch) await notify(ctx, { roles: ['admin'], priority: 'routine', title: `${p.code}: fatura tutar farkı — ${supplier.name} ${data.invoiceNo}`, body: alarms.join('\n'), projectId: p.id, entityType: 'finance_entry', entityId: row.id });
   }
-  return { entry: mapFinance(row), alarms };
+  return { entry: mapFinance((await ctx.db.query('SELECT * FROM finance_entries WHERE id = $1', [row.id])).rows[0]), alarms };
+}
+
+/** Q5: stores the rate the invoice proves (never today's rate); nothing proven → only the value date is stored. */
+async function recordInvoiceRate(ctx: Ctx, id: string, i: { amount: number; currency: string; issueDate: string | null; eurTryRate: number | null; tryAmount: number | null; source: string }): Promise<void> {
+  const r = deriveMovementRates({ amount: i.amount, currency: i.currency, eurTryRate: i.eurTryRate, tryAmount: i.tryAmount });
+  const proven = r.eurTryRate != null || (i.currency !== 'EUR' && r.eurRate != null);
+  await ctx.db.query(`UPDATE finance_entries SET actual_fx_rate = $2, eur_try_rate = $3, rate_source = $4, value_date = $5 WHERE id = $1`,
+    [id, proven ? (i.currency === 'EUR' ? 1 : r.eurRate) : null, r.eurTryRate, proven ? i.source : null, i.issueDate]);
 }
 
 // ------------------------------------------------------------------ customer invoice (issued in Mikro; recorded here)
-export async function recordCustomerInvoice(ctx: Ctx, input: { projectId: string; invoiceNo: string; amount: number; currency: Currency; vatAmount?: number; issueDate?: string; dueDate?: string }): Promise<FinanceEntry> {
+export async function recordCustomerInvoice(ctx: Ctx, input: { projectId: string; invoiceNo: string; amount: number; currency: Currency; vatAmount?: number; issueDate?: string; dueDate?: string; eurTryRate?: number; tryAmount?: number }): Promise<FinanceEntry> {
   assertFinance(ctx);
   const p = await getProjectRow(ctx, input.projectId);
   const fx = await currentFx(ctx.db);
@@ -169,7 +181,9 @@ export async function recordCustomerInvoice(ctx: Ctx, input: { projectId: string
      VALUES (app_tenant_id(), $1,'customer_invoice',$2,$3,$4,$5,$6,'open',$7,$8,$9,$10) RETURNING *`,
     [p.id, input.amount, input.currency, rateFor(fx, input.currency), r2(toEur(fx, input.amount, input.currency)), input.dueDate ?? null, p.code, input.invoiceNo,
       JSON.stringify({ vatAmount: input.vatAmount ?? null, issueDate: input.issueDate ?? isoDate(ctx.now()), customerId: p.customer_id }), ctx.user!.id])).rows[0];
-  return mapFinance(row);
+  await recordInvoiceRate(ctx, row.id, { amount: input.amount, currency: input.currency, issueDate: input.issueDate ?? isoDate(ctx.now()),
+    eurTryRate: input.eurTryRate ?? null, tryAmount: input.tryAmount ?? null, source: 'invoice' });
+  return mapFinance((await ctx.db.query('SELECT * FROM finance_entries WHERE id = $1', [row.id])).rows[0]);
 }
 
 // ------------------------------------------------------------------ payment requests (finance creates, admin approves EACH one)
@@ -215,15 +229,31 @@ export async function paymentDecisionEffect(ctx: Ctx, entryId: string, action: '
   return ['payment_approved'];
 }
 
+/** Payment record input (Q5): what was actually paid and the proof of its rate (rate, or the TL amount → derived). */
+export interface MarkPaidInput { paidAt?: string; reference?: string; paidAmount?: number; paidCurrency?: Currency; eurTryRate?: number; tryAmount?: number }
+
 /** A human records that the approved payment was made (the system itself never pays). */
-export async function markPaid(ctx: Ctx, entryId: string, input: { paidAt?: string; reference?: string }): Promise<FinanceEntry> {
+export async function markPaid(ctx: Ctx, entryId: string, input: MarkPaidInput): Promise<FinanceEntry> {
   const user = requireUser(ctx);
   if (!roleCan(user.role, 'create_payment_request')) throw forbidden('Ödeme kaydını finans / yönetici girer', 'FORBIDDEN');
   const e = await getEntry(ctx, entryId, true);
   if (e.status !== 'approved') throw conflict('Yalnızca onaylı ödeme "ödendi" işaretlenebilir (önce yönetici onayı)', 'PAYMENT_NOT_APPROVED');
+  const paidCurrency = (input.paidCurrency ?? e.currency) as Currency;
+  const paidAmount = input.paidAmount ?? (paidCurrency === e.currency ? Number(e.amount) : paidCurrency === 'TRY' && input.tryAmount ? input.tryAmount : null);
+  if (paidAmount == null || !(paidAmount > 0)) throw badRequest('Farklı para birimiyle ödemede ödenen tutar gerekli', undefined, 'PAID_AMOUNT_REQUIRED');
+  // proof of rate: explicit EUR/TRY, the TL amount, or — a conversion — the paid amount against the settled entry amount
+  const converted = paidCurrency !== e.currency;
+  const r = deriveMovementRates({
+    amount: paidAmount, currency: paidCurrency, eurTryRate: input.eurTryRate ?? null,
+    tryAmount: input.tryAmount ?? null, eurAmount: converted && e.currency === 'EUR' ? Number(e.amount) : null,
+  });
+  const proven = r.eurTryRate != null || (paidCurrency !== 'EUR' && r.eurRate != null);
+  const source = !proven ? null : input.eurTryRate != null || input.tryAmount != null ? 'payment_record' : 'payment_derived';
   const row = (await ctx.db.query(
-    `UPDATE finance_entries SET status = 'paid', paid_by = $2, paid_at = $3, meta = meta || $4 WHERE id = $1 RETURNING *`,
-    [entryId, user.id, input.paidAt ? new Date(input.paidAt) : ctx.now(), JSON.stringify({ paymentReference: input.reference ?? null })])).rows[0];
+    `UPDATE finance_entries SET status = 'paid', paid_by = $2, paid_at = $3, meta = meta || $4,
+       paid_amount = $5, paid_currency = $6, paid_fx_rate = $7, paid_eur_try_rate = $8, paid_rate_source = $9 WHERE id = $1 RETURNING *`,
+    [entryId, user.id, input.paidAt ? new Date(input.paidAt) : ctx.now(), JSON.stringify({ paymentReference: input.reference ?? null }),
+      paidAmount, paidCurrency, paidCurrency === 'EUR' ? 1 : r.eurRate, r.eurTryRate, source])).rows[0];
   return mapFinance(row);
 }
 
@@ -259,6 +289,18 @@ async function matchCandidates(ctx: Ctx) {
 /** Sets the match (tx matched + entry matched). `auto` = high-confidence autonomous match. */
 async function applyMatch(ctx: Ctx, txId: string, entryId: string, confidence: number | null): Promise<void> {
   await ctx.db.query(`UPDATE bank_transactions SET status = 'matched', matched_entry_id = $2, match_confidence = $3 WHERE id = $1`, [txId, entryId, confidence]);
+  // Q5: a line in another currency than the entry it settles = a conversion → its actual rate is proven by the two amounts
+  // (TRY line ÷ EUR invoice). Same currency (EUR paid in EUR) = no conversion → TRY value later from the value-date TCMB rate.
+  const tx = (await ctx.db.query('SELECT amount, currency, fx_rate, eur_try_rate FROM bank_transactions WHERE id = $1', [txId])).rows[0];
+  const e = (await ctx.db.query('SELECT amount, currency FROM finance_entries WHERE id = $1', [entryId])).rows[0];
+  if (tx && e && tx.currency !== e.currency && tx.fx_rate == null && tx.eur_try_rate == null) {
+    const eurAmount = e.currency === 'EUR' ? Number(e.amount) : null;
+    const tryAmount = e.currency === 'TRY' ? Number(e.amount) : null;
+    const r = deriveMovementRates({ amount: Math.abs(Number(tx.amount)), currency: tx.currency, eurAmount, tryAmount });
+    if (r.eurRate != null || r.eurTryRate != null) {
+      await ctx.db.query(`UPDATE bank_transactions SET fx_rate = $2, eur_try_rate = $3, rate_source = 'bank_derived' WHERE id = $1`, [txId, r.eurRate, r.eurTryRate]);
+    }
+  }
   await ctx.db.query(`UPDATE finance_entries SET status = 'matched', matched_bank_transaction_id = $2 WHERE id = $1`, [entryId, txId]);
 }
 

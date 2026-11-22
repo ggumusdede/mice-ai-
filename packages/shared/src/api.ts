@@ -5,10 +5,10 @@
 import type {
   AuditEntry, AutomationCounter, BankTransaction, ChecklistQuestion, Contract, ContractDiffItem, Customer, Decision,
   DecisionInput, Delegation, FieldExtra, FinanceEntry, GeneratedDocument, Guest, ID, InboundMessage, MessageDraft,
-  OfferEvaluation, Project, ProfitSummary, Quote, Rfq, ServiceItem, Supplier, SupplierOffer, Task, User,
+  OfferEvaluation, Project, ProfitSummary, Quote, RealizedFx, Rfq, ServiceItem, Supplier, SupplierOffer, Task, User,
 } from './models.js';
 import type { TenantRules } from './rules.js';
-import type { InboundChannel, Language, ServiceKind } from './enums.js';
+import type { Currency, InboundChannel, Language, ServiceKind } from './enums.js';
 
 export interface ApiError { error: { code: string; message: string; details?: unknown } }
 export interface List<T> { items: T[] }
@@ -68,7 +68,8 @@ export interface ProjectDetail {
   documents: GeneratedDocument[];
   tasks: Task[];
   alerts: ProjectAlert[];
-  profit: { expected: ProfitSummary | null; realized: ProfitSummary | null };
+  /** realizedFx (additive, Q5): evidence-based realized EUR + TRY, averages, FX gain/loss, evidence list */
+  profit: { expected: ProfitSummary | null; realized: ProfitSummary | null; realizedFx?: RealizedFx | null };
   recentActivity: AuditEntry[];
   stepTimer: { businessMinutesElapsed: number; targetBusinessMinutes: number; customerWaitMinutes: number };
 }
@@ -124,6 +125,10 @@ export interface ChannelPriceInput { supplierId: ID; date: string; roomType: str
 // GET  /api/public/quotes/:token                             -> PublicQuoteView (marks opened_at)
 // POST /api/public/quotes/:token/accept  body {optionNo, approverName, poNumber?} -> {ok:true}
 // POST /api/public/quotes/:token/revision body {message}      -> {ok:true}
+// (additive, Q9 hızlı revizyon) POST /api/quotes/:id/revise  body Partial<BuildQuoteRequest> -> Quote
+//   next revision (Rev.N+1) of the SAME quote file (same project code); body omitted → the previous revision's options are reused
+//   (superseded offer versions follow to their latest version); validation + approval gates apply again. Only the latest revision
+//   can be revised (409 QUOTE_NOT_LATEST); an accepted quote is not revised here (409 QUOTE_ACCEPTED). Sent revisions stay read-only.
 export interface BuildQuoteRequest {
   currency?: string;
   options: { title: string; lines: { serviceItemId: ID; offerId?: ID | null; markup?: number; unitPriceEur?: number }[] }[];
@@ -161,13 +166,19 @@ export interface PublicQuoteView { agencyName: string; projectCode: string; cust
 // POST /api/projects/:id/customer-invoice-draft      -> GeneratedDocument
 // GET  /api/finance/export/mikro?from=&to=           -> xlsx (Mikro Yazılım import)
 // GET  /api/finance/commissions?projectId=           -> List<FinanceEntry>
-export interface SupplierInvoiceInput { projectId: ID; supplierId: ID; invoiceNo: string; amount: number; currency: string; vatAmount?: number; issueDate: string; dueDate?: string; serviceItemIds?: ID[] }
+export interface SupplierInvoiceInput { projectId: ID; supplierId: ID; invoiceNo: string; amount: number; currency: string; vatAmount?: number; issueDate: string; dueDate?: string; serviceItemIds?: ID[];
+  /** (additive, Q5) actual rate proof printed on the invoice: EUR/TRY rate or the TL equivalent of `amount` */
+  eurTryRate?: number; tryAmount?: number }
+/** (additive, Q5) POST /api/finance/entries/:id/mark-paid body */
+export interface MarkPaidRequest { paidAt?: string; reference?: string; paidAmount?: number; paidCurrency?: Currency; eurTryRate?: number; tryAmount?: number }
 
 // ---------- Closing (Adım 8) ----------
 // GET  /api/projects/:id/closing-check         -> ClosingCheck
 // POST /api/projects/:id/close   body {lessonsLearned?: string} -> Project
 // GET/POST /api/public/survey/:token           3-question survey
-export interface ClosingCheck { ok: boolean; items: { key: string; label: string; ok: boolean; detail?: string }[]; planVsActual: { planned: ProfitSummary | null; actual: ProfitSummary | null; deviations: { reason: string; amountEur: number }[] } }
+export interface ClosingCheck { ok: boolean; items: { key: string; label: string; ok: boolean; detail?: string }[]; planVsActual: { planned: ProfitSummary | null; actual: ProfitSummary | null; deviations: { reason: string; amountEur: number }[];
+  /** (additive, Q5) evidence-based realized EUR + TRY (each movement at its actual rate) and the planned TRY at the quote rate */
+  realizedFx?: RealizedFx | null; plannedTry?: { cost: number; sale: number; profit: number } | null } }
 
 // ---------- Admin: rules, users, delegations, checklist, automation ----------
 // GET   /api/rules  -> TenantRules ; PATCH /api/rules body Partial<TenantRules> (admin only; AI can never call)
@@ -182,6 +193,62 @@ export type RulesResponse = TenantRules;
 export interface UserStats { userId: ID; quotesTotal: number; quotesCorrected: number; avgPriceChangePct: number; avgMarginChangePct: number; won: number; lost: number; winRate: number | null }
 
 // ---------- Reports (§16.6) ----------
+// (additive, Q7) GET /api/reports/team-performance?from=YYYY-MM-DD&to=YYYY-MM-DD -> TeamPerformanceReport (admin only; default last 12 months)
+//   Per salesperson (project owner): requests, quotes sent, won / lost (+ reasons), quote time vs target, planned margin & markup
+//   (separately) and realized profit on won projects. Quote-quality metrics (corrections, approval-required vs free) go to the quote author.
+export interface TeamPerformanceLostProject { projectId: ID; code: string; title: string; customerName: string | null; lostReason: string | null; decidedAt: string | null; historical: boolean }
+export interface TeamPerformanceRow {
+  userId: ID;
+  fullName: string;
+  role: string | null;
+  authorityLevel: string | null;
+  active: boolean;
+  /** requests (projects) received in the period and owned by the user */
+  requests: number;
+  /** customer quotes (revisions included) sent in the period on the user's projects */
+  quotesSent: number;
+  won: number;
+  lost: number;
+  /** won ÷ (won + lost); null when nothing decided */
+  winRate: number | null;
+  lostProjects: TeamPerformanceLostProject[];
+  lostReasons: { reason: string; count: number }[];
+  /** agency business hours request → first quote sent (customer wait excluded), mean over projects whose quote was sent in the period */
+  avgQuoteBusinessHours: number | null;
+  quoteTargetBusinessHours: number;
+  onTargetRate: number | null;
+  /** won projects: planned (accepted option) Kâr÷Satış and Kâr÷Alış — separately; null when financials are hidden or no data */
+  avgPlannedMargin: number | null;
+  avgPlannedMarkup: number | null;
+  plannedProfitEur: number | null;
+  /** realized profit on won projects (EUR, internal currency); TRY only when the realized-FX evidence provides it */
+  realizedProfitEur: number | null;
+  realizedProfitTry: number | null;
+  realizedProjects: number;
+  /** won projects whose TRY realized profit is unknown (no FX evidence) */
+  realizedTryMissing: number;
+  /** quotes authored by the user (created in the period) */
+  quotesBuilt: number;
+  quotesReviewed: number;
+  quotesCorrected: number;
+  /** corrected ÷ reviewed (admin edit / reject on the approval card) */
+  correctionRate: number | null;
+  approvalRequiredQuotes: number;
+  freeQuotes: number;
+  blockedQuotes: number;
+  historicalProjects: number;
+}
+export interface TeamPerformanceReport {
+  from: string;
+  to: string;
+  financialsVisible: boolean;
+  rows: TeamPerformanceRow[];
+  totals: Omit<TeamPerformanceRow, 'userId' | 'fullName' | 'role' | 'authorityLevel' | 'active' | 'lostProjects'>;
+}
+// (additive, Q6) POST /api/suppliers/:id/request-accreditation body {reason?, projectId?} -> AccreditationRequestResponse
+//   sales / ops / admin; idempotent: reuses the open 'supplier_accreditation' card (admin-only decision, never auto-approved)
+export interface AccreditationRequestResponse { decisionId: ID; created: boolean; supplierId: ID; status: string }
+
 // GET /api/reports/weekly?weekStart=YYYY-MM-DD -> WeeklyReport
 export interface WeeklyReport {
   weekStart: string;
@@ -288,7 +355,7 @@ export interface GenerateDocumentRequest { kind: 'program' | 'rooming_list' | 'p
 // POST  /api/import/batches/:id/commit                  -> ImportBatchDetail (approved rows → live tables, one transaction)
 // POST  /api/import/batches/:id/abandon body {reason?}  -> ImportBatch
 // GET   /api/projects?historical=exclude|include|only   (default exclude: imported past projects never show in active lists)
-export type ImportEntityName = 'suppliers' | 'customers' | 'projects' | 'service_lines' | 'price_points' | 'channel_prices';
+export type ImportEntityName = 'suppliers' | 'customers' | 'projects' | 'service_lines' | 'price_points' | 'channel_prices' | 'finance_movements';
 export type ImportRowStatusName = 'ok' | 'warning' | 'error';
 export type ImportReview = 'pending' | 'approved' | 'rejected';
 export interface ImportIssueView { code: string; severity: 'error' | 'warning' | 'info'; message: string; field?: string }

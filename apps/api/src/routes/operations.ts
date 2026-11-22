@@ -18,6 +18,9 @@ import { loadQuotes } from '../services/quotes.js';
 import { getProjectRow } from '../services/projects.js';
 import { mapDocument } from '../lib/mappers.js';
 import { assertFinancialsVisible } from '../services/visibility.js';
+import { addFxRates, importTcmbRates, listFxRates } from '../services/fx-rates.js';
+import { projectRealizedFx } from '../services/realized-fx.js';
+import { FX_RATE_TYPES } from '@mice/domain';
 
 const auth = { preHandler: requireAuth };
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -121,6 +124,7 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
     projectId: z.string().uuid().optional(), supplierId: z.string().uuid().optional(), invoiceNo: z.string().min(1).max(60).optional(),
     amount: z.coerce.number().nonnegative().optional(), currency: z.enum(CURRENCIES).optional(), vatAmount: z.coerce.number().nonnegative().optional(),
     issueDate: isoDate.optional(), dueDate: isoDate.optional(), serviceItemIds: z.array(z.string().uuid()).optional(), text: z.string().max(200_000).optional(),
+    eurTryRate: z.coerce.number().positive().optional(), tryAmount: z.coerce.number().positive().optional(),
   });
   app.post('/api/finance/supplier-invoices', auth, async (req) => {
     const mp = await readMultipart(req);
@@ -134,8 +138,35 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
   });
   // (additive) the customer invoice number issued in Mikro
   app.post('/api/finance/customer-invoices', auth, async (req) => {
-    const body = parse(z.object({ projectId: z.string().uuid(), invoiceNo: z.string().min(1).max(60), amount: z.number().nonnegative(), currency: z.enum(CURRENCIES), vatAmount: z.number().nonnegative().optional(), issueDate: isoDate.optional(), dueDate: isoDate.optional() }), req.body);
+    const body = parse(z.object({ projectId: z.string().uuid(), invoiceNo: z.string().min(1).max(60), amount: z.number().nonnegative(), currency: z.enum(CURRENCIES), vatAmount: z.number().nonnegative().optional(), issueDate: isoDate.optional(), dueDate: isoDate.optional(),
+      eurTryRate: z.number().positive().optional(), tryAmount: z.number().positive().optional() }), req.body);
     return asUser(req, (ctx) => recordCustomerInvoice(ctx, body));
+  });
+  // (additive, Q5) evidence-based realized EUR + TRY of a project (field role: only with fieldRoleCanSeeFinancials)
+  app.get('/api/projects/:id/realized-fx', auth, async (req) => {
+    const { id } = parse(idParam, req.params);
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
+      await getProjectRow(ctx, id);
+      return projectRealizedFx(ctx, id);
+    });
+  });
+  // (additive, Q5 follow-up) dated FX rates: TCMB bulletin import, manual / CSV entry, list
+  const rateType = z.enum(FX_RATE_TYPES as unknown as [string, ...string[]]);
+  app.get('/api/fx/rates', auth, async (req) => {
+    const q = parse(z.object({ from: isoDate.optional(), to: isoDate.optional(), rateType: rateType.optional() }), req.query);
+    return asUser(req, async (ctx) => list(await listFxRates(ctx, q as Parameters<typeof listFxRates>[1])), ['admin', 'finance']);
+  });
+  app.post('/api/fx/rates', auth, async (req) => {
+    const body = parse(z.object({
+      rows: z.array(z.object({ rateDate: z.string().max(10), currency: z.string().max(5), rateType: rateType.optional(), rate: z.number().positive() })).max(5000).optional(),
+      csv: z.string().max(2_000_000).optional(), source: z.string().max(80).optional(),
+    }), req.body);
+    return asUser(req, (ctx) => addFxRates(ctx, body as Parameters<typeof addFxRates>[1]));
+  });
+  app.post('/api/fx/tcmb-import', auth, async (req) => {
+    const body = parse(z.object({ date: isoDate.optional() }), req.body ?? {});
+    return asUser(req, (ctx) => importTcmbRates(ctx, body));
   });
   app.post('/api/finance/payment-requests', auth, async (req) => {
     const { entryId } = parse(z.object({ entryId: z.string().uuid() }), req.body);
@@ -144,7 +175,8 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
   // (additive) a human records the bank payment of an APPROVED request (the system never pays)
   app.post('/api/finance/entries/:id/mark-paid', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    const body = parse(z.object({ paidAt: z.string().optional(), reference: z.string().max(200).optional() }), req.body);
+    const body = parse(z.object({ paidAt: z.string().optional(), reference: z.string().max(200).optional(),
+      paidAmount: z.number().positive().optional(), paidCurrency: z.enum(CURRENCIES).optional(), eurTryRate: z.number().positive().optional(), tryAmount: z.number().positive().optional() }), req.body ?? {});
     return asUser(req, (ctx) => markPaid(ctx, id, body));
   });
   app.post('/api/finance/bank-statements', auth, async (req) => {

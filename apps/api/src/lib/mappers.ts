@@ -108,6 +108,9 @@ export function mapQuoteBase(r: Row): Omit<Quote, 'options'> {
     createdBy: r.created_by, approvedBy: r.approved_by, sentAt: iso(r.sent_at), openedAt: iso(r.opened_at),
     acceptedOptionNo: r.accepted_option_no, acceptedAt: iso(r.accepted_at), marginOverrideReason: r.margin_override_reason,
     createdAt: iso(r.created_at)!,
+    // (additive, Q8 / Q9)
+    poNumber: r.po_number ?? null, acceptedByName: r.accepted_by_name ?? null, firmApprovedAt: iso(r.firm_approved_at),
+    awaitingSignedForm: !!r.awaiting_signed_form, supersededBy: r.superseded_by ?? null,
   };
 }
 
@@ -166,7 +169,6 @@ export function mapFinance(r: Row): FinanceEntry {
     },
   };
 }
-const num = (v: unknown): number | null => (v == null ? null : Number(v));
 
 export function mapChecklist(r: Row): ChecklistQuestion {
   return { id: r.id, tenantId: r.tenant_id, eventType: r.event_type, question: r.question, field: r.field, status: r.status, source: r.source };

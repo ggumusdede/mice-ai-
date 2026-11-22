@@ -18,6 +18,7 @@ import { assertSafeZip } from '../lib/zip-guard.js';
 import type { Row } from '../lib/mappers.js';
 import { createDecision, decide } from './decisions.js';
 import { currentFx, type FxSnapshot } from './fx.js';
+import { projectRealizedFx } from './realized-fx.js';
 import { nextSeq } from './projects.js';
 
 export const MAX_IMPORT_ROWS = 5000;
@@ -137,7 +138,7 @@ function assertOpen(b: Row): void {
 }
 
 async function activeRows(ctx: Ctx, batchId: string): Promise<Row[]> {
-  const order = `array_position(ARRAY['suppliers','customers','projects','service_lines','price_points','channel_prices'], r.entity)`;
+  const order = `array_position(ARRAY['suppliers','customers','projects','service_lines','price_points','channel_prices','finance_movements'], r.entity)`;
   return (await ctx.db.query(
     `SELECT r.* FROM import_rows r JOIN import_files f ON f.id = r.file_id AND f.superseded_at IS NULL
       WHERE r.batch_id = $1 ORDER BY ${order}, r.row_no`, [batchId])).rows;
@@ -371,6 +372,20 @@ export async function validateBatch(ctx: Ctx, batchId: string): Promise<ImportSu
         currencyKnown(data.currency);
         break;
       }
+      case 'finance_movements': {
+        const code = slugTr(String(data.projectCode ?? ''));
+        const sp = stagedProjects.get(code);
+        if (sp) {
+          if (!sp.usable) err('PROJECT_NOT_USABLE', 'Bağlı proje satırı hatalı veya reddedildi', 'project_code');
+          else resolved.project = { stagedRowId: sp.rowId };
+        } else if (L.histProjects.has(code)) {
+          resolved.project = { existingId: L.histProjects.get(code)!.id };
+          info('PROJECT_EXISTING', 'Daha önce aktarılmış geçmiş projeye eklenir', 'project_code');
+        } else if (code) err('PROJECT_NOT_FOUND', `Proje bulunamadı: ${data.projectCode} — proje dosyasına ekleyin`, 'project_code');
+        if (data.type === 'supplier_invoice' || data.type === 'payment') supplierRef(false);
+        currencyKnown(data.currency);
+        break;
+      }
       case 'price_points':
       case 'channel_prices': {
         const sref = supplierRef(true);
@@ -536,6 +551,7 @@ export async function commitBatch(ctx: Ctx, batchId: string): Promise<ImportBatc
   };
   const committed: NonNullable<ImportSummary['committed']> = {};
   const touchedSuppliers = new Set<string>();
+  const movementProjects = new Set<string>();
   const accredit: { id: string; name: string }[] = [];
   const mark = async (r: Row, id: string, action: 'created' | 'linked') => {
     idMap.set(r.id, id);
@@ -649,6 +665,24 @@ export async function commitBatch(ctx: Ctx, batchId: string): Promise<ImportBatc
           await mark(r, ph.id, 'created');
           break;
         }
+        case 'finance_movements': {
+          // Q5: historical money movement with its actual rate; closed bookkeeping (status matched → never a bank-match candidate,
+          // invoice no kept in meta → never re-exported to Mikro)
+          const projectId = live(r.resolved.project)!;
+          const kind = { customer_invoice: 'customer_invoice', supplier_invoice: 'supplier_invoice', collection: 'payment_in', payment: 'payment_out' }[d.type as string]!;
+          const proven = d.currency === 'EUR' ? d.eurTryRate != null : d.eurRate != null || d.eurTryRate != null;
+          const sysRate = Number(d.eurRate ?? fx.rates[d.currency] ?? NaN);
+          const fe = (await ctx.db.query(
+            `INSERT INTO finance_entries (tenant_id, project_id, supplier_id, kind, amount, currency, fx_rate, amount_eur, status, reference, meta, created_by,
+               actual_fx_rate, eur_try_rate, rate_source, value_date)
+             VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,'matched',$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+            [projectId, live(r.resolved.supplier), kind, d.amount, d.currency, sysRate, r2(Number(d.amount) / sysRate), `H-import`,
+              JSON.stringify({ invoiceNo: d.docNo ?? null, settlesDocNo: d.settlesDocNo ?? null, importBatchId: batchId, historical: true, issueDate: d.date }),
+              user.id, d.currency === 'EUR' ? 1 : d.eurRate ?? null, d.eurTryRate ?? null, proven ? 'import' : null, d.date])).rows[0];
+          movementProjects.add(projectId);
+          await mark(r, fe.id, 'created');
+          break;
+        }
         case 'channel_prices': {
           const supplierId = live(r.resolved.supplier)!;
           const cp = (await ctx.db.query(
@@ -660,6 +694,21 @@ export async function commitBatch(ctx: Ctx, batchId: string): Promise<ImportBatc
         }
       }
     }
+  }
+
+  // Q5: cash ↔ invoice links by document no, then the historical totals from the evidence (instead of today's FX)
+  for (const projectId of movementProjects) {
+    const ents = (await ctx.db.query(`SELECT id, kind, meta FROM finance_entries WHERE project_id = $1 AND meta->>'importBatchId' = $2`, [projectId, batchId])).rows;
+    for (const c of ents.filter((e) => ['payment_in', 'payment_out'].includes(e.kind) && e.meta?.settlesDocNo)) {
+      const invKind = c.kind === 'payment_in' ? 'customer_invoice' : 'supplier_invoice';
+      const inv = ents.find((e) => e.kind === invKind && String(e.meta?.invoiceNo ?? '').toUpperCase() === String(c.meta.settlesDocNo).toUpperCase());
+      if (inv) await ctx.db.query(`UPDATE finance_entries SET meta = meta || $2 WHERE id = $1`, [c.id, JSON.stringify({ settlesEntryId: inv.id })]);
+    }
+    const rf = await projectRealizedFx(ctx, projectId);
+    const eurGap = (side: 'revenue' | 'cost') => rf.missingRates.some((m) => m.need.includes('EUR') && ((side === 'revenue') === ['customer_invoice', 'collection'].includes(m.type)));
+    await ctx.db.query(
+      `UPDATE projects SET historical_sale_eur = COALESCE($2, historical_sale_eur), historical_cost_eur = COALESCE($3, historical_cost_eur) WHERE id = $1`,
+      [projectId, rf.revenue.eur != null && !eurGap('revenue') ? rf.revenue.eur : null, rf.cost.eur != null && !eurGap('cost') ? rf.cost.eur : null]);
   }
 
   // §6 / invariant 5: accreditation still goes through the decision box — an admin-only card decided by this admin

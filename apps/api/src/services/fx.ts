@@ -11,7 +11,7 @@ export interface FxSnapshot {
 
 export async function currentFx(db: Db): Promise<FxSnapshot> {
   const { rows } = await db.query<{ currency: string; rate: number; source: string; rate_date: string }>(
-    `SELECT DISTINCT ON (currency) currency, rate, source, rate_date FROM fx_rates
+    `SELECT DISTINCT ON (currency) currency, rate, source, rate_date FROM fx_rates WHERE rate_type IS NULL
      ORDER BY currency, rate_date DESC, created_at DESC`,
   );
   const rates: Record<string, number> = { EUR: 1 };

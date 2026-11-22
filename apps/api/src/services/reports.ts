@@ -1,11 +1,13 @@
 // §16.6 Haftalık gelişim raporu (single screen) + §17.10 success metric definitions, and §4 per-user decision data (UserStats).
-import type { UserStats, WeeklyReport } from '@mice/shared';
-import { businessMinutesBetween, businessMinutesPerDay, localDate, localParts, median, startOfLocalDate } from '@mice/domain';
+import type { TeamPerformanceLostProject, TeamPerformanceReport, TeamPerformanceRow, UserStats, WeeklyReport } from '@mice/shared';
+import { businessMinutesBetween, businessMinutesPerDay, localDate, localParts, median, profitSummary, startOfLocalDate } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { badRequest } from '../errors.js';
 import { addDaysIso } from '../lib/dates.js';
 import { logAiAction } from './ai-log.js';
 import { currentFx, toEur } from './fx.js';
+import { canSeeFinancials } from './visibility.js';
+import { projectRealizedFx } from './realized-fx.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -173,4 +175,189 @@ export async function userStats(ctx: Ctx, userId: string): Promise<UserStats> {
     userId, quotesTotal: quotes.length, quotesCorrected: corrected, avgPriceChangePct: avg(priceChanges), avgMarginChangePct: avg(marginChanges),
     won: outcome.won, lost: outcome.lost, winRate: decided ? r3(outcome.won / decided) : null,
   };
+}
+
+// ------------------------------------------------------------------ Q7: Ekip performansı (§4 karar verisi, §16.7 6. ay yetki gözden geçirmesi)
+const MAX_SPAN_DAYS = 5 * 366;
+interface PerfAcc {
+  requests: number; quotesSent: number; won: number; lost: number; lostProjects: TeamPerformanceLostProject[];
+  quoteHours: number[]; onTarget: number; margins: number[]; markups: number[]; plannedProfit: number;
+  realizedEur: number; realizedTry: number; realizedProjects: number; realizedTryKnown: number; realizedTryMissing: number;
+  quotesBuilt: number; quotesReviewed: number; quotesCorrected: number; approvalRequired: number; free: number; blocked: number; historical: number;
+}
+const emptyAcc = (): PerfAcc => ({
+  requests: 0, quotesSent: 0, won: 0, lost: 0, lostProjects: [], quoteHours: [], onTarget: 0, margins: [], markups: [], plannedProfit: 0,
+  realizedEur: 0, realizedTry: 0, realizedProjects: 0, realizedTryKnown: 0, realizedTryMissing: 0,
+  quotesBuilt: 0, quotesReviewed: 0, quotesCorrected: 0, approvalRequired: 0, free: 0, blocked: 0, historical: 0,
+});
+const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+
+/** Rolling period report per salesperson. Projects (requests, sends, outcomes, quote time, planned / realized profit) are attributed
+ *  to the project OWNER; quote-quality data (corrections, approval-required vs free) to the quote AUTHOR. Imported historical
+ *  projects count when their owner is known. Default period: the last 12 months up to today (inclusive). */
+export async function teamPerformance(ctx: Ctx, q: { from?: string; to?: string } = {}): Promise<TeamPerformanceReport> {
+  const rules = await ctx.rules();
+  const cal = rules.businessHours;
+  const tz = cal.timezone;
+  const perDay = businessMinutesPerDay(cal);
+  const today = localDate(ctx.now(), tz);
+  const to = q.to ?? today;
+  const from = q.from ?? addDaysIso(`${Number(to.slice(0, 4)) - 1}${to.slice(4, 10)}`, 1);
+  for (const d of [from, to]) if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d))) throw badRequest('from / to YYYY-MM-DD olmalı', undefined, 'INVALID_PERIOD');
+  if (from > to) throw badRequest('Başlangıç bitişten sonra olamaz', undefined, 'INVALID_PERIOD');
+  const fromTs = startOfLocalDate(from, tz);
+  const toTs = startOfLocalDate(to, tz, 1); // inclusive end day
+  if ((toTs.getTime() - fromTs.getTime()) / 86_400_000 > MAX_SPAN_DAYS) throw badRequest('Dönem en fazla 5 yıl olabilir', undefined, 'INVALID_PERIOD');
+  const fin = await canSeeFinancials(ctx);
+
+  const acc = new Map<string, PerfAcc>();
+  const a = (uid: string) => { let x = acc.get(uid); if (!x) acc.set(uid, (x = emptyAcc())); return x; };
+
+  // requests received in the period
+  for (const r of (await ctx.db.query(
+    `SELECT owner_id, count(*)::int AS n, count(*) FILTER (WHERE historical)::int AS h FROM projects
+      WHERE owner_id IS NOT NULL AND received_at >= $1 AND received_at < $2 GROUP BY owner_id`, [fromTs, toTs])).rows) {
+    a(r.owner_id).requests += r.n;
+    a(r.owner_id).historical += r.h;
+  }
+  // quotes sent in the period (each sent revision counts)
+  for (const r of (await ctx.db.query(
+    `SELECT p.owner_id, count(*)::int AS n FROM quotes q JOIN projects p ON p.id = q.project_id
+      WHERE p.owner_id IS NOT NULL AND q.sent_at >= $1 AND q.sent_at < $2 GROUP BY p.owner_id`, [fromTs, toTs])).rows) a(r.owner_id).quotesSent += r.n;
+  // quote time: first send in the period, agency business hours (customer wait excluded) vs target
+  for (const p of (await ctx.db.query(
+    `SELECT owner_id, received_at, quote_sent_at, customer_wait_minutes, target_business_days FROM projects
+      WHERE owner_id IS NOT NULL AND NOT historical AND quote_sent_at >= $1 AND quote_sent_at < $2`, [fromTs, toTs])).rows) {
+    const total = businessMinutesBetween(new Date(p.received_at), new Date(p.quote_sent_at), cal);
+    const agency = total - Math.min(total, Number(p.customer_wait_minutes ?? 0));
+    a(p.owner_id).quoteHours.push(agency / 60);
+    if (agency <= Number(p.target_business_days) * perDay) a(p.owner_id).onTarget++;
+  }
+
+  // outcomes decided in the period: live projects → the audit transition time; historical → event start (import has no decision date)
+  const decided = (await ctx.db.query(
+    `SELECT * FROM (
+       SELECT p.id, p.owner_id, p.code, p.title, p.customer_name, p.outcome, p.lost_reason, p.historical, p.historical_cost_eur, p.historical_sale_eur,
+         CASE WHEN p.historical THEN COALESCE(p.start_date::timestamp AT TIME ZONE $3::text, p.received_at)
+           ELSE COALESCE((SELECT min(al.at) FROM audit_log al WHERE al.entity = 'projects' AND al.entity_id = p.id::text
+                  AND al.after->>'outcome' = CASE WHEN p.outcome = 'lost' THEN 'lost' ELSE 'won' END
+                  AND (al.before IS NULL OR al.before->>'outcome' IS DISTINCT FROM al.after->>'outcome')), p.received_at) END AS decided_at
+       FROM projects p WHERE p.owner_id IS NOT NULL AND p.outcome IN ('won','closed','lost')) x
+     WHERE decided_at >= $1 AND decided_at < $2 ORDER BY decided_at DESC`, [fromTs, toTs, tz])).rows;
+  const wonRows = decided.filter((r) => r.outcome !== 'lost');
+  for (const r of decided) {
+    if (r.outcome === 'lost') {
+      a(r.owner_id).lost++;
+      a(r.owner_id).lostProjects.push({
+        projectId: r.id, code: r.code, title: r.title, customerName: r.customer_name, lostReason: r.lost_reason,
+        decidedAt: r.decided_at ? new Date(r.decided_at).toISOString() : null, historical: r.historical,
+      });
+    } else a(r.owner_id).won++;
+  }
+
+  if (fin && wonRows.length) {
+    const ids = wonRows.map((r) => r.id);
+    // planned: accepted option of the accepted quote (else option 1 of the latest live revision)
+    const planned = (await ctx.db.query(
+      `WITH ref AS (SELECT DISTINCT ON (q.project_id) q.project_id, q.id, COALESCE(q.accepted_option_no, 1) AS opt FROM quotes q
+                     WHERE q.project_id = ANY($1) ORDER BY q.project_id, (q.status = 'accepted') DESC, (q.status <> 'superseded') DESC, q.version DESC)
+       SELECT ref.project_id, sum(l.unit_cost_eur * l.quantity * GREATEST(COALESCE(l.nights, 1), 1)) AS cost,
+              sum(l.unit_price_eur * l.quantity * GREATEST(COALESCE(l.nights, 1), 1)) AS sale
+         FROM ref JOIN quote_lines l ON l.quote_id = ref.id AND l.option_no = ref.opt GROUP BY ref.project_id`, [ids])).rows;
+    const invoiced = (await ctx.db.query(
+      `SELECT project_id, kind, sum(amount_eur) AS s FROM finance_entries WHERE project_id = ANY($1) AND status <> 'cancelled'
+         AND kind IN ('supplier_invoice','customer_invoice') GROUP BY project_id, kind`, [ids])).rows;
+    for (const r of wonRows) {
+      const x = a(r.owner_id);
+      const pl = planned.find((p) => p.project_id === r.id);
+      const cost = pl ? Number(pl.cost) : r.historical_cost_eur != null ? Number(r.historical_cost_eur) : null;
+      const sale = pl ? Number(pl.sale) : r.historical_sale_eur != null ? Number(r.historical_sale_eur) : null;
+      if (cost != null && sale != null && sale > 0) {
+        const ps = profitSummary(cost, sale);
+        x.margins.push(ps.margin);
+        if (cost > 0) x.markups.push(ps.markup);
+        x.plannedProfit += ps.profitEur;
+      }
+      // realized (EUR, same basis as ProjectDetail.profit.realized; historical without movements → imported totals)
+      const ci = invoiced.find((i) => i.project_id === r.id && i.kind === 'customer_invoice')?.s;
+      const si = invoiced.find((i) => i.project_id === r.id && i.kind === 'supplier_invoice')?.s;
+      let realizedEur: number | null = null;
+      if (ci != null || si != null) realizedEur = Number(ci ?? 0) - Number(si ?? 0);
+      else if (r.historical && r.historical_sale_eur != null && r.historical_cost_eur != null) realizedEur = Number(r.historical_sale_eur) - Number(r.historical_cost_eur);
+      if (realizedEur == null) continue;
+      x.realizedEur += realizedEur;
+      x.realizedProjects++;
+      const tryProfit = await realizedTry(ctx, r.id);
+      if (tryProfit == null) x.realizedTryMissing++;
+      else { x.realizedTry += tryProfit; x.realizedTryKnown++; }
+    }
+  }
+
+  // quote quality — by author, quotes created in the period
+  for (const r of (await ctx.db.query(
+    `SELECT q.created_by AS uid, count(*)::int AS built,
+            count(*) FILTER (WHERE q.requires_approval)::int AS approval,
+            count(*) FILTER (WHERE NOT q.requires_approval AND q.approved_by IS NOT NULL AND q.approved_by = q.created_by AND q.margin_override_by IS NULL)::int AS free,
+            count(DISTINCT d.entity_id) FILTER (WHERE d.action IS NOT NULL AND NOT d.auto_executed)::int AS reviewed,
+            count(DISTINCT d.entity_id) FILTER (WHERE d.action IN ('edit','reject') AND NOT d.auto_executed)::int AS corrected
+       FROM quotes q LEFT JOIN decisions d ON d.entity_type = 'quote' AND d.entity_id = q.id AND d.kind IN ('quote_approval','margin_override')
+      WHERE q.created_by IS NOT NULL AND q.created_at >= $1 AND q.created_at < $2 GROUP BY q.created_by`, [fromTs, toTs])).rows) {
+    const x = a(r.uid);
+    x.quotesBuilt += r.built;
+    x.approvalRequired += r.approval;
+    x.free += r.free;
+    x.blocked += r.built - r.approval - r.free;
+    x.quotesReviewed += r.reviewed;
+    x.quotesCorrected += r.corrected;
+  }
+
+  const users = (await ctx.db.query(
+    `SELECT id, full_name, role, authority_level, active FROM users WHERE id = ANY($1) OR (active AND role IN ('admin','clerk_sales','clerk_ops'))`,
+    [[...acc.keys()]])).rows;
+  const targetHours = r2((rules.quoteTargetBusinessDays * perDay) / 60);
+  const toRow = (x: PerfAcc) => {
+    const reasons = new Map<string, number>();
+    for (const l of x.lostProjects) { const k = (l.lostReason ?? '—').trim() || '—'; reasons.set(k, (reasons.get(k) ?? 0) + 1); }
+    const m = mean(x.margins), mk = mean(x.markups), qh = mean(x.quoteHours);
+    return {
+      requests: x.requests, quotesSent: x.quotesSent, won: x.won, lost: x.lost, winRate: x.won + x.lost ? r3(x.won / (x.won + x.lost)) : null,
+      lostReasons: [...reasons.entries()].map(([reason, count]) => ({ reason, count })).sort((p, q2) => q2.count - p.count || p.reason.localeCompare(q2.reason, 'tr')),
+      avgQuoteBusinessHours: qh == null ? null : r2(qh), quoteTargetBusinessHours: targetHours,
+      onTargetRate: x.quoteHours.length ? r3(x.onTarget / x.quoteHours.length) : null,
+      avgPlannedMargin: fin && m != null ? r3(m) : null, avgPlannedMarkup: fin && mk != null ? r3(mk) : null,
+      plannedProfitEur: fin && x.margins.length ? r2(x.plannedProfit) : null,
+      realizedProfitEur: fin && x.realizedProjects ? r2(x.realizedEur) : null,
+      realizedProfitTry: fin && x.realizedTryKnown ? r2(x.realizedTry) : null,
+      realizedProjects: fin ? x.realizedProjects : 0, realizedTryMissing: fin ? x.realizedTryMissing : 0,
+      quotesBuilt: x.quotesBuilt, quotesReviewed: x.quotesReviewed, quotesCorrected: x.quotesCorrected,
+      correctionRate: x.quotesReviewed ? r3(x.quotesCorrected / x.quotesReviewed) : null,
+      approvalRequiredQuotes: x.approvalRequired, freeQuotes: x.free, blockedQuotes: x.blocked, historicalProjects: x.historical,
+    };
+  };
+  const rows: TeamPerformanceRow[] = users.map((u) => {
+    const x = acc.get(u.id) ?? emptyAcc();
+    return { userId: u.id, fullName: u.full_name, role: u.role, authorityLevel: u.authority_level, active: u.active, lostProjects: x.lostProjects, ...toRow(x) };
+  }).sort((p, q2) => q2.won - p.won || q2.requests - p.requests || p.fullName.localeCompare(q2.fullName, 'tr'));
+
+  const all = emptyAcc();
+  for (const x of acc.values()) {
+    for (const k of Object.keys(all) as (keyof PerfAcc)[]) {
+      const v = x[k];
+      if (Array.isArray(v)) (all[k] as unknown[]).push(...(v as unknown[]));
+      else (all[k] as number) += v as number;
+    }
+  }
+  const totals = toRow(all);
+  return { from, to, financialsVisible: fin, rows, totals };
+}
+
+/** Realized profit in TRY from the evidence-based realized-FX feature (null = no proof / feature unavailable — degrade gracefully). */
+async function realizedTry(ctx: Ctx, projectId: string): Promise<number | null> {
+  try {
+    const r = await projectRealizedFx(ctx, projectId);
+    const v = r?.profit?.try;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
 }

@@ -14,7 +14,8 @@
     "migrate:deploy": "tsx --no-experimental-require-module src/db/bootstrap.ts",
     "vapid:generate": "tsx --no-experimental-require-module src/scripts/generate-vapid-keys.ts",
     "inbound:imap": "tsx --no-experimental-require-module src/inbound-imap.ts",
-    "export-eval-set": "tsx --no-experimental-require-module src/scripts/export-eval-set.ts"
+    "export-eval-set": "tsx --no-experimental-require-module src/scripts/export-eval-set.ts",
+    "fx:tcmb": "tsx --no-experimental-require-module src/scripts/import-tcmb.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.1.0",

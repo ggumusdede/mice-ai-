@@ -5,8 +5,9 @@
 import { CURRENCIES, SERVICE_KINDS, type ServiceKind } from '@mice/shared';
 import { parseTrDate, parseTrNumber } from './bank-matching.js';
 import { slugTr } from './project-code.js';
+import { deriveMovementRates } from './realized-fx.js';
 
-export const IMPORT_ENTITIES = ['suppliers', 'customers', 'projects', 'service_lines', 'price_points', 'channel_prices'] as const;
+export const IMPORT_ENTITIES = ['suppliers', 'customers', 'projects', 'service_lines', 'price_points', 'channel_prices', 'finance_movements'] as const;
 export type ImportEntity = (typeof IMPORT_ENTITIES)[number];
 /** Commit order: referenced rows first. */
 export const IMPORT_COMMIT_ORDER: readonly ImportEntity[] = IMPORT_ENTITIES;
@@ -128,7 +129,34 @@ export const IMPORT_TEMPLATES: Record<ImportEntity, ImportTemplate> = {
       col('captured_at', 'Kayıt tarihi', '01.02.2026', { aliases: ['alinma tarihi'] }),
     ],
   },
+  // Q5 (optional): invoices / collections / payments of historical projects with their ACTUAL rate → evidence-based EUR + TL profit
+  finance_movements: {
+    entity: 'finance_movements', title: 'Finansal hareketler (geçmiş projeler)', sheet: 'FinansalHareketler', columns: [
+      col('project_code', 'Proje kodu', '2025-034', { required: true, aliases: ['kod', 'proje'] }),
+      col('type', 'Hareket türü', 'tahsilat', { required: true, aliases: ['tur', 'hareket'], hint: 'müşteri faturası / tedarikçi faturası / tahsilat / ödeme' }),
+      col('date', 'Tarih (valör)', '20.03.2026', { required: true, aliases: ['tarih', 'valor', 'islem tarihi'] }),
+      col('amount', 'Tutar', '10.000,00', { required: true, aliases: ['tutar', 'meblag'], hint: 'faturada KDV hariç matrah; tahsilat/ödemede ödenen tutar' }),
+      col('currency', 'Para birimi', 'EUR', { required: true, aliases: ['doviz', 'pb'] }),
+      col('rate', 'Kur (1 EUR = ? TL)', '37,20', { aliases: ['kur', 'eur tl kuru', 'eurtry'], hint: 'hareketin gerçek kuru (banka dekontu / fatura); yoksa TL veya EUR karşılığı' }),
+      col('try_amount', 'TL karşılığı', '372.000,00', { aliases: ['tl karsiligi', 'tl tutar'] }),
+      col('eur_amount', 'EUR karşılığı', '', { aliases: ['eur karsiligi', 'euro karsiligi'], hint: 'TL / USD hareketin kapattığı EUR tutarı (kur türetilir)' }),
+      col('supplier', 'Tedarikçi', 'Moda Sahil Otel', { aliases: ['tedarikci adi'], hint: 'tedarikçi faturası / ödeme için' }),
+      col('doc_no', 'Belge no', 'GIB2026000001234', { aliases: ['fatura no', 'dekont no', 'belge'] }),
+      col('settles_doc_no', 'Kapattığı fatura no', '', { aliases: ['fatura', 'ilgili fatura'], hint: 'tahsilat / ödeme hangi faturayı kapattı (boşsa tarih sırasıyla)' }),
+    ],
+  },
 };
+
+export type ImportMovementType = 'customer_invoice' | 'supplier_invoice' | 'collection' | 'payment';
+export function importMovementType(v: ImportCell): ImportMovementType | null {
+  const k = slugTr(cellText(v));
+  if (!k) return null;
+  if (/^(MUSTERIFATURASI|SATISFATURASI|SATIS|CUSTOMERINVOICE)$/.test(k)) return 'customer_invoice';
+  if (/^(TEDARIKCIFATURASI|ALISFATURASI|ALIS|SUPPLIERINVOICE)$/.test(k)) return 'supplier_invoice';
+  if (/^(TAHSILAT|GELEN|GELENODEME|COLLECTION)$/.test(k)) return 'collection';
+  if (/^(ODEME|GIDEN|GIDENODEME|TEDARIKCIODEMESI|PAYMENT)$/.test(k)) return 'payment';
+  return null;
+}
 
 // ------------------------------------------------------------------ headers & CSV
 export function headerKey(entity: ImportEntity, header: string): string | null {
@@ -525,6 +553,40 @@ export function normalizeImportRow(entity: ImportEntity, input: Record<string, I
       data.capturedAt = date('captured_at', 'Kayıt tarihi');
       break;
     }
+    case 'finance_movements': {
+      data.projectCode = text('project_code');
+      data.type = text('type') ? importMovementType(input.type ?? null) : null;
+      if (text('type') && !data.type) err('UNKNOWN_MOVEMENT_TYPE', 'Hareket türü müşteri faturası / tedarikçi faturası / tahsilat / ödeme olmalı', 'type');
+      data.date = date('date', 'Tarih');
+      if (data.date && String(data.date) > opts.today) err('FUTURE_DATE', `Tarih ${data.date} gelecekte — yalnız gerçekleşmiş hareket aktarılır`, 'date');
+      data.amount = num('amount', 'Tutar', { min: 0 });
+      if (data.amount === 0) err('ZERO_AMOUNT', 'Tutar 0 olamaz', 'amount');
+      data.currency = currency();
+      const rate = num('rate', 'Kur', { min: 0 });
+      const tryAmount = num('try_amount', 'TL karşılığı', { min: 0 });
+      const eurAmount = num('eur_amount', 'EUR karşılığı', { min: 0 });
+      data.supplier = text('supplier');
+      data.docNo = text('doc_no');
+      data.settlesDocNo = text('settles_doc_no');
+      if (data.amount && data.currency) {
+        const r = deriveMovementRates({ amount: data.amount as number, currency: data.currency as string, eurTryRate: rate, tryAmount, eurAmount });
+        data.eurRate = data.currency === 'EUR' ? 1 : r.eurRate;
+        data.eurTryRate = r.eurTryRate;
+        const needTry = data.currency !== 'TRY' && r.eurTryRate == null;
+        const needEur = data.currency !== 'EUR' && r.eurRate == null;
+        if (needTry || needEur) {
+          warn('FX_EVIDENCE_MISSING', `Kur kanıtı yok — ${needEur ? 'EUR' : 'TL'} karşılığı tahmin edilmez; TCMB valör günü kuru varsa o kullanılır, yoksa kâr kısmi`, 'rate');
+        }
+        if (rate != null && tryAmount != null && data.currency === 'EUR' && Math.abs(rate * (data.amount as number) - tryAmount) > Math.max(1, tryAmount * 0.005)) {
+          warn('RATE_TRY_MISMATCH', `Kur × tutar (${Math.round(rate * (data.amount as number) * 100) / 100}) TL karşılığıyla uyuşmuyor — kur esas alındı`, 'try_amount');
+        }
+      }
+      if (data.settlesDocNo && (data.type === 'customer_invoice' || data.type === 'supplier_invoice')) {
+        warn('SETTLES_IGNORED', 'Faturada "kapattığı fatura" yok sayılır', 'settles_doc_no');
+        data.settlesDocNo = null;
+      }
+      break;
+    }
   }
   return { data, issues };
 }
@@ -539,6 +601,7 @@ export function importNaturalKey(entity: ImportEntity, d: Record<string, unknown
     case 'service_lines': return [slugTr(n(d.projectCode)), d.kind, normalizeName(n(d.description)), normalizeName(n(d.supplier)), d.dateFrom, d.quantity, d.unitCost, d.roomType].map(n).join('|');
     case 'price_points': return [normalizeName(n(d.supplier)), d.supplierVkn, d.date, d.kind, d.unit, d.price, d.currency, d.roomType, d.board].map(n).join('|');
     case 'channel_prices': return [normalizeName(n(d.supplier)), d.supplierVkn, d.stayDate, d.roomType, d.board, d.cancellation, d.price, d.currency].map(n).join('|');
+    case 'finance_movements': return [slugTr(n(d.projectCode)), d.type, d.date, d.amount, d.currency, n(d.docNo).toUpperCase()].map(n).join('|');
   }
 }
 

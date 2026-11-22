@@ -24,3 +24,4 @@ export * from './scoped-rules.js';
 export * from './rule-suggestions.js';
 export * from './initial-import.js';
 export * from './realized-fx.js';
+export * from './fx-rates.js';

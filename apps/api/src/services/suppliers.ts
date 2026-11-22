@@ -3,7 +3,7 @@ import type { ServiceKind, Supplier, SupplierRanking } from '@mice/shared';
 import { rankSuppliers, roleCan } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
-import { badRequest, forbidden, notFound } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import { mapSupplier, type Row } from '../lib/mappers.js';
 import { createDecision } from './decisions.js';
 
@@ -82,6 +82,34 @@ export async function patchSupplier(ctx: Ctx, id: string, input: Partial<Supplie
   if (!sets.length) return mapSupplier((await ctx.db.query('SELECT * FROM suppliers WHERE id = $1', [id])).rows[0]);
   const { rows } = await ctx.db.query(`UPDATE suppliers SET ${sets.join(', ')} WHERE id = $1 RETURNING *`, vals);
   return mapSupplier(rows[0]);
+}
+
+/** Q6 (ürün sahibi kararı): sales / ops ask for accreditation of a candidate supplier that blocks a quote. Creates — or reuses
+ *  the open — 'supplier_accreditation' card for the admin (ADMIN_ONLY_DECISIONS, AI-forbidden; never auto-approved). Idempotent. */
+export async function requestAccreditation(ctx: Ctx, id: string, input: { reason?: string; projectId?: string } = {}): Promise<{ decisionId: string; created: boolean; supplierId: string; status: string }> {
+  const user = requireUser(ctx);
+  const s = await getSupplierRow(ctx, id);
+  if (s.status === 'accredited') throw conflict('Tedarikçi zaten akredite', 'ALREADY_ACCREDITED');
+  if (s.status === 'passive') throw conflict('Pasif tedarikçi için akreditasyon istenemez; yöneticiye danışın', 'SUPPLIER_PASSIVE');
+  // serialize concurrent requests for the same supplier (one open card)
+  await ctx.db.query('SELECT id FROM suppliers WHERE id = $1 FOR UPDATE', [id]);
+  const open = (await ctx.db.query(
+    `SELECT id FROM decisions WHERE kind = 'supplier_accreditation' AND status = 'open' AND entity_type = 'supplier' AND entity_id = $1 ORDER BY created_at LIMIT 1`, [id])).rows[0];
+  if (open) return { decisionId: open.id, created: false, supplierId: id, status: s.status };
+  let projectCode: string | null = null;
+  if (input.projectId) projectCode = (await ctx.db.query('SELECT code FROM projects WHERE id = $1', [input.projectId])).rows[0]?.code ?? null;
+  const reason = input.reason?.trim() || null;
+  const d = await createDecision(ctx, {
+    kind: 'supplier_accreditation', badge: 'suggestion', summary: `${s.name} akredite edilsin mi?`,
+    detail: {
+      supplierId: id, name: s.name, city: s.city, district: s.district, kinds: s.kinds, requestedBy: user.fullName, requestedById: user.id,
+      reason, projectId: input.projectId ?? null, projectCode, source: 'quote_blocked',
+    },
+    aiNote: projectCode ? `${projectCode} teklifi bu aday tedarikçi nedeniyle bloklu.` : undefined,
+    // the card is supplier-level (no project_id): a lost / closed project must not expire the accreditation request
+    requiredRole: 'admin', entityType: 'supplier', entityId: id, primaryActionLabel: 'Akredite et',
+  });
+  return { decisionId: d.id, created: true, supplierId: id, status: s.status };
 }
 
 /** Decision effect (admin only, enforced by canDecide + ADMIN_ONLY_DECISIONS): accredit. */

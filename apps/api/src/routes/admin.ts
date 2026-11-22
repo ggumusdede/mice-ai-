@@ -9,7 +9,9 @@ import { mapChecklist, mapDelegation, mapUser } from '../lib/mappers.js';
 import { loadRules, setRule } from '../services/rules.js';
 import { generateRuleSuggestions } from '../services/rule-suggestions.js';
 import { closeProject, computeClosingCheck } from '../services/closing.js';
-import { userStats, weeklyReport } from '../services/reports.js';
+import { FX_RATE_TYPES } from '@mice/domain';
+import { canSeeFinancials } from '../services/visibility.js';
+import { teamPerformance, userStats, weeklyReport } from '../services/reports.js';
 import { expireDecisionsFor } from '../services/decisions.js';
 import type { Ctx } from '../context.js';
 
@@ -32,7 +34,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // ---------------- closing (Adım 8)
   app.get('/api/projects/:id/closing-check', auth, async (req) => {
     const { id } = parse(idParam, req.params);
-    return asUser(req, (ctx) => computeClosingCheck(ctx, id));
+    return asUser(req, async (ctx) => {
+      const check = await computeClosingCheck(ctx, id);
+      // field role without financials: the checklist only — no plan vs actual money (fieldRoleCanSeeFinancials)
+      if (!(await canSeeFinancials(ctx))) return { ...check, planVsActual: { planned: null, actual: null, deviations: [], realizedFx: null, plannedTry: null } };
+      return check;
+    });
   });
   app.post('/api/projects/:id/close', auth, async (req) => {
     const { id } = parse(idParam, req.params);
@@ -44,6 +51,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/reports/weekly', auth, async (req) => {
     const q = parse(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }), req.query);
     return asUser(req, (ctx) => weeklyReport(ctx, q.weekStart), ['admin']);
+  });
+
+  // (additive, Q7) Ekip performansı — rolling period per salesperson (§4 karar verisi, §16.7)
+  app.get('/api/reports/team-performance', auth, async (req) => {
+    const q = parse(z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }), req.query);
+    return asUser(req, (ctx) => teamPerformance(ctx, q), ['admin']);
   });
 
   // ---------------- rules (Blok 5: table, not code — admin changes)
@@ -58,6 +71,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         if (!(k in DEFAULT_RULES)) throw badRequest(`Bilinmeyen kural: ${k}`, undefined, 'UNKNOWN_RULE');
         if (!sameShape(DEFAULT_RULES[k as keyof TenantRules], v)) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
         if (typeof v === 'number' && (!Number.isFinite(v) || v < 0)) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
+        if (k === 'fxRateTypeForReporting' && !(FX_RATE_TYPES as readonly string[]).includes(String(v))) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
         // string-list rules (neverAutomateKinds): only short identifiers
         const def = DEFAULT_RULES[k as keyof TenantRules];
         if (Array.isArray(def) && def.length && def.every((x) => typeof x === 'string')

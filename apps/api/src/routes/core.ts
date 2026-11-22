@@ -11,10 +11,10 @@ import {
   askProject, assignProject, getProjectRow, listProjects, patchProject, projectDetail, projectTimeline, setOutcome, similarProjects,
 } from '../services/projects.js';
 import { createItem, patchItem, selectOffer, shortlistForItem } from '../services/items.js';
-import { createSupplier, getSupplierRow, listSuppliers, patchSupplier } from '../services/suppliers.js';
+import { createSupplier, getSupplierRow, listSuppliers, patchSupplier, requestAccreditation } from '../services/suppliers.js';
 import { cancelRfq, createRfqs, rotateRfqLink } from '../services/rfqs.js';
 import { addChannelPrice, ensureNegotiationCallTask, comparison, manualOffer, negotiate, parseOffer, verifyOffer } from '../services/offers.js';
-import { buildQuote, getQuote, recordFirmApproval, sendQuote } from '../services/quotes.js';
+import { buildQuote, getQuote, recordFirmApproval, reviseQuote, sendQuote } from '../services/quotes.js';
 import { amendContract, compareContract, createContract, getContractRow, listContracts, onSupplierConfirmationSent, parseContract, signContract } from '../services/contracts.js';
 import { editDraft, getDraftRow, listDrafts, sendDraft } from '../services/drafts.js';
 import { getDocumentFile, latestDocumentFor, listDocuments, regenerateDocument } from '../services/documents.js';
@@ -182,6 +182,12 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
     const body = parse(supplierBody, req.body);
     return asUser(req, (ctx) => createSupplier(ctx, body as never));
   });
+  // (additive, Q6) sales / ops ask the admin to accredit a candidate supplier (idempotent; the decision stays admin-only)
+  app.post('/api/suppliers/:id/request-accreditation', auth, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const body = parse(z.object({ reason: z.string().max(2000).optional(), projectId: z.string().uuid().optional() }), req.body);
+    return asUser(req, (ctx) => requestAccreditation(ctx, id, body), ['admin', 'clerk_sales', 'clerk_ops']);
+  });
   app.patch('/api/suppliers/:id', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(supplierBody, req.body);
@@ -253,16 +259,28 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---------------- quotes (Adım 3/4)
+  const quoteOptions = z.array(z.object({
+    title: z.string().min(1),
+    lines: z.array(z.object({ serviceItemId: z.string().uuid(), offerId: z.string().uuid().nullish(), markup: z.number().min(-0.5).max(5).optional(), unitPriceEur: z.number().nonnegative().optional() })).min(1),
+  })).min(1).max(5);
   app.post('/api/projects/:id/quotes', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(z.object({
       currency: z.string().optional(), optionUntil: isoDate.optional(), marginOverrideReason: z.string().optional(),
-      options: z.array(z.object({
-        title: z.string().min(1),
-        lines: z.array(z.object({ serviceItemId: z.string().uuid(), offerId: z.string().uuid().nullish(), markup: z.number().min(-0.5).max(5).optional(), unitPriceEur: z.number().nonnegative().optional() })).min(1),
-      })).min(1).max(5),
+      options: quoteOptions,
     }), req.body);
     return asUser(req, (ctx) => buildQuote(ctx, id, body as never));
+  });
+  // (additive, Q9) quick revision: next revision of the same quote file; body = only what changed (or nothing)
+  app.post('/api/quotes/:id/revise', auth, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const body = parse(z.object({
+      currency: z.string().optional(), optionUntil: isoDate.optional(), marginOverrideReason: z.string().optional(), options: quoteOptions.optional(),
+    }), req.body);
+    return asUser(req, async (ctx) => {
+      await assertFinancialsVisible(ctx);
+      return reviseQuote(ctx, id, body as never);
+    });
   });
   app.get('/api/projects/:id/quotes', auth, async (req) => {
     const { id } = parse(idParam, req.params);

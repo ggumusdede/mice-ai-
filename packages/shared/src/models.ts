@@ -344,6 +344,13 @@ export interface Quote {
   marginOverrideReason: string | null;
   approvalLink?: string;
   createdAt: ISODateTime;
+  // (additive, ürün sahibi kararı Q8) customer's own purchasing number — distinct from our project code (never equal)
+  poNumber?: string | null;
+  acceptedByName?: string | null;
+  firmApprovedAt?: ISODateTime | null;
+  awaitingSignedForm?: boolean;
+  // (additive, Q9) the revision that replaced this one (Rev.N+1); a sent revision stays read-only and visible
+  supersededBy?: ID | null;
 }
 
 /** Fields compared field-by-field in §7 Adım 5 */
@@ -632,6 +639,7 @@ export type FxRateSource =
   | 'payment_record' // rate / TL amount entered when marking paid
   | 'payment_derived' // paid amount ÷ settled entry amount
   | 'import' // historical movement from the initial import
+  | 'tcmb' // EUR paid / collected without conversion: TCMB rate of the value date (rule fxRateTypeForReporting)
   | 'manual'
   | 'missing';
 export interface FxMovement {
@@ -649,10 +657,12 @@ export interface FxMovement {
   /** cash movement: the invoice (movement id) it settles */
   settles?: ID | null;
   label?: string | null;
+  /** human-readable provenance of the rate, e.g. "TCMB 2026-03-06 döviz alış" or "banka" */
+  rateNote?: string | null;
 }
 export interface FxEvidence {
   movementId: ID; type: FxMovementType; date: ISODate | null; amount: number; currency: Currency;
-  eurRate: number | null; eurTryRate: number | null; rateSource: FxRateSource; label: string | null; settles: ID | null;
+  eurRate: number | null; eurTryRate: number | null; rateSource: FxRateSource; rateNote: string | null; label: string | null; settles: ID | null;
   /** full movement value at its own actual rate (null = rate unknown — "bilmiyorum") */
   eur: number | null; try: number | null;
   /** part of the movement counted in the totals (invoice: the part not yet replaced by cash; cash: whole) */
@@ -679,7 +689,13 @@ export interface RealizedFx {
   quoteRate: number | null;
   /** profit at actual rates − profit at quote-time rates (+ = kur kazancı, − = kur kaybı) */
   fxGainLoss: { eur: number | null; try: number | null };
+  /** TRY effect of paying on a different day / rate than collecting: cost EUR × avg collection rate − cost TRY (+ = kazanç) */
+  collectionVsPaymentFx: { try: number | null };
   evidence: FxEvidence[];
   missingRates: { movementId: ID; type: FxMovementType; currency: Currency; need: ('EUR' | 'TRY')[] }[];
   reasons: { code: RealizedFxReasonCode; message: string }[];
 }
+
+/** TCMB rate types (gösterge niteliğinde; tenant rule `fxRateTypeForReporting`). */
+export type FxRateType = 'tcmb_forex_buying' | 'tcmb_forex_selling' | 'tcmb_banknote_buying' | 'tcmb_banknote_selling';
+export interface FxRate { id: ID; currency: Currency; rate: number; rateType: FxRateType | null; source: string; rateDate: ISODate; createdAt: ISODateTime }

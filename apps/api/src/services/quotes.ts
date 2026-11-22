@@ -252,6 +252,49 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
   return getQuote(ctx, q.id);
 }
 
+// ------------------------------------------------------------------ Q9 hızlı revizyon
+/** Follows superseded_by to the latest version of a supplier offer (supplier revised its offer). */
+async function latestOfferId(ctx: Ctx, offerId: string): Promise<string> {
+  let id = offerId;
+  for (let i = 0; i < 50; i++) {
+    const r = (await ctx.db.query('SELECT superseded_by FROM supplier_offers WHERE id = $1', [id])).rows[0];
+    if (!r?.superseded_by) return id;
+    id = r.superseded_by;
+  }
+  return id;
+}
+
+/** The BuildQuoteRequest that reproduces a revision (prefill for the editor / default body of /revise). */
+export async function revisionRequestOf(ctx: Ctx, q: Quote): Promise<BuildQuoteInput> {
+  const options: BuildQuoteInput['options'] = [];
+  for (const o of q.options) {
+    const lines: BuildQuoteInput['options'][number]['lines'] = [];
+    for (const l of o.lines) {
+      if (l.valueAdd || !l.offerId) lines.push({ serviceItemId: l.serviceItemId, offerId: null, unitPriceEur: l.unitPriceEur });
+      else lines.push({ serviceItemId: l.serviceItemId, offerId: await latestOfferId(ctx, l.offerId), markup: l.markup });
+    }
+    options.push({ title: o.title, lines });
+  }
+  return { currency: q.currency, options };
+}
+
+/** Q9: next revision (Rev.N+1) of the SAME quote file — same project / code; the editor sends only what changed (or nothing).
+ *  Earlier revisions are never overwritten (superseded, read-only, still visible); validation + approval gates run again. */
+export async function reviseQuote(ctx: Ctx, quoteId: string, patch: Partial<BuildQuoteInput> = {}): Promise<Quote> {
+  requireUser(ctx);
+  const row = await getQuoteRow(ctx, quoteId, true);
+  if (row.status === 'superseded' || row.superseded_by) throw conflict('Bu revizyonun daha yeni bir sürümü var; en son revizyonu revize edin', 'QUOTE_NOT_LATEST', { latestQuoteId: row.superseded_by ?? null });
+  if (row.status === 'accepted') throw conflict('Kabul edilmiş teklif buradan revize edilemez (sözleşme / değişiklik akışı)', 'QUOTE_ACCEPTED');
+  const base = await revisionRequestOf(ctx, await getQuote(ctx, quoteId));
+  const req: BuildQuoteInput = {
+    currency: patch.currency ?? base.currency,
+    options: patch.options?.length ? patch.options : base.options,
+    ...(patch.marginOverrideReason ? { marginOverrideReason: patch.marginOverrideReason } : {}),
+    ...(patch.optionUntil ? { optionUntil: patch.optionUntil } : {}),
+  };
+  return buildQuote(ctx, row.project_id, req);
+}
+
 // ------------------------------------------------------------------ decision effects
 export async function approveQuote(ctx: Ctx, quoteId: string, decidedBy: string | null, decisionId: string): Promise<string[]> {
   const q = await getQuoteRow(ctx, quoteId, true);
@@ -471,7 +514,7 @@ function registerQuoteDocuments(): void {
     }
     for (const c of customer?.rules.specialClauses ?? []) clauses.push(c);
     const content = {
-      agencyName: tenantName, projectCode: p.code, customerName: p.customer_name, currency: cur, fxRate: fx, fxSource: quote.fxSource, fxDate: quote.fxDate,
+      agencyName: tenantName, projectCode: p.code, reference: p.code, revision: quote.version, customerName: p.customer_name, currency: cur, fxRate: fx, fxSource: quote.fxSource, fxDate: quote.fxDate,
       optionUntil: quote.optionUntil, appliedCustomerRules: quote.appliedCustomerRules, clauses,
       options: quote.options.map((o) => ({
         optionNo: o.optionNo, title: o.title,
@@ -486,7 +529,9 @@ function registerQuoteDocuments(): void {
       header: {
         agencyName: tenantName, title: `Teklif — ${p.code}`, subtitle: p.title,
         meta: [['Müşteri', p.customer_name ?? '-'], ['Tarih', isoDate(ctx.now())], ['Etkinlik', `${p.start_date ?? '?'} – ${p.end_date ?? '?'}, ${p.pax ?? '?'} kişi`],
-          ['Opsiyon', quote.optionUntil ?? '-'], ['Para birimi', `${cur} (1 EUR = ${fx} ${cur}, ${quote.fxSource} ${quote.fxDate})`], ['Teklif sürümü', `v${quote.version}`]],
+          // Q8: our project code is the reference the customer cites on THEIR purchase order (PO no ≠ project code)
+          ['Referans', p.code],
+          ['Opsiyon', quote.optionUntil ?? '-'], ['Para birimi', `${cur} (1 EUR = ${fx} ${cur}, ${quote.fxSource} ${quote.fxDate})`], ['Teklif sürümü', `Rev.${quote.version}`]],
       },
       sections: [
         ...content.options.map((o) => ({
@@ -505,12 +550,13 @@ function registerQuoteDocuments(): void {
         })),
         ...(clauses.length ? [{ kind: 'text' as const, title: 'Koşullar', lines: clauses }] : []),
       ],
-      footerNote: `Proje referansı ${p.code}. Fiyatlar ${quote.optionUntil ?? '-'} tarihine kadar opsiyonludur. * Acenta hizmeti.`,
+      footerNote: `Proje referansı ${p.code} — satın alma siparişinizde (PO) lütfen bu referansı belirtin. Fiyatlar ${quote.optionUntil ?? '-'} tarihine kadar opsiyonludur. * Acenta hizmeti.`,
     });
     return { content, pdf, fileName: `${p.code}-teklif-v${quote.version}.pdf`, deps };
   }, async (_ctx, doc) => {
     if (doc.stale_reason && PRICING_STALE.test(doc.stale_reason)) {
-      throw conflict(`Fiyatı etkileyen veri değişti (${doc.stale_reason}) — yeni teklif sürümü oluşturun`, 'QUOTE_REBUILD_REQUIRED');
+      // Q9: the UI offers "Revize et" (POST /api/quotes/:id/revise) instead of an error — details carry the quote id
+      throw conflict(`Fiyatı etkileyen veri değişti (${doc.stale_reason}) — yeni teklif sürümü oluşturun`, 'QUOTE_REBUILD_REQUIRED', { quoteId: doc.entity_id ?? null, action: 'revise' });
     }
   });
 
@@ -556,7 +602,7 @@ function registerQuoteDocuments(): void {
 }
 
 async function realizedSections(r: RealizedPnl): Promise<PdfSpec['sections']> {
-  const { planVsActualRows } = await import('./documents-b.js');
+  const { planVsActualRows, realizedFxSections } = await import('./documents-b.js');
   const out: PdfSpec['sections'] = [{
     kind: 'table',
     table: {
@@ -581,6 +627,8 @@ async function realizedSections(r: RealizedPnl): Promise<PdfSpec['sections']> {
     ...r.deviations.map((d) => `${d.reason}: ${money(d.amountEur, 'EUR')}`),
   ];
   out.push({ kind: 'text', title: 'Sapma nedenleri', lines });
+  // Q5: both currencies, average rates, FX lines and the evidence table
+  out.push(...realizedFxSections(r));
   return out;
 }
 

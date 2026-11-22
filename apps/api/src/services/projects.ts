@@ -13,6 +13,7 @@ import { isoDate } from '../lib/dates.js';
 import { evaluateItemOffers } from './offers.js';
 import { loadQuotes } from './quotes.js';
 import { logAiAction } from './ai-log.js';
+import { projectRealizedFx } from './realized-fx.js';
 import { canSeeFinancials, redactAudit, redactProjectDetail, redactSimilar } from './visibility.js';
 
 export async function getProjectRow(ctx: Ctx, id: string, forUpdate = false): Promise<Row> {
@@ -48,7 +49,9 @@ export async function listProjects(ctx: Ctx, f: { q?: string; outcome?: string; 
   else if (f.historical === 'only') where.push('historical');
   if (f.q) {
     params.push(`%${f.q}%`);
-    where.push(`(code ILIKE $${params.length} OR title ILIKE $${params.length} OR customer_name ILIKE $${params.length})`);
+    // Q8: also searchable by the customer's PO number (stored on the accepted quote; distinct from our project code)
+    where.push(`(code ILIKE $${params.length} OR title ILIKE $${params.length} OR customer_name ILIKE $${params.length}
+      OR EXISTS (SELECT 1 FROM quotes q WHERE q.project_id = projects.id AND q.po_number ILIKE $${params.length}))`);
   }
   if (f.outcome) {
     params.push(f.outcome);
@@ -130,6 +133,12 @@ export async function setOutcome(ctx: Ctx, id: string, outcome: 'won' | 'lost', 
       `UPDATE rfqs SET status = 'closed', closed_reason = 'project_lost', link_expires_at = LEAST(COALESCE(link_expires_at, $2), $2)
        WHERE project_id = $1 AND status NOT IN ('closed','cancelled')`,
       [id, ctx.now()],
+    );
+    // Ürün sahibi kararı Q7: a lost project's open decisions are closed automatically — expired with the reason, never deleted
+    // (audit_log keeps the transition; still listed under ?status=expired). Supplier-level cards (no project_id) are untouched.
+    await ctx.db.query(
+      `UPDATE decisions SET status = 'expired', reason = $2 WHERE project_id = $1 AND status = 'open'`,
+      [id, `proje kaybedildi: ${lostReason!.trim()}`.slice(0, 2000)],
     );
   }
   return mapProject(rows[0]);
@@ -220,7 +229,8 @@ export async function projectDetail(ctx: Ctx, id: string): Promise<ProjectDetail
     documents: docRows.map(mapDocument),
     tasks,
     alerts,
-    profit: { expected, realized },
+    // Q5: evidence-based realized EUR + TRY ("—" / status none until a real money movement exists)
+    profit: { expected, realized, realizedFx: await projectRealizedFx(ctx, id) },
     recentActivity: activity,
     stepTimer: {
       businessMinutesElapsed: businessMinutesBetween(new Date(p.received_at), new Date(end), cal),

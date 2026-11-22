@@ -141,7 +141,7 @@ export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRa
     const tr = valueTry(n, n.m.amount);
     return {
       movementId: n.m.id, type: n.m.type, date: n.m.date ?? null, amount: n.m.amount, currency: n.m.currency,
-      eurRate: n.r.eurRate, eurTryRate: n.r.eurTryRate, rateSource: (n.r.eurRate || n.r.eurTryRate ? n.m.rateSource : 'missing') as FxRateSource,
+      eurRate: n.r.eurRate, eurTryRate: n.r.eurTryRate, rateSource: (n.r.eurRate || n.r.eurTryRate ? n.m.rateSource : 'missing') as FxRateSource, rateNote: n.m.rateNote ?? null,
       label: n.m.label ?? null, settles: n.m.settles ?? null,
       eur: eur != null ? round2(eur) : null, try: tr != null ? round2(tr) : null,
       countedEur: n.counted === 0 ? 0 : valueEur(n, n.counted) != null ? round2(valueEur(n, n.counted)!) : null,
@@ -151,7 +151,9 @@ export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRa
   });
   evidence.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'));
 
+  // only what enters the totals: an invoice fully replaced by its cash needs no rate of its own
   const missingRates = nodes.flatMap((n) => {
+    if (n.counted <= 0) return [];
     const need: ('EUR' | 'TRY')[] = [];
     if (valueEur(n, n.m.amount) == null) need.push('EUR');
     if (valueTry(n, n.m.amount) == null) need.push('TRY');
@@ -224,6 +226,12 @@ export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRa
     if (okT) fxGainLoss.try = round2(profit.try! - pt);
   }
 
+  // collection day ↔ payment day: what paying at a different rate than collecting did to the TRY profit
+  const collectionVsPaymentFx: RealizedFx['collectionVsPaymentFx'] = { try: null };
+  if (both && avgCollectionRate != null && cost.eur != null && cost.try != null && !missingRates.some((m) => SIDE[m.type].side === 'cost')) {
+    collectionVsPaymentFx.try = round2(cost.eur * avgCollectionRate - cost.try);
+  }
+
   if (!nodes.length) reasons.push({ code: 'no_movements', message: 'Henüz gerçekleşen hareket yok (fatura / tahsilat / ödeme)' });
   else {
     if (missingRates.length) reasons.push({ code: 'rate_missing', message: `${missingRates.length} harekette gerçek kur yok — tahmin edilmedi (bilmiyorum); karşılığı toplamlara girmedi` });
@@ -237,6 +245,6 @@ export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRa
     status: !nodes.length ? 'none' : reasons.length ? 'partial' : 'complete',
     revenue, cost, profit, margin, markup,
     avgCollectionRate, avgPaymentRate, projectAvgRate, quoteRate: pos(q?.eurTry),
-    fxGainLoss, evidence, missingRates, reasons,
+    fxGainLoss, collectionVsPaymentFx, evidence, missingRates, reasons,
   };
 }

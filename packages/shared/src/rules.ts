@@ -101,6 +101,9 @@ export interface TenantRules {
   /** §8 İlk veri yükü: only projects / prices closed within the last N months are imported (older rows are flagged and
    *  excluded). PRD: "yalnızca son 12–18 ayın kapanmış projeleri". Admin changes it in Kurallar. */
   initialImportWindowMonths: number;
+  /** Q5: TCMB rate type used for the TRY value of EUR (or other) movements made WITHOUT conversion (value-date rate).
+   *  Default döviz alış (VUK değerleme) [Doğrulanmalı: mali müşavir]. */
+  fxRateTypeForReporting: 'tcmb_forex_buying' | 'tcmb_forex_selling' | 'tcmb_banknote_buying' | 'tcmb_banknote_selling';
 }
 
 export const DEFAULT_RULES: TenantRules = {
@@ -146,6 +149,7 @@ export const DEFAULT_RULES: TenantRules = {
   supplierRfqHours: [],
   criticalPushFallbackMinutes: 15,
   initialImportWindowMonths: 18,
+  fxRateTypeForReporting: 'tcmb_forex_buying',
 };
 
 export type RuleKey = keyof TenantRules;

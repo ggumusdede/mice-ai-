@@ -26,3 +26,13 @@ ALTER TABLE bank_transactions
 ALTER TABLE import_files DROP CONSTRAINT IF EXISTS import_files_entity_check;
 ALTER TABLE import_files ADD CONSTRAINT import_files_entity_check
   CHECK (entity IN ('suppliers', 'customers', 'projects', 'service_lines', 'price_points', 'channel_prices', 'finance_movements'));
+
+-- Q5 follow-up: dated FX rate store (TCMB). Existing rows keep rate_type NULL = the internal/system rate used by currentFx();
+-- TCMB rows carry their type and never change the internal rate. Convention unchanged: 1 EUR = rate × currency.
+ALTER TABLE fx_rates
+  ADD COLUMN IF NOT EXISTS rate_type text CHECK (rate_type IS NULL OR rate_type IN ('tcmb_forex_buying','tcmb_forex_selling','tcmb_banknote_buying','tcmb_banknote_selling')),
+  ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES users(id);
+CREATE UNIQUE INDEX IF NOT EXISTS fx_rates_typed_unique ON fx_rates (tenant_id, currency, rate_type, rate_date) WHERE rate_type IS NOT NULL;
+
+-- new FK (fx_rates.created_by → users) becomes tenant-scoped too
+SELECT apply_tenant_foreign_keys();

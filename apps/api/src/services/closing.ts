@@ -18,6 +18,7 @@ import { getProjectRow } from './projects.js';
 import { loadQuotes } from './quotes.js';
 import { money, pct, renderPdf } from './pdf.js';
 import { supplierProjectCount } from './initial-import.js';
+import { projectRealizedFx } from './realized-fx.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -67,7 +68,14 @@ export async function computeClosingCheck(ctx: Ctx, projectId: string): Promise<
     `SELECT i.amount, i.currency, i.amount_eur, (SELECT fx_rate FROM finance_entries pe WHERE pe.project_id = i.project_id AND pe.supplier_id = i.supplier_id AND pe.kind = 'payable' ORDER BY created_at LIMIT 1) AS contract_rate
        FROM finance_entries i WHERE i.project_id = $1 AND i.kind = 'supplier_invoice' AND i.currency <> 'EUR' AND i.status <> 'cancelled'`, [projectId])).rows;
   const fxDiff = r2(fxRows.reduce((s, r) => (r.contract_rate ? s + (Number(r.amount_eur) - Number(r.amount) / Number(r.contract_rate)) : s), 0));
-  if (fxDiff) deviations.push({ reason: 'Kur farkı', amountEur: -fxDiff });
+  // Q5: evidence-based FX gain/loss (each movement at its actual rate vs the quote-time rate) replaces the system-rate estimate
+  const realizedFx = await projectRealizedFx(ctx, projectId);
+  if (realizedFx.fxGainLoss.eur != null) {
+    if (realizedFx.fxGainLoss.eur) deviations.push({ reason: `Kur farkı (gerçekleşen kurlar − teklif kuru${realizedFx.quoteRate ? ` ${realizedFx.quoteRate}` : ''}; kanıtlı)`, amountEur: realizedFx.fxGainLoss.eur });
+  } else if (fxDiff) deviations.push({ reason: 'Kur farkı', amountEur: -fxDiff });
+  if (realizedFx.status === 'partial' && realizedFx.reasons.some((x) => x.code === 'rate_missing')) {
+    deviations.push({ reason: `Kur kanıtı eksik: ${realizedFx.missingRates.length} hareket — gerçekleşen TL / EUR kısmi`, amountEur: 0 });
+  }
   const amendDelta = (await ctx.db.query(`SELECT detail FROM decisions WHERE project_id = $1 AND kind = 'condition_risk' AND detail ? 'impact'`, [projectId])).rows
     .reduce((s, r) => s + Number(r.detail.impact?.deltaCostEur ?? 0), 0);
   if (amendDelta) deviations.push({ reason: 'Değişiklik / ek protokol maliyet farkı', amountEur: -r2(amendDelta) });
@@ -76,17 +84,20 @@ export async function computeClosingCheck(ctx: Ctx, projectId: string): Promise<
     if (costDev) deviations.push({ reason: 'Gerçekleşen maliyet − planlanan maliyet', amountEur: -costDev });
   }
 
+  const plannedTry = planned && realizedFx.quoteRate
+    ? { cost: r2(planned.costEur * realizedFx.quoteRate), sale: r2(planned.saleEur * realizedFx.quoteRate), profit: r2(planned.profitEur * realizedFx.quoteRate) } : null;
+  const withFx = (c: ClosingCheck): ClosingCheck => ({ ...c, planVsActual: { ...c.planVsActual, realizedFx, plannedTry } });
   if (p.outcome === 'lost' || p.outcome === 'cancelled') {
-    return closingCheck({
+    return withFx(closingCheck({
       supplierInvoicesExpected: 0, supplierInvoicesReceived: 0, customerInvoiceIssued: true, receivablesOpenEur: 0, unbilledPayments: 0, commissionsUnreconciled: 0,
       lostReasonMissing: !p.lost_reason?.trim(), planned, actual, deviations,
-    });
+    }));
   }
-  return closingCheck({
+  return withFx(closingCheck({
     supplierInvoicesExpected: contracted.length, supplierInvoicesReceived: contracted.filter((s) => invoiced.has(s)).length,
     customerInvoiceIssued: custInv.length > 0, receivablesOpenEur: r2(receivablesOpenEur), unbilledPayments, commissionsUnreconciled,
     lostReasonMissing: false, planned, actual, deviations,
-  });
+  }));
 }
 
 // ------------------------------------------------------------------ close
