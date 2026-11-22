@@ -352,7 +352,7 @@ try {
       await adminDecide(admin, `${projectCode}`, { shotName: 'inbox-sheet-quote' });
     }
     await openTab(clerk, projectId, 'quote');
-    const card = clerk.locator('.card', { hasText: /^v\d/ }).filter({ hasText: 'Onaylandı' }).first();
+    const card = clerk.locator('.card', { hasText: /^Rev\.\d/ }).filter({ hasText: 'Onaylandı' }).first();
     await card.getByRole('button', { name: 'Müşteriye gönder' }).click();
     await clerk.locator('.copy-link__url').first().waitFor({ timeout: 20_000 });
     quoteLink = await clerk.locator('.copy-link__url').first().innerText();
