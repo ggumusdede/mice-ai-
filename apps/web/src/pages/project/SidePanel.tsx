@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { GeneratedDocument } from '@mice/shared';
-import { api, API_BASE, errorMessage, openBinary } from '../../api/client';
+import { api, API_BASE, ApiClientError, errorMessage, openBinary } from '../../api/client';
 import { useT } from '../../i18n';
 import { relative, staleReason } from '../../lib/format';
 import { useToast } from '../../components/Toast';
@@ -35,6 +36,9 @@ export function SidePanel() {
   const { detail, reload } = useProject();
   const toast = useToast();
   const [busyDoc, setBusyDoc] = useState<string | null>(null);
+  // Q9: a pricing change cannot be "regenerated" — the quote is revised instead (doc id → quote id)
+  const [reviseFor, setReviseFor] = useState<Record<string, string>>({});
+  const navigate = useNavigate();
   const [genKind, setGenKind] = useState<'program' | 'rooming_list' | 'pnl'>('program');
   const [genBusy, setGenBusy] = useState(false);
   const canSeeFinancials = useCanSeeFinancials();
@@ -58,7 +62,11 @@ export function SidePanel() {
       await reload();
       toast(t.common.saved);
     } catch (e) {
-      toast(errorMessage(e), 'danger');
+      const quoteId = e instanceof ApiClientError && e.code === 'QUOTE_REBUILD_REQUIRED' ? (e.details as { quoteId?: string } | undefined)?.quoteId : undefined;
+      if (quoteId) {
+        setReviseFor((m) => ({ ...m, [doc.id]: quoteId }));
+        toast(t.quote.rebuildNeeded);
+      } else toast(errorMessage(e), 'danger');
     } finally {
       setBusyDoc(null);
     }
@@ -86,7 +94,11 @@ export function SidePanel() {
                 </div>
                 <div className="list__end">
                   <DocStatusPill status={d.status} />
-                  {d.status === 'stale' ? (
+                  {d.status === 'stale' && reviseFor[d.id] ? (
+                    <Button size="sm" variant="secondary" icon="refresh" onClick={() => navigate(`/projeler/${detail.project.id}/quote?revize=${reviseFor[d.id]}`)} aria-label={`${t.quote.revise}: ${t.docKind[d.kind]}`}>
+                      {t.quote.revise}
+                    </Button>
+                  ) : d.status === 'stale' ? (
                     <Button size="sm" variant="ghost" icon="refresh" busy={busyDoc === d.id} onClick={() => void regenerate(d)} aria-label={`${t.project.regenerate}: ${t.docKind[d.kind]}`}>
                       {t.project.regenerate}
                     </Button>

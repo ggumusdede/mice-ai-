@@ -108,7 +108,7 @@ export const tr = {
     margin: 'Marj (Kâr ÷ Satış)', markup: 'Markup (Kâr ÷ Alış)', marginShort: 'Marj', markupShort: 'Markup',
   },
   projects: {
-    title: 'Projeler', searchPlaceholder: 'Kod, müşteri veya başlık ara', stepFilter: 'Adım', outcomeFilter: 'Sonuç',
+    title: 'Projeler', searchPlaceholder: 'Kod, müşteri, başlık veya PO no ara', stepFilter: 'Adım', outcomeFilter: 'Sonuç',
     empty: 'Kriterlere uyan proje yok.', code: 'Kod', customer: 'Müşteri', dates: 'Tarih', pax: 'Kişi', step: 'Adım',
     outcome: 'Sonuç', received: 'Talep', newRequest: 'Yeni talep',
   },
@@ -180,6 +180,22 @@ export const tr = {
     accepted: 'Kabul edilen seçenek', appliedRules: 'Uygulanan müşteri kuralları', currency: 'Müşteri para birimi',
     optionCountHint: (min: number, max: number) => `Teklifte ${min}–${max} seçenek olmalı.`,
     noOffer: 'Teklif yok', valueAddHint: 'Katma değer kalemi: alış 0, satış fiyatını siz belirleyin.',
+    // Q6 aday tedarikçi
+    requestAccreditation: 'Akreditasyon iste', accreditationSent: 'Akreditasyon istendi',
+    accreditationReason: 'Teklif aday tedarikçi nedeniyle bloklu',
+    accreditationHint: 'Aday tedarikçi teklifi blokluyor — akreditasyon yönetici kararıdır:',
+    accreditationRequested: (n: string) => `${n}: akreditasyon talebi yöneticinin karar kutusuna düştü.`,
+    accreditationPending: (n: string) => `${n}: açık akreditasyon talebi zaten var (yöneticide).`,
+    // Q8 PO / kesin onay
+    reference: 'Referans', poNumber: 'Müşteri PO no', acceptedBy: 'Onaylayan', firmApproved: 'Kesin onay',
+    awaitingSignedForm: 'İmzalı form / PO bekleniyor',
+    // Q9 hızlı revizyon
+    revise: 'Revize et', reviseTitle: (from: string, to: string) => `Revize et — ${from} → ${to}`,
+    revisingNote: (from: string) => `${from} temel alındı`,
+    revisingHint: 'Yalnız değişeni düzeltin; kaydedince aynı teklif dosyasının yeni revizyonu olur, belgeler yeniden üretilir. Gönderilmiş revizyonlar değişmez.',
+    saveRevision: (to: string) => `${to} olarak kaydet`, revisionSaved: (to: string) => `${to} kaydedildi`,
+    readOnlySent: 'Salt okunur — müşterinin gördüğü sürüm olarak saklanır.',
+    rebuildNeeded: 'Fiyatı etkileyen veri değişti — teklifi revize edin.',
   },
   contracts: {
     title: 'Sözleşmeler', create: 'Şablondan oluştur', template: 'Şablon', agencyTemplate: 'Acenta şablonu',
@@ -249,6 +265,17 @@ export const tr = {
     pending: 'Bekleyen öneriler', rules: 'Kural', automations: 'Otomasyon', checklist: 'Kontrol listesi',
     style: 'Üslup güncellemesi', noStyle: 'Bu hafta üslup değişikliği yok.', rfqOverrides: 'RFQ kural istisnaları',
     hours: (h: number) => `${h.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} iş saati`,
+  },
+  teamPerf: {
+    nav: 'Ekip performansı', title: 'Ekip performansı',
+    subtitle: 'Satış sorumlusu (proje sahibi) bazında karar verisi — kişi bazlı yetki ve 6. ay yetki devri gözden geçirmesi için (§4, §16.7).',
+    period: 'Dönem', last12: 'Son 12 ay', last6: 'Son 6 ay', last3: 'Son 3 ay', ytd: 'Bu yıl', custom: 'Özel', from: 'Başlangıç', to: 'Bitiş',
+    person: 'Kişi', requests: 'Talep', quotesSent: 'Gönderilen teklif', won: 'Kazanılan', lost: 'Kaybedilen', wonLost: 'Kazanılan / kaybedilen',
+    winRate: 'Kazanma oranı', quoteTime: 'Ort. teklif süresi', target: 'Hedef', margin: 'Ort. marj (Kâr÷Satış)', markup: 'Ort. markup (Kâr÷Alış)',
+    realized: 'Gerçekleşen kâr', correction: 'Düzeltme oranı', approvalFree: 'Onaylı / serbest teklif',
+    historical: (n: number) => `${n} geçmiş proje`, historicalLabel: 'Geçmiş proje', empty: 'Bu dönemde veri yok.',
+    lostTitle: 'Kaybedilen projeler ve nedenleri', lostCount: (n: number) => `${n} kayıp`,
+    footnote: 'Talep, gönderim, sonuç, süre ve kâr proje sahibine; düzeltme ve onaylı/serbest teklif sayısı teklifi hazırlayana yazılır. Marj ve markup kazanılan projelerde kabul edilen seçenekten, ayrı ayrı. TL kâr yalnız kur kanıtı olan projelerde gösterilir. Geçmiş (aktarılan) projeler sahibi biliniyorsa sayılır.',
   },
   admin: {
     title: 'Yönetim', rules: 'Kurallar', users: 'Kullanıcılar', delegations: 'Vekâlet', automation: 'Otomasyon',

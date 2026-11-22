@@ -20,6 +20,7 @@ import { ChecklistPage } from './pages/admin/ChecklistPage';
 import { SuppliersPage } from './pages/admin/SuppliersPage';
 import { CustomersPage } from './pages/admin/CustomersPage';
 import { DataImportPage } from './pages/admin/DataImportPage';
+import { TeamPerformancePage } from './pages/admin/TeamPerformancePage';
 import { SupplierRfqPage } from './pages/public/SupplierRfqPage';
 import { CustomerQuotePage } from './pages/public/CustomerQuotePage';
 import { RoomingPage } from './pages/public/RoomingPage';
@@ -74,6 +75,7 @@ export function App() {
             <Route path="tedarikciler" element={<SuppliersPage />} />
             <Route path="musteriler" element={<CustomersPage />} />
             <Route path="veri-aktarimi" element={<DataImportPage />} />
+            <Route path="ekip-performansi" element={<TeamPerformancePage />} />
           </Route>
           <Route path="*" element={<EmptyState icon="info" title="Sayfa bulunamadı" />} />
         </Route>

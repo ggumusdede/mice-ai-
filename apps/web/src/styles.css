@@ -519,7 +519,8 @@ tr.diff th { font-weight: 600; }
 @media (min-width: 900px) { .shell--wide .main { padding: 24px 28px 110px; } }
 .project { display: flex; flex-direction: column; gap: 16px; max-width: 1680px; margin: 0 auto; }
 .project__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-.project__code { font-size: 12.5px; color: var(--text-2); }
+.project__code { font-size: 12.5px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.project__po { color: var(--text-2); }
 .project__title { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin-top: 2px; }
 .project__meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--text-2); margin-top: 6px; font-size: 14px; }
 .project__head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
@@ -815,3 +816,14 @@ tr.diff th { font-weight: 600; }
 .import-row--error td { background: color-mix(in srgb, #f04438 6%, transparent); }
 .data-import .row-end { gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; }
 .import-commit { border-top: 1px solid var(--border, #e4e7ec); padding-top: 0.75rem; }
+
+/* Q7 Ekip performansı: cards on phones, table on desktop */
+.tp__period { flex-wrap: wrap; }
+.tp__cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.tp__card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tp__kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin: 0; font-size: 14px; }
+.tp__kv dt { color: var(--text-2); }
+.tp__kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.tp__table { display: none; }
+.tp__lost + .tp__lost { margin-top: 8px; }
+@media (min-width: 760px) { .tp__table { display: block; } .tp__cards { display: none; } }

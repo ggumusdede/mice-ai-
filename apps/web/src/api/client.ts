@@ -9,7 +9,7 @@ import type {
   MeResponse, MessageDraft, NegotiationArgument, Project, ProjectDetail, PublicExtraView, PublicOfferInput,
   PublicQuoteView, PublicRfqView, PublicRoomingSubmit, PublicRoomingView, PublicSurveySubmit, PublicSurveyView, Quote,
   Rfq, RulesResponse, ServiceItem, ServiceItemInput, SimilarProject, Supplier, SupplierInvoiceInput, SupplierOffer,
-  SupplierRanking, Task, TenantRules, User, UserStats, WeeklyReport,
+  SupplierRanking, Task, TenantRules, User, UserStats, WeeklyReport, TeamPerformanceReport, AccreditationRequestResponse,
 } from '@mice/shared';
 
 export const API_BASE = '/api';
@@ -234,10 +234,13 @@ export const api = {
     list: (q?: { kind?: string; city?: string; status?: string }) => items(get<List<Supplier>>('/suppliers', q)),
     create: (b: Partial<Supplier>) => post<Supplier>('/suppliers', b),
     patch: (id: string, b: Partial<Supplier>) => patch<Supplier>(`/suppliers/${enc(id)}`, b),
+    requestAccreditation: (id: string, b: { reason?: string; projectId?: string } = {}) =>
+      post<AccreditationRequestResponse>(`/suppliers/${enc(id)}/request-accreditation`, b),
   },
   quotes: {
     get: (id: string) => get<Quote>(`/quotes/${enc(id)}`),
     send: (id: string) => post<Quote>(`/quotes/${enc(id)}/send`),
+    revise: (id: string, b: Partial<BuildQuoteRequest> = {}) => post<Quote>(`/quotes/${enc(id)}/revise`, b),
     pdf: (id: string) => openBinary(`/quotes/${enc(id)}/pdf`, `teklif-${id}.pdf`),
   },
   contracts: {
@@ -307,7 +310,10 @@ export const api = {
     patch: (id: string, b: { body: string; subject?: string | null }) => patch<MessageDraft>(`/drafts/${enc(id)}`, b),
     send: (id: string) => post<MessageDraft>(`/drafts/${enc(id)}/send`),
   },
-  reports: { weekly: (weekStart?: string) => get<WeeklyReport>('/reports/weekly', { weekStart }) },
+  reports: {
+    weekly: (weekStart?: string) => get<WeeklyReport>('/reports/weekly', { weekStart }),
+    teamPerformance: (q: { from?: string; to?: string } = {}) => get<TeamPerformanceReport>('/reports/team-performance', q),
+  },
   assist: {
     ask: (question: string, projectId?: string) => post<AskResponse>('/assist/ask', { question, context: projectId ? { projectId } : undefined }),
   },

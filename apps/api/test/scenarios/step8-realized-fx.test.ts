@@ -125,10 +125,13 @@ describe('Q5 — kanıtlı gerçekleşen kâr (EUR + TL)', () => {
     const man = await w.finance.post('/api/fx/rates', { csv: 'Tarih;Para birimi;Tür;Kur\n25.11.2026;TRY;tcmb_forex_selling;37,90\n26.11.2026;XXX;;1' });
     expect(man.body).toMatchObject({ inserted: 1, rejected: [{ line: 3 }] });
     expect((await w.clerk.post('/api/fx/rates', { rows: [{ rateDate: '2026-11-25', currency: 'TRY', rate: 1 }] })).status).toBe(403);
-    await ownerSql(`DELETE FROM fx_rates WHERE tenant_id = $1 AND rate_type IS NOT NULL`, [w.t.tenantId]);
+    // balance paid in EUR on 15.12.2026: no published rate within the look-back window (rates are append-only, never deleted)
+    const bal = (await p.finance('payable')).find((e) => e.meta.part === 'balance');
+    await pay(w, bal.id, { paidAt: '2026-12-15T11:00:00+03:00' });
     r = await rfx(w, p);
     expect(r.status).toBe('partial');
-    expect(r.missingRates).toEqual([expect.objectContaining({ type: 'payment', currency: 'EUR', need: ['TRY'] })]);
+    expect(r.missingRates).toEqual([expect.objectContaining({ movementId: `${bal.id}:paid`, type: 'payment', currency: 'EUR', need: ['TRY'] })]);
+    expect(r.evidence.find((e: any) => e.movementId === `${bal.id}:paid`)).toMatchObject({ rateSource: 'currency', eurTryRate: null, try: null, eur: bal.amount }); // EUR exact, TL unknown
     expect(r.reasons.map((x: any) => x.code)).toContain('rate_missing');
   });
 
@@ -145,8 +148,7 @@ describe('Q5 — kanıtlı gerçekleşen kâr (EUR + TL)', () => {
     const dev = cc.planVsActual.deviations.find((d: any) => /Kur farkı/.test(d.reason));
     expect(dev.reason).toMatch(/kanıtlı/);
     expect(dev.amountEur).toBeCloseTo(cc.planVsActual.realizedFx.fxGainLoss.eur, 2);
-    const quote = (await w.admin.get(`/api/quotes?projectId=${p.id}`)).body.items.find((q: any) => q.status === 'accepted');
-    const pnl = await w.admin.post(`/api/quotes/${quote.id}/documents`, { kind: 'pnl' });
+    const pnl = await w.finance.post(`/api/projects/${p.id}/documents`, { kind: 'pnl' });
     expect(pnl.status).toBe(200);
     expect(pnl.body.content.realized.realizedFx.evidence).toHaveLength(2);
     expect(pnl.body.content.realized.plannedTry.sale).toBeGreaterThan(0);

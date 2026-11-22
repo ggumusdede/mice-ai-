@@ -41,6 +41,7 @@ export function ProjectPage() {
   const { project, customer, alerts, stepTimer } = ctx.detail;
   const tabs = canSeeFinancials ? TABS : TABS.filter((k) => !FINANCIAL_TABS.includes(k));
   const current = (tabs as readonly string[]).includes(tab) ? (tab as TabKey) : 'overview';
+  const poNumber = [...ctx.detail.quotes].sort((a, b) => b.version - a.version).find((q) => q.poNumber)?.poNumber ?? null;
   const overTarget = stepTimer.businessMinutesElapsed > stepTimer.targetBusinessMinutes;
 
   return (
@@ -48,7 +49,11 @@ export function ProjectPage() {
       <div className="project">
         <header className="project__head">
           <div className="project__id">
-            <div className="project__code mono">{project.code}</div>
+            <div className="project__code">
+              <span className="mono">{project.code}</span>
+              {/* Q8: the customer's own PO number — shown next to (never instead of) our project code */}
+              {poNumber ? <span className="project__po small" title={t.quote.poNumber}>{t.quote.poNumber}: <span className="mono">{poNumber}</span></span> : null}
+            </div>
             <h1 className="project__title">{customer?.name ?? project.customerName ?? project.title}</h1>
             <div className="project__meta">
               <span>{project.title}</span>
