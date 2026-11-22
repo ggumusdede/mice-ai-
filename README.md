@@ -59,7 +59,7 @@ packages/domain   @mice/domain  — saf iş kuralı fonksiyonları (marj/markup,
 packages/ai       @mice/ai      — AiService arayüzü: ClaudeAiService (Anthropic SDK) ve deterministik MockAiService, PII maskeleme
 apps/api          @mice/api     — Fastify 5 + PostgreSQL 16 (RLS), JWT, WebAuthn, pdfkit, exceljs; worker (takip / KVKK / özet işleri)
 apps/web          @mice/web     — React 18 + Vite PWA (mobil öncelikli karar kutusu, masaüstü proje ekranı, public token sayfaları)
-e2e/              Playwright UI senaryoları (adım 0–5 ve 6–8)
+e2e/              Playwright UI senaryoları (adım 0–5, 6–8, scenarios/ 01–17, run-all.mjs)
 docs/             mühendislik dokümanları (mimari, veri modeli, AI yetki matrisi, doğruluk ölçümü, faz planı, otomasyon, mobil karar)
 scripts/          db-start.sh (yerel Postgres 16, `mice` + `mice_test`)
 ```
@@ -153,7 +153,7 @@ npm run typecheck                               # tüm workspace'ler (tsc --noEm
 (cd packages/ai && npx vitest run)              # Claude istemcisi (sahte SDK) + mock
 (cd apps/api && npx vitest run)                 # entegrasyon: gerçek Postgres `mice_test` (şema her koşuda yeniden kurulur)
 (cd apps/web && npx vitest run && npx vite build)
-node e2e/steps0-5.mjs && node e2e/steps6-8.mjs   # UI senaryoları (aşağıda)
+node e2e/run-all.mjs                             # tüm UI senaryoları (aşağıda; steps0-5, steps6-8, scenarios/*)
 ```
 
 ## End-to-end UI senaryoları
@@ -194,6 +194,31 @@ Her koşu yeni proje oluşturur (aynı veritabanında tekrar çalıştırılabil
 başarısız doğrulamada çıkış kodu 1 + `PROBLEMS` listesi; ekran görüntüleri (deviceScaleFactor 1) `SHOTS` klasörüne yazılır.
 Not: mock AI kontrol listesi önerilerini tekrarlamaz; aynı veritabanında ikinci koşuda öneri kartı çıkmayabilir (senaryo bunu
 loglar ve atlar).
+
+### Tüm tarayıcı senaryoları: `e2e/run-all.mjs`
+
+`e2e/run-all.mjs` iki akış betiğini ve `e2e/scenarios/*.mjs` altındaki 17 senaryoyu **sırayla**, çalışan sunuculara karşı koşar;
+sonunda betik / sonuç (PASS · FAIL · SKIP) / süre tablosu basar, herhangi biri başarısızsa çıkış kodu 1'dir. Her betiğin tam çıktısı
+`E2E_LOG_DIR`'e (varsayılan `e2e/shots/logs`) yazılır.
+
+```bash
+# API'yi gelen e-posta sırrı ve stdout log dosyasıyla başlatın (senaryo 14 ve 15 bunları kullanır)
+AI_PROVIDER=mock INBOUND_EMAIL_SECRET=e2e-sirri npm start -w apps/api > /tmp/api.log 2>&1 &
+(cd apps/web && npx vite) &
+INBOUND_EMAIL_SECRET=e2e-sirri API_LOG=/tmp/api.log node e2e/run-all.mjs      # hepsi (~6–8 dk)
+node e2e/run-all.mjs 03 kvkk                     # yalnız dosya adında "03" veya "kvkk" geçenler
+node e2e/scenarios/05-stale-documents.mjs        # tek senaryo; VERBOSE=1 run-all çıktısını akıtır, E2E_TIMEOUT_S (600)
+```
+
+- Ortak yardımcılar `e2e/lib/harness.mjs` (tarayıcı, giriş, `adminDecide`, beklenen HTTP hatası `allowHttp`, konsol hatası
+  toplama, çıkış kodları 0/1/3) ve `e2e/lib/setup.mjs` (API ile ön koşul: proje, teklifler, onaylı / gönderilmiş teklif, kazanılmış ve
+  imzalı proje, RFQ linkleri, kural değiştir-geri al). Senaryolar ön koşulu API ile hazırlar, test edilen kısmı arayüzden sürer.
+- **Senaryo 14** `INBOUND_EMAIL_SECRET` yoksa SKIP olur (API ile aynı değer; imza betikte HMAC ile hesaplanır, kiracı `INBOUND_EMAIL_TENANT`,
+  varsayılan `demo`). **Senaryo 15** misafire e-postayla giden rıza geri çekme linkini `API_LOG`'dan (geliştirme API'si outbox
+  e-postalarını konsola yazar) okur; verilmezse ekip tarafı geri çekmeye düşer ve not düşer. **Senaryo 9** RFQ son tarihini geçmişe
+  almak için `psql` kullanır (`MIGRATION_DATABASE_URL`, varsayılan `postgres://postgres@localhost:5432/mice`); psql yoksa o adımı atlar.
+- Senaryo 11 ve 12 kuralları değiştirir ve sonunda geri alır; senaryo 7 karar kutusunu tamamen boşaltır ("Her şey yolunda").
+- Senaryo listesi ve ne doğruladıkları: [`e2e/SCENARIOS.md`](e2e/SCENARIOS.md).
 
 ## Dağıtım (Docker, CI, iletişim kanalları, operasyon)
 

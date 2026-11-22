@@ -155,7 +155,7 @@ try {
 
   await step('Verification table: error group (out of 18-month window), nothing live yet', async () => {
     const table = admin.getByRole('table', { name: 'Doğrulama tablosu' });
-    await table.locator('.import-group', { hasText: 'Hata' }).waitFor();
+    await table.locator('.import-group', { hasText: 'Hata ·' }).first().waitFor();
     await table.locator('.import-row--error', { hasText: `E2E-${RUN}-3` }).getByText('aktarım penceresinin dışında').waitFor();
     await table.locator('.import-row--warning', { hasText: 'Moda Sahil Otel' }).first().waitFor(); // existing supplier → link
     const commit = admin.getByRole('button', { name: /Onaylı satırları aktar/ });
@@ -167,13 +167,13 @@ try {
 
   await step('Inline edit: admin accredits a supplier in review', async () => {
     const table = admin.getByRole('table', { name: 'Doğrulama tablosu' });
-    const row = table.locator('tr.import-row', { hasText: `Beykoz Koru ${RUN}` });
+    const row = table.locator('tr.import-row', { hasText: `Beykoz Koru ${RUN}` }).filter({ hasText: 'Tedarikçiler' });
     await row.getByRole('button', { name: /düzenle/ }).click();
     const editor = table.locator('tr.import-edit');
     await editor.getByText('Akredite et (yönetici kararı').click();
     await editor.getByRole('button', { name: 'Kaydet ve doğrula' }).click();
     await admin.getByText('Satır güncellendi ve yeniden doğrulandı').first().waitFor();
-    await table.locator('tr.import-row', { hasText: `Beykoz Koru ${RUN}` }).getByText('karar kutusu üzerinden').waitFor();
+    await table.locator('tr.import-row', { hasText: `Beykoz Koru ${RUN}` }).filter({ hasText: 'Tedarikçiler' }).getByText('karar kutusu üzerinden').waitFor();
     await shot(admin, 'import-row-edit');
   });
 

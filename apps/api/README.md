@@ -386,3 +386,50 @@ manual offer form and the supplier portal still accept percent values (≤ 100).
 - `src/scripts/export-eval-set.ts`: corrected `document_reading` (supplier offers) and `request_extraction` actions → fixtures in
   the `packages/ai/eval` format (`offers.exported.json`, `requests.exported.json`); gold = AI output + human corrections; PII
   pseudonymized. See docs/04 §3.
+
+## §8 Initial historical data import — "İlk veri yükü" (migration `015_initial_import.sql`)
+
+PRD §8: only projects closed in the last 12–18 months are loaded, **verified by hand** (so the system does not learn from dirty
+data). Admin + human actor only (`ADMIN_ONLY` 403 for every other role, incl. template downloads). Code:
+`packages/domain/src/initial-import.ts` (templates, header aliases, CSV parser, TR number / date normalization via
+`parseTrNumber` / `parseTrDate`, Excel serial dates, row validation), `src/services/initial-import.ts`, `src/routes/import.ts`;
+web `Yönetim → Veri aktarımı` (`apps/web/src/pages/admin/DataImportPage.tsx`, helpers `src/lib/dataImport.ts`).
+
+- **Templates:** `GET /api/import/templates/:entity?format=xlsx|csv` for `suppliers` (VKN, city/district, kinds, status),
+  `customers`, `projects` (code, dates, customer, pax, event type, won/lost + lost reason), `service_lines` (unit cost = alış,
+  unit sale = satış, supplier, currency), `price_points` (→ `price_history` `realized`), `channel_prices`. Samples:
+  `apps/api/test/fixtures/import/*.csv`, `e2e/fixtures/import-*.csv` (relative-date tokens).
+- **Pipeline:** `POST /api/import/batches` → `POST /api/import/batches/:id/files` (multipart `entity` + `file`, or JSON
+  `{entity, csv | dataBase64}`; XLSX passes the G-18 zip guard before exceljs; CSV `;`/`,`/tab, UTF-8 or Windows-1254; max
+  5000 rows) → staging (`import_batches`, `import_files`, `import_rows`; FORCE RLS, tenant FKs, audited, no DELETE).
+- **Validation per row** (status `ok | warning | error` + issues; re-run after every upload / edit / review / `revalidate`):
+  required fields, enums (kinds, outcome, board, cancellation, units), VKN 10/11 digits, **window rule**
+  `initialImportWindowMonths` (default 18, in `rules`; older → `OUT_OF_WINDOW` error, future → `NOT_CLOSED`), lost needs a
+  reason, known currency **and** a recorded FX rate, cost ≤ sale (`COST_ABOVE_SALE` warning; cost 0 = value-add), duplicates
+  inside the file and vs live data (`ALREADY_IMPORTED`: historical project source code, price-history / channel-price rows,
+  service items of an earlier batch), supplier / customer resolution **by VKN, then normalized name** (Turkish folding, legal
+  suffixes dropped) against live rows and rows of the same batch (existing → `EXISTING_RECORD`, linked, not duplicated).
+  The file's "akredite" status is never trusted: suppliers enter as `candidate` (or `passive`).
+- **Manual verification:** `PATCH /api/import/rows/:id {input}` (inline edit → review back to `pending`),
+  `POST /api/import/batches/:id/review {action: approve|reject|reset, rowIds? | statuses?, entity?}` (error rows are never
+  approved; bulk-by-status only touches undecided rows; rejecting a referenced supplier / customer / project turns its
+  dependents into errors). The admin may tick `accredit` on a supplier row.
+- **Commit:** `POST /api/import/batches/:id/commit` — refused while any non-error row is `pending` (`ROWS_PENDING`) or nothing is
+  approved; re-validates inside the same transaction; writes approved rows in dependency order in **one transaction** with
+  actor = the admin and `import_batch_id` on every live row (`suppliers`, `customers`, `projects`, `service_items`,
+  `price_history`, `channel_prices`; the audit `after` carries it). Projects: `historical = true`, code `H-<source code>`,
+  negative `seq` (the live `PRJ-####` counter is untouched), outcome `closed` (won) / `lost`, `closed_at` set, step 8,
+  `historical_cost_eur` / `historical_sale_eur` from the lines (current recorded FX — [Doğrulanmalı] historical rates).
+  Lines → `service_items` (`specs.historical`) + `price_history` (`realized` for won, `negotiated` for lost projects, `verified`,
+  `created_at` = service date). Accreditation ticked in review goes through the decision box: an admin-only
+  `supplier_accreditation` card is created and decided by the committing admin via `decide()`.
+  Suppliers with contracts are rescored (`supplierScore` project denominator now includes historical projects — also in
+  closing). Idempotency: committed / abandoned batches refuse changes (`BATCH_CLOSED`); the identical file is a no-op in its
+  batch and `DUPLICATE_FILE` in another live batch; re-uploaded rows hit the duplicate checks. `POST …/abandon` (no deletes).
+- **Effects:** `GET /api/projects` excludes historical projects by default (`?historical=include|only`); they create no inbox
+  card, task, follow-up, ops-calendar task, daily summary or closing alarm (closed / lost + `closed_at`); the weekly report
+  ignores their insert as a won/lost transition. They DO feed `GET /api/projects/:id/similar` (know-how totals / margin / lost
+  reason), comparison history medians (`price_history`), supplier ranking advantage, and the §16.5 rule-suggestion generator
+  (price points × channel prices).
+- Tests: `test/initial-import.test.ts`, `packages/domain/test/initial-import.test.ts`, `apps/web/src/lib/__tests__/dataImport.test.ts`,
+  browser `e2e/import.mjs`.

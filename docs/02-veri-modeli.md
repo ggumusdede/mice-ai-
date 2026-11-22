@@ -176,6 +176,18 @@ Tüm tablolarda `tenant_id` vardır ve RLS açıktır. Aşağıda `id`, `tenant_
 |---|---|---|
 | `surveys` | `project_id, token_hash, sent_at, answers jsonb, answered_at, questions jsonb, created_by` | 3 soruluk anket. "Neyi geç öğrendik?" metni `projects.lessons_learned` sütunundadır (ayrı `project_lessons` tablosu yok) |
 
+### İlk veri yükü (§8) — `015`
+
+| Tablo | Temel sütunlar | Notlar |
+|---|---|---|
+| `import_batches` | `label, status ('open'\|'committed'\|'abandoned'), summary jsonb, created_by, committed_by/at, abandoned_by/at, abandon_reason` | Yalnız yönetici. Silinmez; vazgeçme durumla |
+| `import_files` | `batch_id, entity, file_name, file_sha256, row_count, unknown_headers, uploaded_by, superseded_at` | Aktarım × tür başına tek etkin dosya; aynı dosya tekrar yüklenirse işlem yok |
+| `import_rows` | `batch_id, file_id, entity, row_no, raw, input, data, natural_key, status ('ok'\|'warning'\|'error'), issues, resolved, review ('pending'\|'approved'\|'rejected'), reviewed_by, committed_entity_id, committed_action, committed_at` | Elle doğrulama; `committed_at` yalnız onaylı ve hatasız satırda |
+
+Canlı tablolara `import_batch_id` eklendi (`suppliers`, `customers`, `projects`, `service_items`, `price_history`, `channel_prices`).
+`projects.historical` (+ `source_ref` tekil, `historical_cost_eur`, `historical_sale_eur`; `CHECK historical ⇒ closed/lost + closed_at`):
+geçmiş projeler aktif listelerde ve işçi işlerinde görünmez, bilgi birikimini besler.
+
 ### Denetim
 
 | Tablo | Temel sütunlar | Notlar |

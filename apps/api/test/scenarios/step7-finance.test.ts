@@ -124,9 +124,9 @@ describe('Adım 7 — finans', () => {
     // komisyon satırının fatura tarihi yok → kayıt tarihiyle süzülür; tam aktarımda yer alır
     const rows = await exp('');
     expect(rows.map((r) => r[3]).sort()).toEqual(['KOM-1', 'MSO-9', 'SF-1', 'SF-OLD']);
-    expect(rows.find((r) => r[3] === 'SF-1').slice(0, 2)).toEqual(['Satış Faturası', '120.MARMARATEK']);
+    expect(rows.find((r) => r[3] === "SF-1")!.slice(0, 2)).toEqual(['Satış Faturası', '120.MARMARATEK']);
     expect(rows.find((r) => r[3] === 'MSO-9')).toEqual(expect.arrayContaining(['Alış Faturası', '15.03.2027', 13250, 1585, 14835, 'EUR']));
-    expect(rows.find((r) => r[3] === 'KOM-1')[0]).toBe('Satış Faturası (komisyon)');
+    expect(rows.find((r) => r[3] === "KOM-1")![0]).toBe('Satış Faturası (komisyon)');
   });
 
   it('S7-08 §10 e-Fatura UBL-TR: VKN ile tedarikçi bulunur, AI\'sız (güven 1.0) okunur, sözleşmeyle tutar uyumlu; aynı ETTN ikinci kez reddedilir', async () => {
