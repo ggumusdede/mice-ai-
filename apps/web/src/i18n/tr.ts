@@ -58,6 +58,7 @@ export const tr = {
     negotiation_message: 'Pazarlık mesajı', outbound_message: 'Giden mesaj', field_extra: 'Saha ekstra',
     low_confidence_review: 'Düşük güvenli okuma', unbilled_payment_escalation: 'Fatura edilmemiş ödeme',
     low_supplier_score: 'Düşük tedarikçi skoru', closing_overdue: 'Kapanış gecikmesi',
+    base_currency_change: 'Ana para birimi değişikliği', allotment_release: 'Allotment release kararı', supplier_option_expiry: 'Opsiyon bitiyor',
   } satisfies Record<DecisionKind, string>,
   role: {
     admin: 'Yönetici', clerk_sales: 'Satış', clerk_ops: 'Operasyon', field: 'Saha sorumlusu', finance: 'Finans', signatory: 'İmza yetkilisi',
@@ -352,6 +353,39 @@ export const tr = {
     approveExtra: 'Onaylıyorum', extraApproved: (n: string, d: string) => `${n} tarafından ${d} tarihinde onaylandı.`,
     surveyTitle: 'Kısa anket', surveyIntro: 'Etkinliğimizi değerlendirir misiniz? 3 soru, 30 saniye.',
     surveySubmit: 'Gönder', surveyThanks: 'Teşekkür ederiz! Geri bildiriminiz bize ulaştı.',
+  },
+  // v0.5-A para ve tedarik çekirdeği (S-19, S-03, S-06, S-07)
+  money: {
+    baseCurrency: 'Ana para birimi', baseCurrent: (c: string) => `Şu an: ${c}`,
+    baseWarning: 'Değişiklik yalnız yeni projeleri etkiler. Mevcut projeler oluşturuldukları para biriminde kalır; raporlar yeni para birimine çevrilerek gösterilir.',
+    baseNew: 'Yeni ana para birimi', baseReason: 'Neden değiştiriyorsunuz?', baseChange: 'Değiştir (Face ID)',
+    basePending: (c: string) => `${c} değişikliği Face ID onayı bekliyor — karar kutusundan onaylayın.`,
+    baseChanged: (c: string) => `Ana para birimi ${c} oldu (yeni projeler).`,
+    controlRules: 'Para ve tedarik kuralları',
+    depositFirstMode: 'Kapora gelmeden tedarikçiye ön ödeme', depositWarn: 'Uyar (gerekçe + Face ID ile istisna)', depositBlock: 'Engelle',
+    fxBufferDefault: 'Teklifte varsayılan kur payı (%)', fxBufferHint: 'Yalnız teklif para birimi ana para biriminden farklıysa uygulanır.',
+    showFxBuffer: 'Kur payını müşteriye göster', showFxClause: 'Teklif PDF’ine kur maddesi ekle', fxClause: 'Kur maddesi metni',
+    releaseDays: 'Allotment release hatırlatması (gün önce)', optionDays: 'Opsiyon bitiş hatırlatması (gün önce)', save: 'Kaydet', saved: 'Kurallar kaydedildi',
+    depositFirstReason: 'Neden kapora gelmeden ödüyoruz?', depositFirstHint: 'Talep yöneticiye "kapora önce istisnası" olarak gider; Face ID ile onaylanır ve istisna listesinde görünür.',
+    depositFirstSend: 'Gerekçeyle talep et',
+    // S-03
+    procurement: 'Opsiyonlar ve grup blokesi', options: 'Tedarikçi opsiyonları', noOptions: 'Kayıtlı opsiyon yok.', addOption: 'Opsiyon ekle',
+    rank: (r: number) => `${r}. opsiyon`, until: 'Son gün', daysLeft: (n: number) => (n < 0 ? 'süresi doldu' : n === 0 ? 'bugün bitiyor' : `${n} gün kaldı`),
+    optionStatus: { active: 'Aktif', extension_requested: 'Uzatma istendi', released: 'Bırakıldı', confirmed: 'Konfirme', expired: 'Süresi doldu' } as Record<string, string>,
+    askExtension: 'Uzatma iste', extensionAsked: 'Uzatma talebi taslağı onayınıza geldi', extended: 'Uzatıldı — yeni tarih', saveExtension: 'Kaydet',
+    extendedToast: 'Opsiyon uzatıldı; müşteri teklifini revize edin', release: 'Bırak', confirm: 'Konfirme et', more: 'Diğer işlemler',
+    item: 'Kalem', supplier: 'Tedarikçi',
+    allotments: 'Grup blokesi (allotment)', noAllotments: 'Kayıtlı blok yok.', addAllotment: 'Blok ekle', roomsPerNight: 'Gecelik oda',
+    firstNight: 'İlk gece', lastNight: 'Son gece', rate: 'Oda-gece fiyatı', releaseDate: 'Release tarihi', advanced: 'Ceza koşulları (isteğe bağlı)',
+    attrition: 'Attrition toleransı (%)', penalty: 'Ceza oranı (%)', penaltyTerms: 'Ceza koşulu (metin)',
+    pickup: 'Satılan oda (gecelik)', savePickup: 'Pickup kaydet', releaseRooms: 'Release edilecek oda', doRelease: 'Release et',
+    summary: (p: string, r: number) => `Pickup ${p} · serbest bırakılabilir ${r} oda`,
+    penaltyHold: 'Tutarsanız tahmini ceza', penaltyRelease: 'Şimdi release ederseniz', releasedToast: 'Release kaydedildi; tedarikçi bildirimi onayınıza geldi',
+    stage: { before_release: 'Release tarihi uzak', release_window: 'Karar zamanı', after_release: 'Release tarihi geçti' } as Record<string, string>,
+    // K-11
+    contractRates: 'Kontrat fiyatları', noContractRates: 'Kayıtlı kontrat fiyatı yok.', addContractRate: 'Kontrat fiyatı ekle',
+    validFrom: 'Geçerlilik başı', validTo: 'Geçerlilik sonu', price: 'Fiyat (KDV hariç)', roomType: 'Oda tipi (boş = tümü)', conditions: 'Koşullar', archive: 'Arşivle',
+    contractHint: 'Teklif kıyaslamasında "kontrat fiyatı" olarak görünür; üstündeki teklifler işaretlenir.',
   },
 };
 

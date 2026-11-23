@@ -23,6 +23,7 @@ await scenario('17-visual', async () => {
     ['project-operations', `/projeler/${p.projectId}/operations`], ['project-finance', `/projeler/${p.projectId}/finance`], ['project-closing', `/projeler/${p.projectId}/closing`],
     ['finance', '/finans'], ['report', '/rapor'], ['rules', '/yonetim/kurallar'], ['users', '/yonetim/kullanicilar'], ['delegations', '/yonetim/vekalet'],
     ['automation', '/yonetim/otomasyon'], ['checklist', '/yonetim/kontrol-listesi'], ['suppliers', '/yonetim/tedarikciler'], ['customers', '/yonetim/musteriler'],
+    ['team', '/yonetim/ekip'], ['handover', '/yonetim/devir'], ['my-dashboard', '/benim'], ['transparency', '/olcum'],
     ['field', '/saha', fieldTok], ['public-rfq', rel(rfq), null], ['public-rooming', rel(rooming), null], ['login', '/giris', null],
   ];
   const overflow = [];

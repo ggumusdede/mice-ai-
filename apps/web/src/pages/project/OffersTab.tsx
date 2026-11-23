@@ -9,6 +9,7 @@ import { Button, Callout, Card, ConfidenceTag, EmptyState, FilePicker, InlineErr
 import { money } from '../../lib/format';
 import { useProject } from './ProjectContext';
 import { supplierName, useSuppliers } from './useSuppliers';
+import { ProcurementPanel } from './ProcurementPanel';
 
 const THRESHOLD = 0.8;
 
@@ -19,6 +20,7 @@ export function OffersTab() {
   return (
     <div className="stack stack--lg">
       {detail.items.map((item) => <ItemOffers key={item.id} item={item} />)}
+      <ProcurementPanel />
     </div>
   );
 }

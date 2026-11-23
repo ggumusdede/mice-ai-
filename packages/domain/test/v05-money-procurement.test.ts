@@ -54,7 +54,7 @@ describe('S-19 base currency helpers', () => {
 
 describe('S-19 realized profit in the base currency', () => {
   const mv = (id: string, type: FxMovement['type'], amount: number, currency: FxMovement['currency'], date: string, eurRate: number | null, eurTryRate: number | null): FxMovement =>
-    ({ id, type, amount, currency, date, eurRate, eurTryRate, rateSource: 'bank' });
+    ({ id, type, amount, currency, date, eurRate, eurTryRate, rateSource: 'bank_derived' });
   it('TRY base = the TL figures; EUR base = EUR figures', () => {
     const ms = [mv('ci', 'customer_invoice', 50000, 'TRY', '2026-12-01', 40, 40), mv('si', 'supplier_invoice', 1000, 'EUR', '2026-12-01', 1, 40)];
     const t = realizedFx(ms, { baseCurrency: 'TRY' });
@@ -166,7 +166,8 @@ describe('S-06 kapora önce', () => {
 describe('S-07 quote FX policy', () => {
   const defaults = { rateSource: 'TCMB', rateDate: '2026-11-20', validUntil: '2026-11-30', rules: DEFAULT_RULES };
   it('defaults: buffer only when quote currency ≠ base; customer rate = market × (1 + buffer)', () => {
-    const r = resolveFxPolicy({ baseCurrency: 'EUR', quoteCurrency: 'TRY', marketRate: 40 }, defaults);
+    expect(resolveFxPolicy({ baseCurrency: 'EUR', quoteCurrency: 'TRY', marketRate: 40 }, defaults).policy.bufferPct).toBe(0); // rule default 0
+    const r = resolveFxPolicy({ baseCurrency: 'EUR', quoteCurrency: 'TRY', marketRate: 40 }, { ...defaults, rules: { ...DEFAULT_RULES, quoteFxBufferDefault: 0.02 } });
     expect(r.errors).toEqual([]);
     expect(r.policy).toMatchObject({ rateSource: 'TCMB', rateDate: '2026-11-20', validUntil: '2026-11-30', bufferPct: 0.02, customerRate: 40.8 });
     const same = resolveFxPolicy({ baseCurrency: 'TRY', quoteCurrency: 'TRY', marketRate: 1, bufferPct: 0.05 }, defaults);

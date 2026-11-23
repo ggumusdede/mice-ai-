@@ -6,6 +6,7 @@ import { useT } from '../../i18n';
 import { pct } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, Card, Checkbox, ErrorBox, InlineError, Loading, Pill, Select, TextArea, TextInput } from '../../components/ui';
+import { CustomerRelations } from '../../components/CustomerRelations';
 
 /** §17.2 default for a new customer: signed approval or PO, no deposit. */
 const DEFAULT_CUSTOMER_RULES: CustomerRules = {
@@ -32,6 +33,7 @@ export function CustomersPage() {
           }}
         />
       ) : null}
+      <CustomerRelations />
       <Card title={t.admin.customers} padded={false}>
         <div className="table-wrap">
           <table className="table table--hover">

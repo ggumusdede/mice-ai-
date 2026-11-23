@@ -133,8 +133,30 @@ Bu doküman PRD'nin iş kurallarını **API düzeyinde uçtan uca** sınayan sen
 | C-02 | §7.1 | tedarikçi RFQ e-postasına yanıt verir → mevcut teklif okuma (yeni sürüm), RFQ "yanıtlandı" | `channels.test.ts` |
 | C-03 | §6 | müşteri e-postayla "onaylıyoruz" der → otomatik kabul YOK, sorumluya görev + kritik bildirim | `channels.test.ts` |
 | C-04 | §10 | WhatsApp Business: bilinmeyen numaradan mesaj → talep; imzasız istek reddedilir | `channels.test.ts` |
+| EK-01 | v0.5 S-01 | hazır şablon → onay kartı; toplu onay her kartı ayrı karar + ayrı denetim izi; Face ID kartı topluya girmez; onaydan önce mesaj gitmez | `team-control.test.ts` |
+| EK-02 | v0.5 S-01 | mesai dışı kart nöbetçiye atanır; süre dolunca vekiline yükselir; otomatik onay yok | `team-control.test.ts` |
+| EK-03 | v0.5 S-13 | son tarihli kart: önce onaylayana kritik bildirim, ≥30 dk sonra vekile; vekil Face ID ile karar verir | `team-control.test.ts` |
+| EK-04 | v0.5 S-02 | WhatsApp: onaylayanın adı mesajda/kayıtta; atanmamış sohbet 409; katılımcı mesajı kapalı → proje bazında lojistik | `team-control.test.ts` |
+| EK-05 | v0.5 S-08 | müşteri adı istisnası yalnız yönetici, yalnız seçilen otel, geri alınabilir | `team-control.test.ts` |
+| EK-06 | v0.5 S-09 | kurumsal olmayan posta kutusu engelli, kişi istisnası; "Projeye ilet" etiketi | `team-control.test.ts` |
+| EK-07 | v0.5 S-10/S-11/D-2 | kendi rakamları, isimli rapor yalnız yönetici, tahmini prim ayarla, ekip lideri görünümü | `team-control.test.ts` |
+| EK-08 | v0.5 S-12 | söz tutma skoru acenta/proje düzeyi; saha göremez | `team-control.test.ts` |
+| EK-09 | v0.5 S-14 | sessiz saat: rutin özet pencere sonuna kalır | `team-control.test.ts` |
+| EK-10 | K-05 | acil devir: Face ID + gerekçe, paket veriden, oturum kapanır, iş devri, "okudum" → tamamlandı | `team-control.test.ts` |
+| EK-11 | K-05 | planlı devir worker'da kapanır; önce iptal edilebilir | `team-control.test.ts` |
+| EK-12 | v0.5 S-15 | saha paketi: yalnız ad/oda/grup/telefon, grup kısıtı, anahtar özeti, iptal ve süre sonu | `team-control.test.ts` |
+| EK-13 | v0.5 D-3 | ilk yüklemede satış sorumlusu eşleşir / uyarı; geçmiş proje performansa girer | `team-control.test.ts` |
+| EK-14 | v0.5 S-25/S-26 | ses vars. kapalı; 17 temkinli varsayılan kuralda | `team-control.test.ts` |
+| M-01 | v0.5 S-19 | ana para birimi yalnız yönetici + gerekçe + Face ID kartıyla değişir; eski proje EUR kalır, yeni proje TL; proje para birimi DB'de sabit; audit | `v05-money-procurement.test.ts` |
+| M-02 | v0.5 S-19 | TL acenta: normalizasyon / teklif / marj-markup / P&L / gerçekleşen kâr TL; EUR acentayla aynı oranlar; `*_eur` EUR karşılığı | `v05-money-procurement.test.ts` |
+| M-03 | v0.5 S-19 + S-07 | USD acenta: EUR teklif + %3 kur payı (müşteriye gizli, P&L'de ayrı satır, üst sınır); gerçekleşen kâr USD (her hareket kendi kuruyla); ekip raporu USD + kur notu | `v05-money-procurement.test.ts` |
+| M-04 | v0.5 S-03 K-11 | kontrat fiyatı değerlendirmede çıpa, üstündeki teklif risk satırı; arşivlenen kullanılmaz; saha rolü giremez | `v05-money-procurement.test.ts` |
+| M-05 | v0.5 S-03 K-12 | allotment pickup, T-x release kartı tahmini cezayla, idempotent; karar insanın, bildirim onaylı taslak; otomatik release yok | `v05-money-procurement.test.ts` |
+| M-06 | v0.5 S-03 K-13 | 1./2. opsiyon, T-3 kartı → uzatma taslağı; uzatılınca teklif belgesi eskir, revize yeni opsiyon tarihiyle | `v05-money-procurement.test.ts` |
+| M-07 | v0.5 S-06 | kapora önce: blok kuralında 409; uyar kuralında gerekçe zorunlu, kart "KAPORA ÖNCE", Face ID; kaporasız müşteride uyarı yok | `v05-money-procurement.test.ts` |
+| M-08 | v0.5 D-1 | kabul edilmiş teklif revize → Rev.N yeni link; kabul edilene kadar eski geçerli; kabulde eski `superseded`, imzalı sözleşmede ek protokol görevi | `v05-money-procurement.test.ts` |
 
-Toplam **102 senaryo**: Adım 0: 10 · Adım 1: 12 · Adım 2: 9 · Adım 3: 13 · Adım 4: 8 · Adım 5: 10 · Adım 6: 7 · Adım 7: 9 · Adım 8: 5 ·
+Toplam **124 senaryo** (v0.5-A EK: 14, M: 8 dahil): Adım 0: 10 · Adım 1: 12 · Adım 2: 9 · Adım 3: 13 · Adım 4: 8 · Adım 5: 10 · Adım 6: 7 · Adım 7: 9 · Adım 8: 5 ·
 yönetişim: 8 · çok kiracılı: 3 · roller: 4 · gelen kanallar: 4.
 
 ## Senaryolarla bulunan ve düzeltilen hatalar
@@ -158,7 +180,7 @@ yönetişim: 8 · çok kiracılı: 3 · roller: 4 · gelen kanallar: 4.
 | Q6 | Aday tedarikçi teklifi bloklarsa? | Satış / operasyon teklif oluşturucudan "Akreditasyon iste" der; yöneticiye `supplier_accreditation` kartı açılır (açık kart varsa yeniden kullanılır). Karar yalnız yöneticide kalır (ana çatı 5) | `POST /api/suppliers/:id/request-accreditation` (`requestAccreditation`, `services/suppliers.ts`; kart proje-bağımsız); web `RequestAccreditationButton` (`QuoteTab.tsx`) | Q6-01, e2e 04 |
 | Q7 | Kaybedilen projenin açık kararları + satışçı performansı | Proje kaybedilince açık kararları `expired` olur, `reason = "proje kaybedildi: <neden>"`; silinmez, denetim izinde ve `?status=expired` geçmişinde görünür. Yönetici "Ekip performansı" raporu (varsayılan son 12 ay): talep, gönderilen teklif, kazanılan/kaybedilen, kazanma oranı, kayıp projeler + nedenler, ort. teklif süresi (iş saati) / hedef, kazanılanlarda planlı marj ve markup (ayrı), gerçekleşen kâr EUR (+ kur kanıtı varsa TL), düzeltme oranı, onaylı / serbest teklif. Proje metrikleri proje sahibine, teklif kalitesi teklifi hazırlayana yazılır; sahibi bilinen geçmiş projeler sayılır | `setOutcome` (`services/projects.ts`); `teamPerformance` (`services/reports.ts`), `GET /api/reports/team-performance?from=&to=` (admin); web `/yonetim/ekip-performansi` (390 px kart, masaüstü tablo) | Q7-01, Q7-02, e2e 18 |
 | Q8 | PO numarası = proje kodu mu? | Hayır: PO müşterinin kendi satın alma numarasıdır, proje kodumuz ayrı kalır. Teklif yanıtında `poNumber`, `acceptedByName`, `firmApprovedAt`, `awaitingSignedForm` (eklemeli); başlıkta ve teklif sekmesinde proje kodunun yanında; projeler PO ile aranır; müşteri teklif PDF'inde "Referans" = proje kodu (müşteri PO'sunda belirtir) | `mapQuoteBase` (`lib/mappers.ts`), `listProjects` q (`services/projects.ts`), quote PDF meta (`services/quotes.ts`) | Q8-01, e2e 18 |
-| Q9 | Hızlı revizyon | Teklif sekmesinde "Revize et": mevcut revizyon aynı editörde dolu açılır, yalnız değişen düzeltilir → aynı teklif dosyasının sonraki revizyonu (Rev.N, aynı proje kodu), belgeler otomatik üretilir. Gönderilmiş revizyonlar salt okunur ve görünür kalır (ana çatı 3). Fiyatı etkileyen değişiklikte "Yeniden üret" hata yerine "Revize et" sunar. Doğrulama + onay kapıları yeni revizyonda yeniden işler. Yalnız en son revizyon revize edilir (409 `QUOTE_NOT_LATEST`); kabul edilmiş teklif buradan revize edilmez (409 `QUOTE_ACCEPTED`, temkinli varsayılan — [Ürün kararı]) | `POST /api/quotes/:id/revise` (`reviseQuote`, `services/quotes.ts`; `QUOTE_REBUILD_REQUIRED` detayında `quoteId`); web `lib/quoteRevision.ts`, `QuoteTab.tsx`, `SidePanel.tsx` | Q9-01, Q6-01, web `quoteRevision.test.ts`, e2e 05 |
+| Q9 | Hızlı revizyon | Teklif sekmesinde "Revize et": mevcut revizyon aynı editörde dolu açılır, yalnız değişen düzeltilir → aynı teklif dosyasının sonraki revizyonu (Rev.N, aynı proje kodu), belgeler otomatik üretilir. Gönderilmiş revizyonlar salt okunur ve görünür kalır (ana çatı 3). Fiyatı etkileyen değişiklikte "Yeniden üret" hata yerine "Revize et" sunar. Doğrulama + onay kapıları yeni revizyonda yeniden işler. Yalnız en son revizyon revize edilir (409 `QUOTE_NOT_LATEST`); kabul edilmiş teklif de revize edilir (v0.5 D-1; eskiden 409 `QUOTE_ACCEPTED`) — müşteri yeniden onaylar | `POST /api/quotes/:id/revise` (`reviseQuote`, `services/quotes.ts`; `QUOTE_REBUILD_REQUIRED` detayında `quoteId`); web `lib/quoteRevision.ts`, `QuoteTab.tsx`, `SidePanel.tsx` | Q9-01, Q6-01, web `quoteRevision.test.ts`, e2e 05 |
 
 ## Açık sorular (ürün sahibi)
 
@@ -206,6 +228,9 @@ Aynı tablo `e2e/SCENARIOS.md`'de de durur.
 | 16 | `scenarios/16-accessibility.mjs` | §15 | yalnız klavyeyle giriş → kart Tab + Enter → alt panel odak tuzağı (25× Tab, 5× Shift+Tab) → Escape kapatır, odak karta döner · 14 sayfada (390 + 1366 px) etiketsiz alan / adsız düğme-link / alt'sız görsel / `lang` / `h1` kontrolü · konsol hatası yok |
 | 17 | `scenarios/17-visual.mjs` | §15 | 25 sayfa (uygulama, proje sekmeleri, yönetim, saha, herkese açık formlar) 390 px ve 1280 px'te yatay kaydırmasız; tam sayfa ekran görüntüleri |
 | 18 | `scenarios/18-owner-decisions.mjs` | §4, §16.7, §7 Adım 4 (Q7, Q8) | kaybedilen projenin açık kartları `expired` geçmişinde; kazanılan projede müşteri PO no proje kodunun yanında ve teklif kartında, PO ile arama; "Ekip performansı" masaüstünde tablo, 390 px'te kart (yatay kaydırma yok), kayıp nedeni listede, dönem seçimi |
+| 19 | `scenarios/19-quick-approval.mjs` | v0.5 S-01 | 390 px: 3 hazır mesaj kartı → "N mesaj onay bekliyor" toplu kartı → "Tek tek bak" yalnız mesajlar → bir kart "Tek dokunuşla gönder", kalanı "Hepsini onayla" → her biri ayrı onaylı karar, gönderildi |
+| 20 | `scenarios/20-handover.mjs` | v0.5 K-05 | yönetici planlı devri (şimdi) başlatır → ayrılanın oturumu 401, proje devralana geçer → devralan "Benim panom" → paketi açar, "Okudum" → %100 tamamlandı |
+| 21 | `scenarios/21-offline-pack.mjs` | v0.5 S-15 | saha "Çevrimdışı için indir" → depoda yalnız şifreli metin → çevrimdışı liste açılır ve aranır → yönetici iptal eder → çevrimiçi olunca paket silinir |
 
 **Tarayıcı senaryolarıyla bulunan ve düzeltilen hatalar**
 

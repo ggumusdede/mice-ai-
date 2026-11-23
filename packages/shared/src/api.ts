@@ -128,7 +128,7 @@ export interface ChannelPriceInput { supplierId: ID; date: string; roomType: str
 // (additive, Q9 hızlı revizyon) POST /api/quotes/:id/revise  body Partial<BuildQuoteRequest> -> Quote
 //   next revision (Rev.N+1) of the SAME quote file (same project code); body omitted → the previous revision's options are reused
 //   (superseded offer versions follow to their latest version); validation + approval gates apply again. Only the latest revision
-//   can be revised (409 QUOTE_NOT_LATEST); an accepted quote is not revised here (409 QUOTE_ACCEPTED). Sent revisions stay read-only.
+//   can be revised (409 QUOTE_NOT_LATEST); an accepted quote CAN be revised since v0.5 D-1 (see below; 409 QUOTE_ACCEPTED removed). Sent revisions stay read-only.
 // (v0.5 D-1) an ACCEPTED quote can be revised: the new Rev.N needs the customer's re-approval (new link); the accepted version stays
 //   valid until the customer accepts the revision. With a signed contract, accepting the revision opens the ek protokol task.
 export interface BuildQuoteRequest {

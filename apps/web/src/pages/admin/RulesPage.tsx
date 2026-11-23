@@ -8,6 +8,7 @@ import { marginFromMarkup, pct } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, Card, ErrorBox, InlineError, Loading } from '../../components/ui';
 import { ProductDecisionRules } from '../../components/ProductDecisionRules';
+import { MoneyRules } from '../../components/MoneyRules';
 
 /** Keys whose values are fractions → edited as %. */
 const FRACTION_KEYS = new Set<keyof TenantRules>(['targetMarginMin', 'goodPriceAdvantage', 'goodPriceVsMedian', 'automationSampleRate', 'aiConfidenceThreshold', 'accommodationTaxRate']);
@@ -53,6 +54,7 @@ export function RulesPage() {
 
   return (
     <div className="stack stack--lg">
+      <MoneyRules isAdmin={isAdmin} />
       <Card title={t.admin.markupTiers} padded={false}>
         <div className="table-wrap">
           <table className="table">

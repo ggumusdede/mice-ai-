@@ -27,6 +27,12 @@ import { RoomingPage } from './pages/public/RoomingPage';
 import { ExtraApprovalPage } from './pages/public/ExtraApprovalPage';
 import { SurveyPage } from './pages/public/SurveyPage';
 import { EmptyState } from './components/ui';
+import { TeamPage } from './pages/admin/TeamPage';
+import { HandoverPage } from './pages/admin/HandoverPage';
+import { HandoverDetailPage } from './pages/HandoverDetail';
+import { MyDashboardPage } from './pages/MyDashboard';
+import { TransparencyPage } from './pages/Transparency';
+import { ForwardToProjectPage } from './pages/ForwardToProject';
 
 function RequireAuth() {
   const { status, refresh } = useAuth();
@@ -65,6 +71,10 @@ export function App() {
           <Route path="saha" element={<FieldPanelPage />} />
           <Route path="rapor" element={<WeeklyReportPage />} />
           <Route path="finans" element={<FinancePage />} />
+          <Route path="benim" element={<MyDashboardPage />} />
+          <Route path="olcum" element={<TransparencyPage />} />
+          <Route path="ilet" element={<ForwardToProjectPage />} />
+          <Route path="devir/:id" element={<HandoverDetailPage />} />
           <Route path="yonetim" element={<AdminLayout />}>
             <Route index element={<Navigate to="kurallar" replace />} />
             <Route path="kurallar" element={<RulesPage />} />
@@ -76,6 +86,8 @@ export function App() {
             <Route path="musteriler" element={<CustomersPage />} />
             <Route path="veri-aktarimi" element={<DataImportPage />} />
             <Route path="ekip-performansi" element={<TeamPerformancePage />} />
+            <Route path="ekip" element={<TeamPage />} />
+            <Route path="devir" element={<HandoverPage />} />
           </Route>
           <Route path="*" element={<EmptyState icon="info" title="Sayfa bulunamadı" />} />
         </Route>

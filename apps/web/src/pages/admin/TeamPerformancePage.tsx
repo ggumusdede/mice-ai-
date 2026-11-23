@@ -6,6 +6,7 @@ import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
 import { date, eur, pct, tl, todayISO } from '../../lib/format';
 import { Card, EmptyState, ErrorBox, Loading, Pill, Stat } from '../../components/ui';
+import { TeamRollup } from '../../components/CustomerRelations';
 
 type Preset = '12m' | '6m' | '3m' | 'ytd' | 'custom';
 
@@ -35,6 +36,7 @@ export function TeamPerformancePage() {
 
   return (
     <div className="stack stack--lg tp">
+      {r?.teams?.length ? <TeamRollup teams={r.teams} /> : null}
       <Card title={tp.title}>
         <p className="muted small">{tp.subtitle}</p>
         <div className="row tp__period" role="group" aria-label={tp.period}>

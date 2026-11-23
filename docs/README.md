@@ -46,6 +46,14 @@ PRD bölümü / özellik → kodun bugünkü durumu. ✅ uygulandı · 🟡 kıs
 | PRD | Özellik | Durum | Kod / not |
 |---|---|---|---|
 | §4 / §16.7 (Q7) | Ekip performansı raporu (kişi bazlı karar verisi, dönem seçimli) | ✅ | `services/reports.ts` `teamPerformance`, `/yonetim/ekip-performansi` |
+| v0.5 S-01 / S-13 | Hızlı onay (tek dokunuş + toplu kart), nöbet çizelgesi, eskalasyon, hazır şablonlar, meşgul vekâleti (son tarihli kart) | ✅ | `services/team-control.ts`, `components/QuickApproval.tsx`, `/yonetim/ekip`; otomatik dış mesaj yok |
+| v0.5 S-02 / S-08 / S-09 | Kurumsal hat imzası + atanmış sohbet, katılımcı mesajı proje ayarı, müşteri adı istisnası, kurumsal posta kutusu + "Projeye ilet" | ✅ | `drafts.ts` `sendDraft`, `visibility.ts` `supplierRef`, `mail-accounts.ts`, `/ilet` |
+| v0.5 S-10…S-12 / D-2 / D-3 | Benim panom, tahmini prim (vars. kapalı), söz tutma skoru, ekipler, içe aktarımda satış sorumlusu | ✅ | `services/team-reports.ts`, `/benim`, `initial-import.ts` |
+| v0.5 S-14 / S-15 / S-25 / S-26 | Sessiz saat (vars. kapalı), şifreli çevrimdışı saha paketi, ses vars. kapalı, 17 temkinli varsayılan | ✅ | `services/field-pack.ts`, `lib/fieldPack.ts`, `ProductDecisionRules.tsx` |
+| v0.5 K-04 / K-05 | İlişki sahibi + yedek irtibat, devir-teslim ve erişim kapatma, "Sistem neyi ölçer / ölçmez" | ✅ | `services/handover.ts`, `/yonetim/devir`, `/devir/:id`, `/olcum` |
+| v0.5 S-19 | Acenta ana para birimi (TL / EUR / USD), Face ID kararıyla değişir, yalnız yeni projeler; proje hesapları proje para biriminde, raporlar çevrimle | ✅ | migration 019, `domain/base-currency.ts`, `services/settings.ts`, `fx.ts`, Kurallar → "Ana para birimi" |
+| v0.5 S-03 (K-11…K-13) | Kontrat fiyatı (kıyasta çıpa), allotment release/attrition (saf fonksiyon) + T-x kartı, opsiyon 1./2. sıra + T-3 kartı + uzatma | ✅ | `domain/procurement.ts`, `services/procurement.ts`, `ProcurementPanel.tsx`, `ContractRatesCard.tsx` |
+| v0.5 S-06 / S-07 / D-1 | Kapora önce (uyar + gerekçe + Face ID / blok), teklif kur politikası (kur payı müşteriye gizli), kabul edilmiş teklif revizyonu | ✅ | `finance.ts` `createPaymentRequest`, `domain/money-controls.ts`, `quotes.ts` |
 | §7 Adım 3–4 (Q6, Q8, Q9) | Akreditasyon talebi, PO ≠ proje kodu (Referans), hızlı revizyon (Rev.N) | ✅ | `suppliers.ts` `requestAccreditation`, `quotes.ts` `reviseQuote`, `QuoteTab.tsx` |
 | §3.1, §3.5 | Tek doğru kaynak, belgeler veriden; değişiklik yayılımı | ✅ | `services/documents.ts`, `documents-b.ts`; `003` `propagate_staleness`, `doc_kinds_for`, `documents_send_guard`, `quotes_send_guard` |
 | §3.2, §15 | Onay kapıları, karar kutusu, Face ID step-up | ✅ | `services/decisions.ts`, `registry.ts`, `phase-b-registry.ts`; `domain/authority.ts` `requiresBiometric`; `auth/webauthn.ts`. Geliştirme biyometrisi yalnız `ALLOW_DEV_BIOMETRIC` |

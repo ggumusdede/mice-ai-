@@ -33,6 +33,7 @@ export function AppShell() {
     { to: '/finans', label: t.nav.finance, icon: 'doc', roles: ['admin', 'finance'] },
     { to: '/rapor', label: t.nav.report, icon: 'chart', roles: ['admin'] }, // GET /api/reports/weekly is admin-only
     { to: '/yonetim', label: t.nav.admin, icon: 'settings', roles: ['admin'] },
+    { to: '/benim', label: 'Benim panom', icon: 'user' }, // v0.5 S-10: own figures only
   ];
   const visible = nav.filter((n) => !n.roles || (user && n.roles.includes(user.role)));
   const canCreate = !!user && ['admin', 'clerk_sales', 'clerk_ops'].includes(user.role);

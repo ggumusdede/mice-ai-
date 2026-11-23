@@ -5,6 +5,7 @@ import { useApi } from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n';
 import { num } from '../../lib/format';
+import { ContractRatesCard } from '../../components/ContractRatesCard';
 import { useToast } from '../../components/Toast';
 import { Button, Card, Checkbox, ErrorBox, InlineError, Loading, Pill, TextInput, type Tone } from '../../components/ui';
 
@@ -100,6 +101,7 @@ export function SuppliersPage() {
           </div>
         </Card>
       ) : null}
+      {res.data?.length ? <ContractRatesCard suppliers={res.data} canEdit={isAdmin} /> : null}
     </div>
   );
 }
