@@ -37,6 +37,9 @@ export const AI_ACTIONS = {
   rule_change: { authority: 'forbidden', label: 'Kural / eşik / yetki değişikliği' },
   record_deletion: { authority: 'forbidden', label: 'Kayıt silme' },
   external_message_unapproved: { authority: 'forbidden', label: 'İnsan onayı olmadan dışarıya mesaj' },
+  /** v0.5 S-03 / K-01: release, opsiyon bırakma / uzatma kararı ve base para birimi değişikliği asla otomatik değil */
+  allotment_release: { authority: 'forbidden', label: 'Allotment release / opsiyon bırakma (tedarikçiye bildirim)' },
+  base_currency_change: { authority: 'forbidden', label: 'Ana para birimi değişikliği' },
 } as const satisfies Record<string, { authority: AiAuthority; label: string }>;
 
 export type AiActionType = keyof typeof AI_ACTIONS;

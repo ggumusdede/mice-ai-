@@ -129,10 +129,15 @@ export interface ChannelPriceInput { supplierId: ID; date: string; roomType: str
 //   next revision (Rev.N+1) of the SAME quote file (same project code); body omitted → the previous revision's options are reused
 //   (superseded offer versions follow to their latest version); validation + approval gates apply again. Only the latest revision
 //   can be revised (409 QUOTE_NOT_LATEST); an accepted quote is not revised here (409 QUOTE_ACCEPTED). Sent revisions stay read-only.
+// (v0.5 D-1) an ACCEPTED quote can be revised: the new Rev.N needs the customer's re-approval (new link); the accepted version stays
+//   valid until the customer accepts the revision. With a signed contract, accepting the revision opens the ek protokol task.
 export interface BuildQuoteRequest {
   currency?: string;
   options: { title: string; lines: { serviceItemId: ID; offerId?: ID | null; markup?: number; unitPriceEur?: number }[] }[];
   marginOverrideReason?: string;
+  /** (additive, v0.5 S-07) quote FX policy — mandatory on every quote; omitted fields are filled with defaults
+   *  (current rate source/date, validity = option date, buffer = rule quoteFxBufferDefault when currency ≠ base currency) */
+  fxPolicy?: { rateSource?: string; rateDate?: string; validUntil?: string; bufferPct?: number };
 }
 export interface PublicQuoteView { agencyName: string; projectCode: string; customerName: string | null; currency: string; optionUntil: string | null; options: { optionNo: number; title: string; lines: { description: string; quantity: number; unit: string; unitPrice: number; total: number }[]; total: number; vat: number; accommodationTax: number; grandTotal: number }[]; status: string; firmApproval: 'online' | 'signed_or_po' }
 
@@ -384,3 +389,32 @@ export interface ImportReviewRequest {
   statuses?: ImportRowStatusName[];
   entity?: ImportEntityName;
 }
+
+// ---------- v0.5-A — para ve tedarik çekirdeği ----------
+// GET  /api/settings                                   -> TenantSettings
+// POST /api/settings/base-currency  body {currency, reason} -> {decision}  (admin; Face ID decision 'base_currency_change';
+//      on approval the agency base currency changes — applies to NEW projects only; every project keeps its own)
+// GET  /api/contract-rates?supplierId=                 -> List<ContractRate>
+// POST /api/contract-rates  body ContractRateInput     -> ContractRate
+// POST /api/contract-rates/:id/archive                 -> ContractRate   (no delete: status)
+// GET  /api/allotments?projectId=                      -> List<AllotmentBlock> (with summary)
+// POST /api/allotments  body AllotmentInput            -> AllotmentBlock
+// POST /api/allotments/:id/pickup  body {date?, rooms}  -> AllotmentBlock (date omitted = every night)
+// POST /api/allotments/:id/release body {rooms, reason?} -> AllotmentBlock (human only; supplier notice is a draft for approval)
+// GET  /api/projects/:id/options                       -> List<SupplierOption>
+// POST /api/projects/:id/options  body SupplierOptionInput -> SupplierOption
+// POST /api/options/:id/extension-request              -> {draftId, decisionId} (draft to the supplier, human approval)
+// POST /api/options/:id/extended  body {optionUntil}   -> SupplierOption (dependent customer quote → stale)
+// POST /api/options/:id/status    body {status: 'released'|'confirmed'} -> SupplierOption
+// POST /api/finance/:id/payment-request body {depositFirstReason?} — S-06 "kapora önce" (409 DEPOSIT_FIRST_REASON_REQUIRED /
+//      DEPOSIT_FIRST_BLOCKED)
+export interface ContractRateInput {
+  supplierId: ID; kind: ServiceKind; roomType?: string | null; board?: string | null; unit?: string;
+  validFrom: string; validTo: string; price: number; currency: Currency; vatIncluded?: boolean; conditions?: string | null;
+}
+export interface AllotmentInput {
+  projectId?: ID | null; serviceItemId?: ID | null; supplierId: ID; roomType?: string | null; dateFrom: string; dateTo: string;
+  roomsPerNight: number; ratePerRoomNight: number; currency: Currency; releaseDate?: string | null; attritionPct?: number;
+  penaltyPct?: number; penaltyTerms?: string | null;
+}
+export interface SupplierOptionInput { serviceItemId: ID; supplierId: ID; offerId?: ID | null; rank?: 1 | 2; optionUntil: string; note?: string | null }

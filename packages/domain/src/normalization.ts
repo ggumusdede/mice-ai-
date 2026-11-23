@@ -1,16 +1,18 @@
 // §7 Adım 2 Normalizasyon: kişi başı / gün başı, KDV hariç, konaklama vergisi ayrı, tek para birimi (EUR)
-import type { NormalizedOffer, ServiceItem, SupplierOffer, HiddenCost, OfferLine } from '@mice/shared';
+import type { Currency, NormalizedOffer, ServiceItem, SupplierOffer, HiddenCost, OfferLine } from '@mice/shared';
 import { round2 } from './pricing.js';
 
 function rateOf(currency: string, rates: Record<string, number>): number {
   const cur = currency.toUpperCase();
-  if (cur === 'EUR') return 1;
+  // v0.5 S-19: `rates` may be rebased on the project's base currency (rebaseRates) — then EUR has its own entry
+  if (cur === 'EUR' && rates.EUR === undefined) return 1;
   const r = rates[cur] ?? rates[currency];
   if (r === undefined || !Number.isFinite(r) || r <= 0) throw new Error(`Unknown or invalid FX rate for currency ${currency}`);
   return r;
 }
 
-/** rates: 1 EUR = rates[currency] units. EUR→1. Throws on unknown currency. */
+/** rates: 1 EUR = rates[currency] units. EUR→1. Throws on unknown currency.
+ *  v0.5 S-19: with rates rebased on a base currency B (1 B = rates[c]), toEur/fromEur convert to/from B. */
 export function toEur(amount: number, currency: string, rates: Record<string, number>): number {
   return amount / rateOf(currency, rates);
 }
@@ -24,6 +26,8 @@ export interface NormalizeContext {
   days: number | null;
   rates: Record<string, number>;
   accommodationTaxRate: number;
+  /** (additive, v0.5 S-19) currency the rates are based on (the result amounts are in it); default EUR */
+  baseCurrency?: Currency;
 }
 
 /** Inclusive day count between two ISO dates (YYYY-MM-DD), or null. */
@@ -103,6 +107,7 @@ export function normalizeOffer(offer: SupplierOffer, ctx: NormalizeContext): Nor
     perRoomNightEur: perRoomNight,
     fxRate: fx,
     hiddenCosts: detectHiddenCosts(offer, ctx.pax),
+    baseCurrency: ctx.baseCurrency ?? 'EUR',
   };
 }
 

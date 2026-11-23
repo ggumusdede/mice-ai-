@@ -72,6 +72,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         if (!sameShape(DEFAULT_RULES[k as keyof TenantRules], v)) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
         if (typeof v === 'number' && (!Number.isFinite(v) || v < 0)) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
         if (k === 'fxRateTypeForReporting' && !(FX_RATE_TYPES as readonly string[]).includes(String(v))) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
+        // v0.5-A (S-06 / S-07): enum and ratio rules
+        if (k === 'depositFirstMode' && !['warn', 'block'].includes(String(v))) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
+        if ((k === 'quoteFxBufferDefault' || k === 'quoteFxBufferMax') && Number(v) > 0.5) throw badRequest(`Geçersiz değer: ${k}`, undefined, 'INVALID_RULE_VALUE');
         // string-list rules (neverAutomateKinds): only short identifiers
         const def = DEFAULT_RULES[k as keyof TenantRules];
         if (Array.isArray(def) && def.length && def.every((x) => typeof x === 'string')

@@ -82,6 +82,10 @@ export const DECISION_KINDS = [
   'unbilled_payment_escalation',
   'low_supplier_score',
   'closing_overdue',
+  // v0.5-A para ve tedarik (S-19, S-03)
+  'base_currency_change',
+  'allotment_release',
+  'supplier_option_expiry',
 ] as const;
 export type DecisionKind = (typeof DECISION_KINDS)[number];
 
@@ -118,5 +122,8 @@ export type Language = (typeof LANGUAGES)[number];
 
 export const CURRENCIES = ['EUR', 'TRY', 'USD', 'GBP'] as const;
 export type Currency = (typeof CURRENCIES)[number];
-/** §7 Adım 2: İç hesap EUR */
+/** §7 Adım 2: İç hesap EUR — v0.5 S-19: artık acentanın varsayılanı; her proje kendi `baseCurrency`'siyle hesaplanır. */
 export const INTERNAL_CURRENCY: Currency = 'EUR';
+/** v0.5 S-19 (ana çatı 7): acentanın seçebileceği ana para birimleri. */
+export const BASE_CURRENCIES = ['EUR', 'TRY', 'USD'] as const;
+export type BaseCurrency = (typeof BASE_CURRENCIES)[number];

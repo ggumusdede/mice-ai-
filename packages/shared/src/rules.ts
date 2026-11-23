@@ -104,6 +104,23 @@ export interface TenantRules {
   /** Q5: TCMB rate type used for the TRY value of EUR (or other) movements made WITHOUT conversion (value-date rate).
    *  Default döviz alış (VUK değerleme) [Doğrulanmalı: mali müşavir]. */
   fxRateTypeForReporting: 'tcmb_forex_buying' | 'tcmb_forex_selling' | 'tcmb_banknote_buying' | 'tcmb_banknote_selling';
+  /** v0.5 S-06 "Kapora önce": tedarikçi ön ödeme talebi müşteri kaporası tahsil edilmeden gelirse — 'warn' (vars.: uyarı +
+   *  zorunlu gerekçe + Face ID istisna) | 'block' (talep açılmaz). */
+  depositFirstMode: 'warn' | 'block';
+  /** v0.5 S-07 teklif kur politikası: varsayılan kur payı (tampon, 0.02 = %2) — teklif para birimi ana para biriminden farklıysa.
+   *  [Ürün kararı] temkinli varsayılan %2. */
+  quoteFxBufferDefault: number;
+  /** kur payı üst sınırı (bu değerin üstü reddedilir) */
+  quoteFxBufferMax: number;
+  /** S-07: kur payı müşteriye gizli (vars. false = gizli). true → PDF'te kur ve pay açıkça yazılır. */
+  showFxBufferToCustomer: boolean;
+  /** S-07: istenirse teklif PDF'ine kur maddesi eklenir (vars. kapalı) */
+  showFxClauseOnQuote: boolean;
+  quoteFxClauseText: string;
+  /** v0.5 S-03 allotment: release tarihinden kaç gün önce "release et / tut" kartı açılır (T-x) */
+  allotmentReleaseWarningDays: number;
+  /** v0.5 S-03 opsiyon: bitişten kaç gün önce "Uzat / Bırak / Konfirme et" kartı (T-3) */
+  supplierOptionWarningDays: number;
 }
 
 export const DEFAULT_RULES: TenantRules = {
@@ -150,6 +167,14 @@ export const DEFAULT_RULES: TenantRules = {
   criticalPushFallbackMinutes: 15,
   initialImportWindowMonths: 18,
   fxRateTypeForReporting: 'tcmb_forex_buying',
+  depositFirstMode: 'warn',
+  quoteFxBufferDefault: 0.02,
+  quoteFxBufferMax: 0.15,
+  showFxBufferToCustomer: false,
+  showFxClauseOnQuote: false,
+  quoteFxClauseText: 'Fiyatlar teklif tarihindeki kur esas alınarak hesaplanmıştır; kur politikası alanında belirtilen tarihe kadar sabittir.',
+  allotmentReleaseWarningDays: 7,
+  supplierOptionWarningDays: 3,
 };
 
 export type RuleKey = keyof TenantRules;

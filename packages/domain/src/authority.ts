@@ -5,7 +5,7 @@ import type { DecisionKind, Delegation, Role, User } from '@mice/shared';
  *  margin_override: ürün sahibi kararı (v0.4 S-G03) — vekil hedef marj altı teklifi hazırlayıp açabilir, ama açma kararı yalnız
  *  acenta yöneticisinin (admin) onayına sunulur.
  *  low_supplier_score is an accreditation decision too (§7 Adım 8 "akreditasyon kararı yöneticide": its Düzelt passivates the supplier). */
-export const ADMIN_ONLY_DECISIONS: DecisionKind[] = ['supplier_accreditation', 'automation_promotion', 'rule_suggestion', 'checklist_question', 'low_supplier_score', 'margin_override'];
+export const ADMIN_ONLY_DECISIONS: DecisionKind[] = ['supplier_accreditation', 'automation_promotion', 'rule_suggestion', 'checklist_question', 'low_supplier_score', 'margin_override', 'base_currency_change'];
 
 /** (additive) Active delegation for `userId` at `now` (startsAt <= now <= endsAt), if any. */
 export function activeDelegation(userId: string, delegations: Delegation[], now: Date): Delegation | null {
@@ -38,7 +38,7 @@ export function canDecide(user: Pick<User, 'id' | 'role'>, decision: { kind: Dec
 /** §15 "Para ve sözleşme onaylarında biyometrik doğrulama zorunlu": payments, contracts, field extras (money spent on site) and
  *  customer quotes — a sent quote is a priced commitment to the customer, so its approval and a below-target margin override are
  *  money approvals too. */
-const BIOMETRIC: ReadonlySet<DecisionKind> = new Set<DecisionKind>(['payment_approval', 'contract_approval', 'field_extra', 'quote_approval', 'margin_override']);
+const BIOMETRIC: ReadonlySet<DecisionKind> = new Set<DecisionKind>(['payment_approval', 'contract_approval', 'field_extra', 'quote_approval', 'margin_override', 'base_currency_change']);
 /** Money and contract approvals require biometric (Face ID) step-up (§15). */
 export function requiresBiometric(kind: DecisionKind): boolean {
   return BIOMETRIC.has(kind);

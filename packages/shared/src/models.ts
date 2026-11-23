@@ -1,5 +1,6 @@
 // Entity shapes as exchanged over the API (camelCase JSON). The DB uses snake_case; the API layer maps.
-// All monetary "Eur" fields are in the internal currency (EUR). Dates: ISO strings.
+// All monetary "Eur" fields are in the PROJECT'S BASE CURRENCY (v0.5 S-19, ana çatı 7: `baseCurrency`, EUR / TRY / USD; the
+// legacy name "Eur" is kept for API compatibility — for projects created before v0.5 the base is EUR). Dates: ISO strings.
 import type {
   AuthorityLevel, ContractStatus, Currency, DecisionAction, DecisionBadge, DecisionKind, DecisionStatus,
   DocumentKind, DocumentStatus, FinanceKind, InboundChannel, Language, OfferSource, PriceClass, ProjectOutcome,
@@ -158,6 +159,8 @@ export interface Project {
   eventEndedAt: ISODateTime | null;
   closedAt: ISODateTime | null;
   createdAt: ISODateTime;
+  /** (additive, v0.5 S-19) the agency's base currency when the project was created — fixed for the project's lifetime */
+  baseCurrency?: Currency;
   /** §8 İlk veri yükü: imported past project (never in active lists / worker; feeds know-how and price history) */
   historical?: boolean;
 }
@@ -268,6 +271,8 @@ export interface NormalizedOffer {
   perRoomNightEur: number | null;
   fxRate: number;
   hiddenCosts: HiddenCost[];
+  /** (additive, v0.5 S-19) currency of the *Eur amounts (project base currency; default EUR) */
+  baseCurrency?: Currency;
 }
 
 export interface OfferEvaluation {
@@ -280,6 +285,8 @@ export interface OfferEvaluation {
   suggestedMarkup: number | null;
   risks: string[];
   candidateSupplier: boolean;
+  /** (additive, v0.5 S-03) agreed contract rate of the supplier for this item, as comparison anchor ("kontrat fiyatı") */
+  contractBenchmark?: { contractRateId: ID; price: number; basis: 'room_night' | 'unit'; advantage: number | null; label: string } | null;
 }
 
 export interface QuoteLine {
@@ -318,6 +325,24 @@ export interface QuoteOption {
   vatEur: number;
   accommodationTaxEur: number;
   grandTotalCustomerCurrency: number;
+  /** (additive, v0.5 S-07) FX buffer ("kur payı") in base currency: sale × buffer. Internal only — never on the customer view
+   *  unless the rule showFxBufferToCustomer is on. 0 when quote currency = base currency. */
+  fxBufferEur?: number;
+}
+
+/** v0.5 S-07 — mandatory quote FX policy ("kur politikası"). */
+export interface QuoteFxPolicy {
+  /** rate source + date the quote is priced with (e.g. 'TCMB döviz satış', '2026-11-20') */
+  rateSource: string;
+  rateDate: ISODate;
+  /** prices are fixed until this date (FX validity) */
+  validUntil: ISODate;
+  /** buffer as fraction (0.02 = %2); 0 when quote currency = base currency */
+  bufferPct: number;
+  /** market rate (1 base = x quote currency) before the buffer */
+  marketRate?: number;
+  /** clause printed on the PDF (only when rule showFxClauseOnQuote) */
+  clause?: string | null;
 }
 
 export interface Quote {
@@ -327,7 +352,7 @@ export interface Quote {
   version: number;
   status: QuoteStatus;
   currency: Currency;
-  fxRate: number; // 1 EUR = fxRate currency
+  fxRate: number; // 1 <baseCurrency> = fxRate currency (customer rate, buffer included); legacy rows: 1 EUR = fxRate
   fxSource: string;
   fxDate: ISODate;
   optionUntil: ISODate | null;
@@ -343,6 +368,12 @@ export interface Quote {
   acceptedAt: ISODateTime | null;
   marginOverrideReason: string | null;
   approvalLink?: string;
+  /** (additive, v0.5) project base currency the option amounts are in */
+  baseCurrency?: Currency;
+  /** (additive, v0.5 S-07) quote FX policy */
+  fxPolicy?: QuoteFxPolicy | null;
+  /** (additive, v0.5 D-1) this revision changes an ACCEPTED quote: the customer must re-approve it (new link) */
+  revisesAcceptedQuoteId?: ID | null;
   createdAt: ISODateTime;
   // (additive, ürün sahibi kararı Q8) customer's own purchasing number — distinct from our project code (never equal)
   poNumber?: string | null;
@@ -486,6 +517,8 @@ export interface FinanceEntry {
   amount: number;
   currency: Currency;
   amountEur: number;
+  /** (additive, v0.5 S-19) currency of amountEur (project base currency; agency base for entries without project) */
+  baseCurrency?: Currency;
   dueDate: ISODate | null;
   status: 'open' | 'pending_approval' | 'approved' | 'paid' | 'matched' | 'cancelled';
   reference: string | null;
@@ -653,6 +686,9 @@ export interface FxMovement {
   eurRate?: number | null;
   /** 1 EUR = eurTryRate TRY at this movement. null = unknown */
   eurTryRate?: number | null;
+  /** (additive, v0.5 S-19) 1 EUR = eurBaseRate <project base currency> at this movement, for a base other than EUR/TRY (USD).
+   *  Filled from the movement itself (USD movement) or the dated table; null = unknown */
+  eurBaseRate?: number | null;
   rateSource: FxRateSource;
   /** cash movement: the invoice (movement id) it settles */
   settles?: ID | null;
@@ -694,8 +730,100 @@ export interface RealizedFx {
   evidence: FxEvidence[];
   missingRates: { movementId: ID; type: FxMovementType; currency: Currency; need: ('EUR' | 'TRY')[] }[];
   reasons: { code: RealizedFxReasonCode; message: string }[];
+  /** (additive, v0.5 S-19) realized figures in the project's base currency (EUR → = eur, TRY → = try, USD → each movement at its
+   *  own proven EUR/USD rate; null when a needed rate is missing — never guessed) */
+  base?: { currency: Currency; revenue: number | null; cost: number | null; profit: number | null; margin: number | null; markup: number | null; fxGainLoss: number | null; missing: number };
 }
 
 /** TCMB rate types (gösterge niteliğinde; tenant rule `fxRateTypeForReporting`). */
 export type FxRateType = 'tcmb_forex_buying' | 'tcmb_forex_selling' | 'tcmb_banknote_buying' | 'tcmb_banknote_selling';
 export interface FxRate { id: ID; currency: Currency; rate: number; rateType: FxRateType | null; source: string; rateDate: ISODate; createdAt: ISODateTime }
+
+// ============================================================ v0.5-A — para ve tedarik çekirdeği
+/** S-19: agency settings owned by the admin (base currency changes go through a Face ID decision). */
+export interface TenantSettings {
+  baseCurrency: Currency;
+  /** open base-currency change decision, if any */
+  pendingBaseCurrency?: { currency: Currency; decisionId: ID } | null;
+  /** FX rates (1 EUR = x) used for agency-level conversions, with source */
+  fx?: { source: string; date: ISODate } | null;
+}
+
+/** S-03 / K-11: yearly / seasonal agreed supplier price ("kontrat fiyatı"). */
+export interface ContractRate {
+  id: ID;
+  supplierId: ID;
+  supplierName?: string | null;
+  kind: ServiceKind;
+  roomType: string | null;
+  board: string | null;
+  unit: string;
+  validFrom: ISODate;
+  validTo: ISODate;
+  price: number;
+  currency: Currency;
+  /** VAT included in price? (normalized ex VAT for comparisons) */
+  vatIncluded: boolean;
+  conditions: string | null;
+  status: 'active' | 'archived';
+  createdAt: ISODateTime;
+}
+
+/** S-03 / K-12: allotment (group block) with release and attrition terms. */
+export interface AllotmentBlock {
+  id: ID;
+  projectId: ID | null;
+  serviceItemId: ID | null;
+  supplierId: ID;
+  supplierName?: string | null;
+  roomType: string | null;
+  dateFrom: ISODate; // first night
+  dateTo: ISODate; // last night
+  roomsPerNight: number;
+  ratePerRoomNight: number;
+  currency: Currency;
+  /** rooms not picked up may be released free of charge until this date */
+  releaseDate: ISODate | null;
+  /** tolerated shortfall after release (0.1 = %10) */
+  attritionPct: number;
+  /** share of the room-night rate charged for each room-night below the tolerance (1 = full rate) */
+  penaltyPct: number;
+  penaltyTerms: string | null;
+  /** rooms released so far (per night) */
+  releasedRooms: number;
+  /** picked-up rooms per night (nameless count) */
+  pickup: { date: ISODate; rooms: number }[];
+  status: 'active' | 'released' | 'closed';
+  createdAt: ISODateTime;
+  /** computed */
+  summary?: AllotmentSummary;
+}
+export interface AllotmentSummary {
+  contractedRoomNights: number;
+  pickedUpRoomNights: number;
+  pickupPct: number;
+  daysToRelease: number | null;
+  /** rooms per night that can still be released free of charge (before the release date) */
+  releasableRooms: number;
+  /** estimated attrition penalty if the current pickup stays as is (in block currency) */
+  penaltyIfHold: number;
+  /** estimated penalty if the releasable rooms are released now */
+  penaltyIfRelease: number;
+  stage: 'before_release' | 'release_window' | 'after_release';
+}
+
+/** S-03 / K-13: supplier option (1st / 2nd option) on an offer, with extension history. */
+export interface SupplierOption {
+  id: ID;
+  projectId: ID;
+  serviceItemId: ID;
+  supplierId: ID;
+  supplierName?: string | null;
+  offerId: ID | null;
+  rank: 1 | 2;
+  optionUntil: ISODate;
+  status: 'active' | 'extension_requested' | 'released' | 'confirmed' | 'expired';
+  extensions: { from: ISODate; to: ISODate; at: ISODateTime; by: ID | null }[];
+  note: string | null;
+  createdAt: ISODateTime;
+}
