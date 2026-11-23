@@ -148,6 +148,8 @@ export async function closeAccess(ctx: Ctx, handoverId: string): Promise<void> {
                        WHERE account_id IN (SELECT id FROM user_mail_accounts WHERE user_id = $1) AND purged_at IS NULL`, [uid, now]);
   await ctx.db.query(`UPDATE push_subscriptions SET active = false WHERE user_id = $1 AND active`, [uid]);
   await ctx.db.query(`UPDATE field_packs SET revoked_at = $2, revoke_reason = 'access_closed' WHERE user_id = $1 AND revoked_at IS NULL`, [uid, now]);
+  // open assignment suggestions naming the leaver are moot (a human re-assigns; never silently re-routed)
+  await ctx.db.query(`UPDATE decisions SET status = 'expired', reason = 'devir: kişinin erişimi kapandı' WHERE status = 'open' AND kind = 'assignment' AND detail->>'userId' = $1::text`, [uid]);
   await ctx.db.query(`UPDATE handovers SET status = 'access_closed', access_closed_at = $2 WHERE id = $1`, [handoverId, now]);
 }
 
