@@ -8,9 +8,22 @@ import { supplierSafeCode } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { forbidden } from '../errors.js';
 
-/** Project reference for anything a supplier receives or sees. */
-export async function supplierRef(ctx: Ctx, code: string): Promise<string> {
-  return (await ctx.rules()).hideCustomerFromSuppliers ? supplierSafeCode(code) : code;
+/** Project reference for anything a supplier receives or sees.
+ *  v0.5 S-08 (additive): with `supplierId`, an active admin exception "this hotel is under the customer's own corporate agreement"
+ *  (customer_supplier_disclosures, revocable) lets that supplier see the full project code; every other supplier still gets the
+ *  supplier-safe reference. */
+export async function supplierRef(ctx: Ctx, code: string, supplierId?: string | null): Promise<string> {
+  if (!(await ctx.rules()).hideCustomerFromSuppliers) return code;
+  if (supplierId && (await customerDisclosedTo(ctx, code, supplierId))) return code;
+  return supplierSafeCode(code);
+}
+
+/** S-08: is there a live disclosure exception for (the project's customer, supplier)? */
+export async function customerDisclosedTo(ctx: Ctx, projectCode: string, supplierId: string): Promise<boolean> {
+  const { rows } = await ctx.db.query(
+    `SELECT 1 FROM customer_supplier_disclosures x JOIN projects p ON p.customer_id = x.customer_id
+      WHERE p.code = $1 AND x.supplier_id = $2 AND x.revoked_at IS NULL LIMIT 1`, [projectCode, supplierId]);
+  return rows.length > 0;
 }
 
 /** Document kinds that carry purchase cost / margin / sale totals. */

@@ -6,7 +6,7 @@ import type {
 } from '@mice/shared';
 import type { FileInput, ParsedOffer } from '@mice/ai';
 import {
-  canNegotiate, daysInclusive, evaluateOffer, lineMultiplier, negotiationDraftViolations, normalizeOffer, seasonalMarkupFor, splitLine,
+  canNegotiate, daysInclusive, evaluateOffer, findContractRate, lineMultiplier, negotiationDraftViolations, normalizeOffer, seasonalMarkupFor, splitLine,
   type ChannelBenchmark,
 } from '@mice/domain';
 import ExcelJS from 'exceljs';
@@ -299,14 +299,13 @@ async function channelBenchmark(ctx: Ctx, offer: SupplierOffer, item: Row, fx: F
   const wantCancel = offer.cancellationTerms && /(iadesiz|non[- ]?refundable|iade edilmez)/i.test(offer.cancellationTerms) ? 'non_refundable' : 'flexible';
   const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
   const match = rows.filter((r) => norm(r.room_type) === norm(acc.roomType) && norm(r.board) === norm(acc.board) && r.cancellation === wantCancel);
-  void fx;
-  const avg = (xs: Row[]) => xs.reduce((s, r) => s + Number(r.price_eur), 0) / xs.length;
+  // channel prices are stored in EUR (agency-wide reference); v0.5 S-19 → project base currency
+  const avg = (xs: Row[]) => toEur(fx, xs.reduce((s, r) => s + Number(r.price_eur), 0) / xs.length, 'EUR');
   if (match.length) return { priceEur: Math.round(avg(match) * 100) / 100, conditionsMatch: true };
   return { priceEur: Math.round(avg(rows) * 100) / 100, conditionsMatch: false };
 }
 
-async function historyFor(ctx: Ctx, offer: SupplierOffer, item: Row, project: Row): Promise<{ history: number[]; unitPriceEur: number | null }> {
-  const fx = await currentFx(ctx.db);
+async function historyFor(ctx: Ctx, offer: SupplierOffer, item: Row, project: Row, fx: FxSnapshot): Promise<{ history: number[]; unitPriceEur: number | null }> {
   const rules = await ctx.rules();
   const main = offer.lines.find((l) => l.kind === item.kind) ?? offer.lines[0];
   if (!main) return { history: [], unitPriceEur: null };
@@ -324,12 +323,35 @@ async function historyFor(ctx: Ctx, offer: SupplierOffer, item: Row, project: Ro
        AND (service_item_id IS NULL OR service_item_id <> $4) AND created_at > now() - interval '24 months'`,
     [item.kind, main.unit, project.city, item.id],
   );
-  return { history: rows.map((r) => Number(r.unit_price_eur)), unitPriceEur };
+  // price history is stored in EUR at the day's rate (K-14); compared in the project's base currency
+  return { history: rows.map((r) => toEur(fx, Number(r.unit_price_eur), 'EUR')), unitPriceEur };
+}
+
+/** v0.5 S-03 / K-11: the supplier's agreed contract price for this item, ex VAT, in the project's base currency (comparison anchor). */
+async function contractFor(ctx: Ctx, offer: SupplierOffer, item: Row, fx: FxSnapshot): Promise<{ contractRateId: string; price: number; label: string } | null> {
+  const rows = (await ctx.db.query(`SELECT * FROM contract_rates WHERE supplier_id = $1 AND kind = $2 AND status = 'active'`, [offer.supplierId, item.kind])).rows;
+  if (!rows.length) return null;
+  const main = offer.lines.find((l) => l.kind === item.kind) ?? offer.lines[0];
+  const rates = rows.map((r) => ({
+    id: r.id as string, supplierId: r.supplier_id as string, kind: r.kind as string, roomType: r.room_type as string | null, board: r.board as string | null,
+    validFrom: String(r.valid_from).slice(0, 10), validTo: String(r.valid_to).slice(0, 10), status: r.status as string, row: r,
+  }));
+  const hit = findContractRate(rates, { supplierId: offer.supplierId, kind: item.kind, date: item.date_from ? String(item.date_from).slice(0, 10) : null, roomType: main?.roomType ?? null, board: main?.board ?? null });
+  if (!hit) return null;
+  const rules = await ctx.rules();
+  const vat = item.kind === 'accommodation' ? rules.vatRates.accommodation : rules.vatRates.service;
+  const net = Number(hit.row.price) / (hit.row.vat_included ? 1 + vat : 1);
+  try {
+    return { contractRateId: hit.id, price: Math.round(toEur(fx, net, hit.row.currency) * 100) / 100, label: `Kontrat fiyatı (${hit.validFrom} – ${hit.validTo})` };
+  } catch {
+    return null; // no rate for the contract currency — never guessed
+  }
 }
 
 export async function evaluateItemOffers(ctx: Ctx, item: Row, project: Row): Promise<{ offers: SupplierOffer[]; evaluations: OfferEvaluation[]; suppliers: Supplier[] }> {
   const rules = await ctx.rules();
-  const fx = await currentFx(ctx.db);
+  const baseCurrency = project.base_currency ?? 'EUR';
+  const fx = await currentFx(ctx.db, baseCurrency);
   const offerRows = (await ctx.db.query(
     'SELECT * FROM supplier_offers WHERE service_item_id = $1 AND superseded_by IS NULL ORDER BY created_at', [item.id])).rows;
   const offers = offerRows.map(mapOffer);
@@ -341,17 +363,18 @@ export async function evaluateItemOffers(ctx: Ctx, item: Row, project: Row): Pro
     const s = suppliers.find((x) => x.id === offer.supplierId);
     let normalized;
     try {
-      normalized = normalizeOffer(offer, { item: it, pax: project.pax, days: daysInclusive(item.date_from, item.date_to), rates: fx.rates, accommodationTaxRate: rules.accommodationTaxRate });
+      normalized = normalizeOffer(offer, { item: it, pax: project.pax, days: daysInclusive(item.date_from, item.date_to), rates: fx.rates, accommodationTaxRate: rules.accommodationTaxRate, baseCurrency });
     } catch {
       continue; // unknown currency etc. — never guess (§3.7)
     }
     // §16.5 scoped supplier × season markup (admin-approved rule); only used when the price class is unknown
     const seasonal = seasonalMarkupFor(rules.supplierSeasonMarkups, offer.supplierId, item.date_from ? String(item.date_from) : null);
-    const base = { kind: it.kind, normalized, supplierStatus: s?.status ?? 'candidate', rules, valueAdd: it.valueAdd, seasonalMarkup: seasonal?.markup ?? null } as const;
+    const contract = await contractFor(ctx, offer, item, fx);
+    const base = { kind: it.kind, normalized, supplierStatus: s?.status ?? 'candidate', rules, valueAdd: it.valueAdd, seasonalMarkup: seasonal?.markup ?? null, ...(contract ? { contract } : {}) } as const;
     if (it.kind === 'accommodation') {
       evaluations.push(evaluateOffer({ ...base, channel: await channelBenchmark(ctx, offer, item, fx) }));
     } else {
-      const h = await historyFor(ctx, offer, item, project);
+      const h = await historyFor(ctx, offer, item, project, fx);
       evaluations.push(evaluateOffer({ ...base, history: h.history, unitPriceEur: h.unitPriceEur }));
     }
   }

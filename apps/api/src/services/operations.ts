@@ -11,7 +11,7 @@ import type { Row } from '../lib/mappers.js';
 import { logAiAction } from './ai-log.js';
 import { createDecision } from './decisions.js';
 import { createDraft, sendDraft } from './drafts.js';
-import { currentFx, toEur } from './fx.js';
+import { agencyBase, currentFx, toEur } from './fx.js';
 import { getProjectRow, setStep } from './projects.js';
 import { notify } from './notifications.js';
 import type { PublicExtraView } from '@mice/shared';
@@ -172,7 +172,7 @@ export async function reflectFieldExtra(ctx: Ctx, id: string, input: { reflected
 
 /** Admin screen: total NOT reflected amounts per project and per customer. */
 export async function unreflectedTotals(ctx: Ctx): Promise<{ byProject: { projectId: string; code: string; amountTry: number; amountEur: number; count: number }[]; byCustomer: { customerId: string | null; customerName: string | null; amountTry: number; amountEur: number }[]; totalTry: number; totalEur: number }> {
-  const fx = await currentFx(ctx.db);
+  const fx = await currentFx(ctx.db, await agencyBase(ctx.db)); // v0.5 S-19: agency-level → agency base currency
   const eur = (try_: number) => Math.round(toEur(fx, try_, 'TRY') * 100) / 100;
   const rows = (await ctx.db.query(
     `SELECT p.id, p.code, p.customer_id, p.customer_name, sum(e.amount_try) AS s, count(*)::int AS n FROM field_extras e JOIN projects p ON p.id = e.project_id
@@ -262,7 +262,7 @@ export async function itemChangeFlow(ctx: Ctx, itemId: string, before: Row): Pro
   const m = (l: Row) => Number(l.quantity) * (l.nights > 0 ? Number(l.nights) : 1);
   let costB = 0, saleB = 0, costA = 0, saleA = 0;
   for (const l of lines) {
-    const c = Number(l.unit_cost_eur) * m(l), s = Number(l.unit_price_eur) * m(l);
+    const c = Number(l.unit_cost_base ?? l.unit_cost_eur) * m(l), s = Number(l.unit_price_base ?? l.unit_price_eur) * m(l);
     costB += c; saleB += s;
     const f = l.service_item_id === itemId ? ratio : 1;
     costA += c * f; saleA += s * f;
@@ -284,7 +284,7 @@ export async function itemChangeFlow(ctx: Ctx, itemId: string, before: Row): Pro
   await ctx.db.query(
     `INSERT INTO tasks (tenant_id, project_id, assignee_id, kind, title, source, origin_key, entity_type, entity_id)
      VALUES (app_tenant_id(), $1,$2,'change_flow',$3,'rule',$4,'service_item',$5) ON CONFLICT (tenant_id, origin_key) DO NOTHING`,
-    [p.id, p.owner_id, `${p.code}: "${after.description}" değişti — maliyet farkı ${Math.round(reflected.deltaCostEur)} EUR; müşteriye yansıtma kararı`, `item:${itemId}:change:${Date.now()}`, itemId]);
+    [p.id, p.owner_id, `${p.code}: "${after.description}" değişti — maliyet farkı ${Math.round(reflected.deltaCostEur)} ${p.base_currency ?? 'EUR'}; müşteriye yansıtma kararı`, `item:${itemId}:change:${Date.now()}`, itemId]);
   if (notReflected.belowTarget) {
     await createDecision(ctx, {
       projectId: p.id, kind: 'condition_risk', badge: 'critical', urgent: true,

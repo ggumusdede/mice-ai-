@@ -31,7 +31,7 @@ async function plannedProfit(ctx: Ctx, projectId: string): Promise<ProfitSummary
 
 async function actualProfit(ctx: Ctx, projectId: string): Promise<ProfitSummary | null> {
   const fin = (await ctx.db.query(
-    `SELECT kind, sum(amount_eur) AS s FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled' AND kind IN ('supplier_invoice','customer_invoice') GROUP BY kind`, [projectId])).rows;
+    `SELECT kind, sum(COALESCE(amount_base, amount_eur)) AS s FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled' AND kind IN ('supplier_invoice','customer_invoice') GROUP BY kind`, [projectId])).rows;
   const cost = fin.find((r) => r.kind === 'supplier_invoice')?.s;
   const sale = fin.find((r) => r.kind === 'customer_invoice')?.s;
   return cost != null || sale != null ? profitSummary(Number(cost ?? 0), Number(sale ?? 0)) : null;
@@ -39,7 +39,9 @@ async function actualProfit(ctx: Ctx, projectId: string): Promise<ProfitSummary 
 
 export async function computeClosingCheck(ctx: Ctx, projectId: string): Promise<ClosingCheck> {
   const p = await getProjectRow(ctx, projectId);
-  const fx = await currentFx(ctx.db);
+  // v0.5 S-19: closing figures in the project's base currency
+  const base: string = p.base_currency ?? 'EUR';
+  const fx = await currentFx(ctx.db, base);
   const contracted = (await ctx.db.query(
     `SELECT DISTINCT supplier_id FROM contracts WHERE project_id = $1 AND superseded_by IS NULL AND status = 'signed'`, [projectId])).rows.map((r) => r.supplier_id);
   const invoiced = new Set((await ctx.db.query(
@@ -47,7 +49,7 @@ export async function computeClosingCheck(ctx: Ctx, projectId: string): Promise<
   const custInv = (await ctx.db.query(`SELECT * FROM finance_entries WHERE project_id = $1 AND kind = 'customer_invoice' AND status <> 'cancelled'`, [projectId])).rows;
   // collections: customer invoices (else the commitment receivables) not yet matched to an incoming payment
   const collectBase = custInv.length ? custInv : (await ctx.db.query(`SELECT * FROM finance_entries WHERE project_id = $1 AND kind = 'receivable' AND status <> 'cancelled'`, [projectId])).rows;
-  const receivablesOpenEur = collectBase.filter((e) => !['matched', 'paid'].includes(e.status)).reduce((s, e) => s + Number(e.amount_eur), 0);
+  const receivablesOpenEur = collectBase.filter((e) => !['matched', 'paid'].includes(e.status)).reduce((s, e) => s + Number(e.amount_base ?? e.amount_eur), 0);
   // unbilled payments: supplier payments made (paid / matched payable) for a supplier with no invoice in this project
   const paidPayables = (await ctx.db.query(
     `SELECT supplier_id FROM finance_entries WHERE project_id = $1 AND kind = 'payable' AND status IN ('paid','matched')`, [projectId])).rows;
@@ -65,13 +67,14 @@ export async function computeClosingCheck(ctx: Ctx, projectId: string): Promise<
   if (extrasEur) deviations.push({ reason: 'Saha ekstraları (toplam)', amountEur: extrasEur });
   // FX difference: supplier invoices in foreign currency at today's rate vs the rate recorded on the contract payable
   const fxRows = (await ctx.db.query(
-    `SELECT i.amount, i.currency, i.amount_eur, (SELECT fx_rate FROM finance_entries pe WHERE pe.project_id = i.project_id AND pe.supplier_id = i.supplier_id AND pe.kind = 'payable' ORDER BY created_at LIMIT 1) AS contract_rate
-       FROM finance_entries i WHERE i.project_id = $1 AND i.kind = 'supplier_invoice' AND i.currency <> 'EUR' AND i.status <> 'cancelled'`, [projectId])).rows;
-  const fxDiff = r2(fxRows.reduce((s, r) => (r.contract_rate ? s + (Number(r.amount_eur) - Number(r.amount) / Number(r.contract_rate)) : s), 0));
+    `SELECT i.amount, i.currency, COALESCE(i.amount_base, i.amount_eur) AS amount_base, (SELECT COALESCE(base_fx_rate, fx_rate) FROM finance_entries pe WHERE pe.project_id = i.project_id AND pe.supplier_id = i.supplier_id AND pe.kind = 'payable' ORDER BY created_at LIMIT 1) AS contract_rate
+       FROM finance_entries i WHERE i.project_id = $1 AND i.kind = 'supplier_invoice' AND i.currency <> $2 AND i.status <> 'cancelled'`, [projectId, base])).rows;
+  const fxDiff = r2(fxRows.reduce((s, r) => (r.contract_rate ? s + (Number(r.amount_base) - Number(r.amount) / Number(r.contract_rate)) : s), 0));
   // Q5: evidence-based FX gain/loss (each movement at its actual rate vs the quote-time rate) replaces the system-rate estimate
   const realizedFx = await projectRealizedFx(ctx, projectId);
-  if (realizedFx.fxGainLoss.eur != null) {
-    if (realizedFx.fxGainLoss.eur) deviations.push({ reason: `Kur farkı (gerçekleşen kurlar − teklif kuru${realizedFx.quoteRate ? ` ${realizedFx.quoteRate}` : ''}; kanıtlı)`, amountEur: realizedFx.fxGainLoss.eur });
+  const baseGainLoss = realizedFx.base ? realizedFx.base.fxGainLoss : realizedFx.fxGainLoss.eur;
+  if (baseGainLoss != null) {
+    if (baseGainLoss) deviations.push({ reason: `Kur farkı (gerçekleşen kurlar − teklif kuru${realizedFx.quoteRate ? ` ${realizedFx.quoteRate}` : ''}; kanıtlı)`, amountEur: baseGainLoss });
   } else if (fxDiff) deviations.push({ reason: 'Kur farkı', amountEur: -fxDiff });
   if (realizedFx.status === 'partial' && realizedFx.reasons.some((x) => x.code === 'rate_missing')) {
     deviations.push({ reason: `Kur kanıtı eksik: ${realizedFx.missingRates.length} hareket — gerçekleşen TL / EUR kısmi`, amountEur: 0 });
@@ -84,8 +87,11 @@ export async function computeClosingCheck(ctx: Ctx, projectId: string): Promise<
     if (costDev) deviations.push({ reason: 'Gerçekleşen maliyet − planlanan maliyet', amountEur: -costDev });
   }
 
-  const plannedTry = planned && realizedFx.quoteRate
-    ? { cost: r2(planned.costEur * realizedFx.quoteRate), sale: r2(planned.saleEur * realizedFx.quoteRate), profit: r2(planned.profitEur * realizedFx.quoteRate) } : null;
+  // plan in TL: base → TRY at the quote-time rate (TRY base: the plan itself)
+  const eurBase = base === 'EUR' ? 1 : fx.eurRates?.[base] ?? null;
+  const tryPerBase = base === 'TRY' ? 1 : realizedFx.quoteRate && eurBase ? realizedFx.quoteRate / eurBase : null;
+  const plannedTry = planned && tryPerBase
+    ? { cost: r2(planned.costEur * tryPerBase), sale: r2(planned.saleEur * tryPerBase), profit: r2(planned.profitEur * tryPerBase) } : null;
   const withFx = (c: ClosingCheck): ClosingCheck => ({ ...c, planVsActual: { ...c.planVsActual, realizedFx, plannedTry } });
   if (p.outcome === 'lost' || p.outcome === 'cancelled') {
     return withFx(closingCheck({
@@ -263,7 +269,7 @@ export function registerClosingDocuments(): void {
   registerDocumentGenerator('customer_invoice_draft', null, async (ctx, { projectId }) => {
     const p = await getProjectRow(ctx, projectId);
     const rules = await ctx.rules();
-    const fx = await currentFx(ctx.db);
+    const fx = await currentFx(ctx.db, p.base_currency ?? 'EUR');
     const quotes = await loadQuotes(ctx, { projectId });
     const q = quotes.find((x) => x.status === 'accepted' && x.acceptedOptionNo != null);
     if (!q) throw conflict('Kabul edilmiş teklif yok — müşteri faturası taslağı sözleşme/teklif verisinden üretilir', 'NO_ACCEPTED_QUOTE');

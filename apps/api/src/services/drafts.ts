@@ -1,7 +1,7 @@
 // §3.3 İnsan imzası: AI writes drafts in the owner's style; a HUMAN sends them from their OWN address.
 import type { DraftRequest } from '@mice/ai';
 import type { Language, MessageDraft } from '@mice/shared';
-import { roleCan } from '@mice/domain';
+import { corporateChannelCheck, roleCan, signCorporateMessage } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
@@ -136,7 +136,18 @@ export async function sendDraft(ctx: Ctx, id: string, opts: SendOptions = {}): P
   const fromUserId = opts.fromUserId ?? ctx.user?.id ?? d.from_user_id;
   const sender = fromUserId ? (await ctx.db.query('SELECT email FROM users WHERE id = $1', [fromUserId])).rows[0] : null;
   if (!sender) throw badRequest('Gönderen kullanıcı bulunamadı', undefined, 'SENDER_MISSING');
-  const rendered = opts.render ? opts.render(d.body) : { body: d.body, secrets: [] };
+  // v0.5 S-02: a corporate WhatsApp / SMS line counts as "the human's address" only when the conversation is assigned to a
+  // person (draft owner) and the approver's name is in the message and on record. Autonomous system texts are not affected.
+  let outBody: string = d.body;
+  if ((d.channel === 'whatsapp' || d.channel === 'sms') && !opts.autonomous) {
+    const approver = ctx.user?.fullName ?? null;
+    const check = corporateChannelCheck({ assignedUserId: d.from_user_id, approverName: approver });
+    if (!check.ok) throw conflict(check.message, check.code);
+    const agency = (await ctx.db.query('SELECT name FROM tenants WHERE id = $1', [ctx.tenantId])).rows[0]?.name ?? '';
+    outBody = signCorporateMessage(d.body, approver!, agency);
+    await ctx.db.query('UPDATE message_drafts SET body = $2, signed_by_name = $3 WHERE id = $1', [id, outBody, approver]);
+  }
+  const rendered = opts.render ? opts.render(outBody) : { body: outBody, secrets: [] };
   await ctx.deps.email.send(ctx.db, {
     tenantId: ctx.tenantId, draftId: d.id, channel: d.channel, from: sender.email, to: d.to_address, subject: d.subject,
     body: rendered.body, secrets: rendered.secrets, autonomous: opts.autonomous,

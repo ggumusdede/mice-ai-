@@ -247,8 +247,16 @@ export interface TeamPerformanceReport {
   from: string;
   to: string;
   financialsVisible: boolean;
+  /** (additive, v0.5 S-19) money columns are in the agency's CURRENT base currency, converted from each project's EUR equivalent at
+   *  the rate shown in fxNote */
+  baseCurrency?: Currency;
+  fxNote?: string | null;
   rows: TeamPerformanceRow[];
   totals: Omit<TeamPerformanceRow, 'userId' | 'fullName' | 'role' | 'authorityLevel' | 'active' | 'lostProjects'>;
+  /** v0.5 D-2 (additive): per sub-team ("küçük çekirdek ekip") aggregate — quote quality attributed to author AND team */
+  teams?: import('./team.js').TeamPerformanceTeamRow[];
+  /** v0.5 D-2: the user's team id per row (null = no team) */
+  userTeams?: Record<ID, ID | null>;
 }
 // (additive, Q6) POST /api/suppliers/:id/request-accreditation body {reason?, projectId?} -> AccreditationRequestResponse
 //   sales / ops / admin; idempotent: reuses the open 'supplier_accreditation' card (admin-only decision, never auto-approved)
@@ -257,6 +265,9 @@ export interface AccreditationRequestResponse { decisionId: ID; created: boolean
 // GET /api/reports/weekly?weekStart=YYYY-MM-DD -> WeeklyReport
 export interface WeeklyReport {
   weekStart: string;
+  /** (additive, v0.5 S-19) unreflectedPriceDiffEur is in this currency (agency's current base currency) */
+  baseCurrency?: Currency;
+  fxNote?: string | null;
   quoteTime: { medianBusinessHours: number | null; targetBusinessHours: number; onTargetRate: number | null; customerWaitHours: number; overrides: { projectCode: string; reason: string }[] };
   corrections: { rate: number | null; trend: number[] };
   quotes: { won: number; lost: number; lostReasons: { reason: string; count: number }[] };

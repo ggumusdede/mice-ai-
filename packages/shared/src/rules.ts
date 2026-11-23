@@ -98,6 +98,57 @@ export interface TenantRules {
   supplierRfqHours: SupplierRfqHours[];
   /** §15 / docs/07 §1: a critical push not opened within N minutes → WhatsApp / SMS fallback to the admin (0 = off) */
   criticalPushFallbackMinutes: number;
+  // ---- v0.5-A Ekip, iletişim ve kontrol (docs/12 S-01, S-02, S-09…S-15, S-25, S-26) — temkinli varsayılanlar ----
+  /** S-01 hızlı onay: nöbetçiye / sorumluya atanmış dış mesaj kartı N dakika içinde ele alınmazsa sıradaki kişiye yükselir
+   *  (nöbetçi → vekili → yönetici). Yalnız bildirim ve atama; otomatik onay asla yok. 0 = kapalı. */
+  quickApprovalEscalationMinutes: number;
+  /** S-01: mesai dışında açılan dış mesaj kartları nöbet çizelgesindeki kişiye atanır (çizelgede kimse yoksa rol bazlı kalır). */
+  onCallAssignOutsideBusinessHours: boolean;
+  /** S-01 hazır mesaj şablonlarının acenta metni (anahtar → {subject?, body}); boş = ürünle gelen metin (packages/shared team.ts). */
+  quickMessageTemplates: Record<string, { subject?: string; body: string }>;
+  /** S-01 tahsilat hatırlatması: vadesi N gün geçmiş alacak için hazır hatırlatma kartı (tek dokunuş, insan onaylı). 0 = kapalı. */
+  collectionReminderAfterDays: number;
+  /** S-02 / S-26 #8: katılımcıya doğrudan mesaj — projede ayar yoksa bu geçerli. Varsayılan kapalı; müşteri proje bazında açtırır. */
+  participantMessagingDefault: 'off' | 'logistics' | 'on';
+  /** S-09: kurumsal e-posta alan adları (boş = kullanıcının giriş adresinin alan adı). Kişisel hesap yalnız yönetici istisnasıyla. */
+  corporateMailDomains: string[];
+  /** S-11: satışçı kendi panosunda tahmini primini görür (acenta tercihi, varsayılan kapalı). Formül şeffaf ve basit. */
+  showEstimatedBonus: boolean;
+  bonusFormula: { basis: 'realized_profit' | 'planned_profit'; rate: number; onlyCollected: boolean };
+  /** S-14: bildirimler varsayılan "her zaman"; acenta (veya çalışan kendisi) sessiz saat açabilir. Kritikler ve nöbetçi geçer. */
+  quietHours: { enabled: boolean; start: string; end: string };
+  /** S-13 meşgul vekâleti: son tarihli kart (opsiyon, bilet limiti, release …) N saat yanıtsız kalır ve son tarihe M saatten az
+   *  kalırsa önce onaylayana kritik bildirim, sonra kart vekile yönlenir. Otomatik onay asla yok. */
+  busyDelegationEnabled: boolean;
+  busyDelegationWaitHours: number;
+  busyDelegationLeadHours: number;
+  /** S-15 çevrimdışı saha paketi: ad + oda + transfer grubu (+ telefon), rol bazlı, cihazda şifreli, uzaktan iptal. */
+  fieldPackEnabled: boolean;
+  fieldPackIncludePhone: boolean;
+  /** paket, paket gününün başından itibaren N saat geçerli */
+  fieldPackValidHours: number;
+  /** S-25 sesli not / sesle yazma: varsayılan kapalı; yönetici uyarıyı okuyup açar. */
+  voiceFeaturesEnabled: boolean;
+  /** K-04: her müşteride ilişki sahibi + yedek irtibat (küçük ekipte kapatılabilir; kapalıyken yalnız uyarı gösterilmez) */
+  requireBackupContact: boolean;
+  /** S-26 temkinli varsayılanlar paketi (docs/11 §H, 17 madde). Bazıları v0.6 işlerinin varsayılanıdır (bilgi amaçlı). */
+  negotiationUseHotelOwnPublicPrice: boolean;
+  rfqShowBudget: boolean;
+  supplierQualitativeSummary: boolean;
+  supplierPagePoweredBy: boolean;
+  crisisDeputyUserId: string | null;
+  crisisSpendCapTry: number;
+  roomingChangeMode: 'diff_and_full' | 'diff_only' | 'full_only';
+  postEventReportBusinessDays: number;
+  participantPreferencesRequireConsent: boolean;
+  departedMailboxRetentionDays: number;
+  officeSupportRoleEnabled: boolean;
+  fieldAdvanceSelfViewOnly: boolean;
+  cashWeightedProfitSeparate: boolean;
+  billingModelRequiresApproval: boolean;
+  visaInsuranceTrackingOnly: boolean;
+  leakScanGuaranteeDesignPartnersOnly: boolean;
+  departedAgencyReadOnlyDays: number;
   /** §8 İlk veri yükü: only projects / prices closed within the last N months are imported (older rows are flagged and
    *  excluded). PRD: "yalnızca son 12–18 ayın kapanmış projeleri". Admin changes it in Kurallar. */
   initialImportWindowMonths: number;
@@ -165,6 +216,41 @@ export const DEFAULT_RULES: TenantRules = {
   supplierSeasonMarkups: [],
   supplierRfqHours: [],
   criticalPushFallbackMinutes: 15,
+  // v0.5-A Ekip, iletişim ve kontrol (temkinli varsayılanlar)
+  quickApprovalEscalationMinutes: 10,
+  onCallAssignOutsideBusinessHours: true,
+  quickMessageTemplates: {},
+  collectionReminderAfterDays: 3,
+  participantMessagingDefault: 'off',
+  corporateMailDomains: [],
+  showEstimatedBonus: false,
+  bonusFormula: { basis: 'realized_profit', rate: 0.05, onlyCollected: true },
+  quietHours: { enabled: false, start: '22:00', end: '08:00' },
+  busyDelegationEnabled: true,
+  busyDelegationWaitHours: 4,
+  busyDelegationLeadHours: 24,
+  fieldPackEnabled: true,
+  fieldPackIncludePhone: true,
+  fieldPackValidHours: 36,
+  voiceFeaturesEnabled: false,
+  requireBackupContact: true,
+  negotiationUseHotelOwnPublicPrice: false,
+  rfqShowBudget: false,
+  supplierQualitativeSummary: false,
+  supplierPagePoweredBy: false,
+  crisisDeputyUserId: null,
+  crisisSpendCapTry: 25000,
+  roomingChangeMode: 'diff_and_full',
+  postEventReportBusinessDays: 3,
+  participantPreferencesRequireConsent: true,
+  departedMailboxRetentionDays: 90,
+  officeSupportRoleEnabled: false,
+  fieldAdvanceSelfViewOnly: true,
+  cashWeightedProfitSeparate: true,
+  billingModelRequiresApproval: true,
+  visaInsuranceTrackingOnly: true,
+  leakScanGuaranteeDesignPartnersOnly: true,
+  departedAgencyReadOnlyDays: 90,
   initialImportWindowMonths: 18,
   fxRateTypeForReporting: 'tcmb_forex_buying',
   depositFirstMode: 'warn',

@@ -169,8 +169,8 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
     return asUser(req, (ctx) => importTcmbRates(ctx, body));
   });
   app.post('/api/finance/payment-requests', auth, async (req) => {
-    const { entryId } = parse(z.object({ entryId: z.string().uuid() }), req.body);
-    return asUser(req, (ctx) => createPaymentRequest(ctx, entryId));
+    const { entryId, depositFirstReason } = parse(z.object({ entryId: z.string().uuid(), depositFirstReason: z.string().max(1000).optional() }), req.body);
+    return asUser(req, (ctx) => createPaymentRequest(ctx, entryId, { depositFirstReason }));
   });
   // (additive) a human records the bank payment of an APPROVED request (the system never pays)
   app.post('/api/finance/entries/:id/mark-paid', auth, async (req) => {

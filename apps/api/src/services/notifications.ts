@@ -3,7 +3,7 @@
 // NotificationService is the abstraction; OutboxNotificationService stores every notification in `notifications`
 // (and logs to the console in development). WebPushNotificationService (push.ts, VAPID) implements `deliver` when keys are set.
 import type { Decision, Role } from '@mice/shared';
-import { localParts, zonedTimeToUtc } from '@mice/domain';
+import { effectiveQuietHours, inQuietHours, localParts, zonedTimeToUtc } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import type { Db } from '../db/pool.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -132,6 +132,13 @@ export async function flushNotificationDigests(ctx: Ctx, now: Date): Promise<num
     `SELECT * FROM notifications WHERE status = 'pending' AND priority = 'routine' AND deliver_after <= $1 ORDER BY user_id, created_at`, [now]);
   const byUser = new Map<string, typeof rows>();
   for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), r]);
+  // v0.5 S-14: default "her zaman"; when the agency or the person turned quiet hours on, routine digests wait until the window
+  // ends (critical notifications are never held back — they do not go through this digest).
+  const rules = await ctx.rules();
+  const qh = new Map<string, unknown>((await ctx.db.query('SELECT id, quiet_hours FROM users WHERE id = ANY($1)', [[...byUser.keys()]])).rows.map((u) => [u.id, u.quiet_hours]));
+  for (const userId of [...byUser.keys()]) {
+    if (inQuietHours(now, rules.businessHours.timezone, effectiveQuietHours(rules.quietHours, (qh.get(userId) ?? null) as never))) byUser.delete(userId);
+  }
   for (const [userId, list] of byUser) {
     const title = `${list.length} rutin bildirim`;
     const body = list.map((r) => `• ${r.title}`).join('\n');

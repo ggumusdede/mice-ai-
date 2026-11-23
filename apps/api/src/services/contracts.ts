@@ -14,7 +14,7 @@ import { logAiAction } from './ai-log.js';
 import { aiGate, assertAiMayExecute } from './automation.js';
 import { createDecision, expireDecisionsFor } from './decisions.js';
 import { aiDraft } from './drafts.js';
-import { currentFx, toEur } from './fx.js';
+import { currentFx, eurEquivalent, toEur } from './fx.js';
 import { fileToAiInput, type UploadedFile } from './offers.js';
 import { getProjectRow, setStep } from './projects.js';
 import { getQuote } from './quotes.js';
@@ -182,7 +182,8 @@ export async function compareContract(ctx: Ctx, id: string): Promise<Contract> {
   }
   const diff = diffContractVsQuote(fields, snap.snapshot);
   const clean = isContractClean(diff);
-  const fx = await currentFx(ctx.db);
+  const base: string = p.base_currency ?? 'EUR';
+  const fx = await currentFx(ctx.db, base); // v0.5 S-19: risk in the project's base currency
   const supplierTotalEur = fields.totalAmount != null && fields.currency
     ? toEur(fx, fields.totalAmount, fields.currency) : toEur(fx, snap.supplierTotal, snap.supplierCurrency);
   const customer = p.customer_id ? mapCustomer((await ctx.db.query('SELECT * FROM customers WHERE id = $1', [p.customer_id])).rows[0]) : null;
@@ -196,11 +197,11 @@ export async function compareContract(ctx: Ctx, id: string): Promise<Contract> {
   });
   const lowConfidence = c.extraction_confidence != null && Number(c.extraction_confidence) < rules.aiConfidenceThreshold;
   const status = clean && !lowConfidence ? 'clean' : 'diff_pending';
-  const riskAccepted = risk.riskEur > 0 && c.condition_risk_accepted_by && Number(c.condition_risk_eur) === risk.riskEur;
+  const riskAccepted = risk.riskEur > 0 && c.condition_risk_accepted_by && Number(c.condition_risk_base ?? c.condition_risk_eur) === risk.riskEur;
   await ctx.db.query(
     `UPDATE contracts SET diff = $2, condition_risk_eur = $3, condition_risk_note = $4, status = $5,
-       condition_risk_accepted_by = CASE WHEN $6::boolean THEN condition_risk_accepted_by ELSE NULL END WHERE id = $1`,
-    [id, JSON.stringify(diff), risk.riskEur, risk.note, status, !!riskAccepted]);
+       condition_risk_accepted_by = CASE WHEN $6::boolean THEN condition_risk_accepted_by ELSE NULL END, condition_risk_base = $7 WHERE id = $1`,
+    [id, JSON.stringify(diff), Math.round(eurEquivalent(fx, risk.riskEur, base) * 100) / 100, risk.note, status, !!riskAccepted, risk.riskEur]);
   await expireDecisionsFor(ctx, 'contract', id);
   const supplier = (await ctx.db.query('SELECT name, email, contact_name FROM suppliers WHERE id = $1', [c.supplier_id])).rows[0];
 
@@ -221,7 +222,7 @@ export async function compareContract(ctx: Ctx, id: string): Promise<Contract> {
   if (risk.riskEur > 0 && !riskAccepted) {
     await createDecision(ctx, {
       projectId: p.id, kind: 'condition_risk', badge: 'critical', urgent: true,
-      summary: `${p.code}: karşılıklı koşul riski ${Math.round(risk.riskEur).toLocaleString('tr-TR')} EUR`,
+      summary: `${p.code}: karşılıklı koşul riski ${Math.round(risk.riskEur).toLocaleString('tr-TR')} ${base}`,
       detail: { contractId: id, riskEur: risk.riskEur, note: risk.note, supplierPrepaymentRate: fields.prepaymentRate ?? snap.prepaymentRate, customerDepositRate: customer?.rules.depositRate ?? 0 },
       aiNote: risk.note, requiredRole: 'admin', entityType: 'contract', entityId: id, primaryActionLabel: 'Riski kabul et',
     });
@@ -240,7 +241,7 @@ export async function requestContractApproval(ctx: Ctx, id: string): Promise<voi
   await createDecision(ctx, {
     projectId: p.id, kind: 'contract_approval', badge: (c.diff ?? []).length ? 'critical' : 'within_rules',
     summary: `${p.code}: ${supplier?.name ?? ''} sözleşmesi temiz — imzaya onay`,
-    detail: { contractId: id, totalAmount: c.fields?.totalAmount, currency: c.fields?.currency, diffInfo: c.diff, conditionRiskEur: c.condition_risk_eur },
+    detail: { contractId: id, totalAmount: c.fields?.totalAmount, currency: c.fields?.currency, diffInfo: c.diff, conditionRiskEur: c.condition_risk_base ?? c.condition_risk_eur },
     requiredRole: 'admin', entityType: 'contract', entityId: id,
   });
 }
@@ -359,21 +360,22 @@ export async function amendContract(ctx: Ctx, id: string, input: { changes: Part
   await ctx.db.query(`UPDATE contracts SET status = 'amended', superseded_by = $2 WHERE id = $1`, [id, row.id]);
   // change flow: cost/sale/margin impact
   const rules = await ctx.rules();
-  const fx = await currentFx(ctx.db);
+  const base = (await getProjectRow(ctx, c.project_id)).base_currency ?? 'EUR';
+  const fx = await currentFx(ctx.db, base);
   const oldF = c.fields as ContractFields;
   const before = oldF.totalAmount != null && oldF.currency ? toEur(fx, oldF.totalAmount, oldF.currency) : 0;
   const after = fields.totalAmount != null && fields.currency ? toEur(fx, fields.totalAmount, fields.currency) : before;
   // sale = NET (ex VAT / accommodation tax) sale of the contract's items in the accepted option — same basis as the supplier
   // contract total, so margin (Kâr÷Satış) is not overstated by the VAT inside the receivable
   const sale = (await ctx.db.query(
-    `SELECT COALESCE(sum(ql.unit_price_eur * ql.quantity * GREATEST(COALESCE(ql.nights, 1), 1)), 0) AS s FROM quote_lines ql JOIN quotes q ON q.id = ql.quote_id
+    `SELECT COALESCE(sum(COALESCE(ql.unit_price_base, ql.unit_price_eur) * ql.quantity * GREATEST(COALESCE(ql.nights, 1), 1)), 0) AS s FROM quote_lines ql JOIN quotes q ON q.id = ql.quote_id
       WHERE q.id = $1 AND ql.option_no = q.accepted_option_no AND ql.service_item_id = ANY($2::uuid[])`, [c.quote_id, c.service_item_ids])).rows[0].s;
   const impact = changeImpact({ costEur: before, saleEur: Number(sale) }, { costEur: after, saleEur: Number(sale) }, rules.targetMarginMin);
   const p = await getProjectRow(ctx, c.project_id);
   await ctx.db.query(
     `INSERT INTO tasks (tenant_id, project_id, assignee_id, kind, title, source, origin_key, entity_type, entity_id)
      VALUES (app_tenant_id(), $1, $2, 'change_flow', $3, 'rule', $4, 'contract', $5) ON CONFLICT (tenant_id, origin_key) DO NOTHING`,
-    [p.id, p.owner_id, `${p.code}: ek protokol (${input.reason}) — maliyet farkı ${Math.round(impact.deltaCostEur)} EUR, yeni marj %${Math.round(impact.newMargin * 100)}; müşteriye yansıtma kararı`, `contract:${row.id}:change_flow`, row.id]);
+    [p.id, p.owner_id, `${p.code}: ek protokol (${input.reason}) — maliyet farkı ${Math.round(impact.deltaCostEur)} ${base}, yeni marj %${Math.round(impact.newMargin * 100)}; müşteriye yansıtma kararı`, `contract:${row.id}:change_flow`, row.id]);
   if (impact.belowTarget) {
     await createDecision(ctx, {
       projectId: p.id, kind: 'condition_risk', badge: 'critical', urgent: true,

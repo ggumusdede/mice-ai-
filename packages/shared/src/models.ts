@@ -281,7 +281,7 @@ export interface OfferEvaluation {
   priceClass: PriceClass;
   /** accommodation: (channel - net)/channel ; others: (median - price)/median */
   advantage: number | null;
-  benchmark: { type: 'channel' | 'history_median' | 'none'; value: number | null; sampleSize?: number };
+  benchmark: { type: 'channel' | 'history_median' | 'contract' | 'none'; value: number | null; sampleSize?: number };
   suggestedMarkup: number | null;
   risks: string[];
   candidateSupplier: boolean;
@@ -495,6 +495,15 @@ export interface Decision {
   decidedDevice: string | null;
   viaDelegation: boolean;
   createdAt: ISODateTime;
+  /** v0.5 S-01 / S-13 (additive): the person the card is routed to (on-call / escalation / busy-deputy); null = role-based */
+  assignedTo?: ID | null;
+  assignedToName?: string | null;
+  /** 0 = first assignee; +1 per escalation step (nöbetçi → vekili → yönetici) */
+  escalationLevel?: number;
+  /** deadline-linked card (option expiry, ticket time limit, release date …) */
+  deadlineAt?: ISODateTime | null;
+  /** S-13: routed to the approver's deputy before the deadline (never auto-approved) */
+  routedToDeputy?: boolean;
 }
 
 export interface DecisionInput {
@@ -621,7 +630,9 @@ export interface MessageDraft {
   id: ID;
   tenantId: ID;
   projectId: ID | null;
-  kind: 'missing_info' | 'rfq' | 'rfq_reminder' | 'negotiation' | 'quote_cover' | 'quote_followup' | 'option_extension' | 'revision_request' | 'supplier_confirmation' | 'daily_summary' | 'other';
+  kind: 'missing_info' | 'rfq' | 'rfq_reminder' | 'negotiation' | 'quote_cover' | 'quote_followup' | 'option_extension' | 'revision_request' | 'supplier_confirmation' | 'daily_summary' | 'other'
+    /** v0.5 S-01 hazır şablon / tahsilat hatırlatması (additive) */
+    | 'quick_template' | 'collection_reminder';
   channel: 'email' | 'whatsapp' | 'sms';
   to: string | null;
   subject: string | null;

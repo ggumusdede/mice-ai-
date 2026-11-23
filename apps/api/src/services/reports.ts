@@ -5,7 +5,7 @@ import type { Ctx } from '../context.js';
 import { badRequest } from '../errors.js';
 import { addDaysIso } from '../lib/dates.js';
 import { logAiAction } from './ai-log.js';
-import { currentFx, toEur } from './fx.js';
+import { agencyBase, currentFx, toEur } from './fx.js';
 import { canSeeFinancials } from './visibility.js';
 import { projectRealizedFx } from './realized-fx.js';
 
@@ -88,7 +88,9 @@ export async function weeklyReport(ctx: Ctx, weekStart?: string): Promise<Weekly
   const evn = (e: string) => ev.find((x) => x.event === e)?.n ?? 0;
   const sampled = (await ctx.db.query(`SELECT count(*)::int AS n FROM decisions WHERE kind = 'audit_sample' AND created_at >= $1 AND created_at < $2`, [from, to])).rows[0].n;
 
-  const fx = await currentFx(ctx.db);
+  // v0.5 S-19: agency-level report → the agency's CURRENT base currency, rate source shown
+  const agency = await agencyBase(ctx.db);
+  const fx = await currentFx(ctx.db, agency);
   const unreflectedTry = Number((await ctx.db.query(
     `SELECT COALESCE(sum(amount_try), 0) AS s FROM field_extras WHERE reflected_to_customer = false AND COALESCE(reflected_at, created_at) >= $1 AND COALESCE(reflected_at, created_at) < $2`, [from, to])).rows[0].s);
 
@@ -114,6 +116,7 @@ export async function weeklyReport(ctx: Ctx, weekStart?: string): Promise<Weekly
     quotes: { won: outcomes.filter((o) => o.outcome === 'won').length, lost: outcomes.filter((o) => o.outcome === 'lost').length, lostReasons: [...lostReasons.entries()].map(([reason, count]) => ({ reason, count })) },
     automation: { autoCount: evn('auto_executed'), sampled, sampleErrors: evn('sample_error'), demotions: evn('demoted') },
     unreflectedPriceDiffEur: r2(toEur(fx, unreflectedTry, 'TRY')),
+    baseCurrency: agency as WeeklyReport['baseCurrency'], fxNote: agency === 'TRY' ? null : `${fx.source} ${fx.date}`,
     pending: { rules: pn('rule_suggestion'), automations: pn('automation_promotion'), checklist: pn('checklist_question') },
     styleUpdate: await monthlyStyleUpdate(ctx, ws),
     rfqOverrides,
@@ -209,6 +212,11 @@ export async function teamPerformance(ctx: Ctx, q: { from?: string; to?: string 
   const toTs = startOfLocalDate(to, tz, 1); // inclusive end day
   if ((toTs.getTime() - fromTs.getTime()) / 86_400_000 > MAX_SPAN_DAYS) throw badRequest('Dönem en fazla 5 yıl olabilir', undefined, 'INVALID_PERIOD');
   const fin = await canSeeFinancials(ctx);
+  // v0.5 S-19: projects may have different base currencies — summed through their EUR equivalent (*_eur) and shown in the agency's
+  // CURRENT base currency at today's system rate (source shown in fxNote)
+  const agency = await agencyBase(ctx.db);
+  const eurFx = await currentFx(ctx.db);
+  const kAgency = agency === 'EUR' ? 1 : eurFx.rates[agency] ?? 1;
 
   const acc = new Map<string, PerfAcc>();
   const a = (uid: string) => { let x = acc.get(uid); if (!x) acc.set(uid, (x = emptyAcc())); return x; };
@@ -325,8 +333,8 @@ export async function teamPerformance(ctx: Ctx, q: { from?: string; to?: string 
       avgQuoteBusinessHours: qh == null ? null : r2(qh), quoteTargetBusinessHours: targetHours,
       onTargetRate: x.quoteHours.length ? r3(x.onTarget / x.quoteHours.length) : null,
       avgPlannedMargin: fin && m != null ? r3(m) : null, avgPlannedMarkup: fin && mk != null ? r3(mk) : null,
-      plannedProfitEur: fin && x.margins.length ? r2(x.plannedProfit) : null,
-      realizedProfitEur: fin && x.realizedProjects ? r2(x.realizedEur) : null,
+      plannedProfitEur: fin && x.margins.length ? r2(x.plannedProfit * kAgency) : null,
+      realizedProfitEur: fin && x.realizedProjects ? r2(x.realizedEur * kAgency) : null,
       realizedProfitTry: fin && x.realizedTryKnown ? r2(x.realizedTry) : null,
       realizedProjects: fin ? x.realizedProjects : 0, realizedTryMissing: fin ? x.realizedTryMissing : 0,
       quotesBuilt: x.quotesBuilt, quotesReviewed: x.quotesReviewed, quotesCorrected: x.quotesCorrected,
@@ -348,7 +356,7 @@ export async function teamPerformance(ctx: Ctx, q: { from?: string; to?: string 
     }
   }
   const totals = toRow(all);
-  return { from, to, financialsVisible: fin, rows, totals };
+  return { from, to, financialsVisible: fin, rows, totals, baseCurrency: agency as TeamPerformanceReport['baseCurrency'], fxNote: agency === 'EUR' ? null : `1 EUR = ${kAgency} ${agency} (${eurFx.source} ${eurFx.date})` };
 }
 
 /** Realized profit in TRY from the evidence-based realized-FX feature (null = no proof / feature unavailable — degrade gracefully). */

@@ -16,6 +16,9 @@ import { applyRuleSuggestionDecision } from './rule-suggestions.js';
 import { badRequest, forbidden } from '../errors.js';
 import { negotiationDraftViolations } from '@mice/domain';
 import { registerPhaseB } from './phase-b-registry.js';
+import { baseCurrencyChangeEffect } from './settings.js';
+import { allotmentReleaseEffect, optionExpiryEffect } from './procurement.js';
+import { registerTeamControl } from './team-control.js';
 
 let registered = false;
 
@@ -59,6 +62,7 @@ export function registerAll(): void {
   if (registered) return;
   registered = true;
   registerQuoteDocuments();
+  registerTeamControl(); // v0.5 S-01: outbound cards → on-call person
 
   registerDecisionEffect('quote_approval', async (ctx, d, input) => {
     const quoteId = d.entity_id as string;
@@ -158,4 +162,8 @@ export function registerAll(): void {
   // phase B: payment_approval, field_extra, low_confidence_review (bank match), unbilled_payment_escalation,
   // low_supplier_score, closing_overdue effects + customer_invoice_draft generator + notification hook
   registerPhaseB();
+  // v0.5-A para ve tedarik çekirdeği (S-19 ana para birimi, S-03 release / opsiyon kartları) — human decisions only
+  registerDecisionEffect('base_currency_change', (ctx, d, input) => baseCurrencyChangeEffect(ctx, d, input));
+  registerDecisionEffect('allotment_release', (ctx, d, input) => allotmentReleaseEffect(ctx, d, input));
+  registerDecisionEffect('supplier_option_expiry', (ctx, d, input) => optionExpiryEffect(ctx, d, input));
 }

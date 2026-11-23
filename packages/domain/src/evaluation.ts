@@ -1,6 +1,7 @@
 // §7 Adım 2 + §9: iyi fiyat / normal fiyat / bilmiyorum
 import type { OfferEvaluation, NormalizedOffer, ServiceKind, TenantRules, SupplierStatus, PriceClass } from '@mice/shared';
 import { channelAdvantage, markupForAdvantage } from './pricing.js';
+import { contractAdvantage } from './procurement.js';
 
 export interface ChannelBenchmark {
   /** channel price per room-night in EUR under IDENTICAL conditions (date, room type, board, cancellation) */
@@ -23,6 +24,10 @@ export interface EvaluateInput {
   /** (additive, §16.5) supplier × season markup override (see seasonalMarkupFor). Used ONLY when the price class is
    *  unknown, instead of the lowest tier. A measured advantage always goes through the tier table. */
   seasonalMarkup?: number | null;
+  /** (additive, v0.5 S-03 / K-11) agreed contract price on the same basis as the offer (accommodation: per room-night; others: the
+   *  same unit basis as unitPriceEur), in the same (base) currency. The comparison anchor: shown as "kontrat fiyatı"; when no channel /
+   *  history benchmark exists it decides the price class (at or below contract → normal / good). */
+  contract?: { contractRateId: string; price: number; label?: string } | null;
 }
 
 /** Lowest-tier markup (used when the price class is unknown — never guess a higher margin). */
@@ -76,6 +81,23 @@ export function evaluateOffer(input: EvaluateInput): OfferEvaluation {
     }
   }
 
+  // v0.5 K-11: contract price is the anchor ("kıyasta çıpa kontrat fiyatıdır")
+  let contractBenchmark: OfferEvaluation['contractBenchmark'] = null;
+  if (input.contract && input.contract.price > 0) {
+    const offerPrice = input.kind === 'accommodation' ? n.perRoomNightEur : input.unitPriceEur ?? n.perPersonPerDayEur ?? n.perPersonEur ?? n.totalNetExVatEur;
+    const cAdv = contractAdvantage(input.contract.price, offerPrice);
+    contractBenchmark = {
+      contractRateId: input.contract.contractRateId, price: input.contract.price, basis: input.kind === 'accommodation' ? 'room_night' : 'unit',
+      advantage: cAdv, label: input.contract.label ?? 'Kontrat fiyatı',
+    };
+    if (cAdv != null && cAdv < -1e-9) risks.push(`Teklif kontrat fiyatının %${Math.round(-cAdv * 1000) / 10} üzerinde — kontrat fiyatını hatırlatın.`);
+    if (advantage == null && cAdv != null) {
+      advantage = cAdv;
+      benchmark = { type: 'contract', value: input.contract.price };
+      priceClass = cAdv >= rules.goodPriceVsMedian - 1e-9 ? 'good' : 'normal';
+    }
+  }
+
   let suggestedMarkup: number | null;
   if (input.valueAdd) {
     suggestedMarkup = null; // §17.4: kademe tablosu uygulanmaz
@@ -96,7 +118,7 @@ export function evaluateOffer(input: EvaluateInput): OfferEvaluation {
     if (hc.severity !== 'info') risks.push(hc.description);
   }
 
-  return { offerId: n.offerId, normalized: n, priceClass, advantage, benchmark, suggestedMarkup, risks, candidateSupplier };
+  return { offerId: n.offerId, normalized: n, priceClass, advantage, benchmark, suggestedMarkup, risks, candidateSupplier, ...(input.contract ? { contractBenchmark } : {}) };
 }
 
 export function median(values: number[]): number | null {

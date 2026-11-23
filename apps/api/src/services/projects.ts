@@ -14,6 +14,7 @@ import { evaluateItemOffers } from './offers.js';
 import { loadQuotes } from './quotes.js';
 import { logAiAction } from './ai-log.js';
 import { projectRealizedFx } from './realized-fx.js';
+import { currentFx } from './fx.js';
 import { canSeeFinancials, redactAudit, redactProjectDetail, redactSimilar } from './visibility.js';
 
 export async function getProjectRow(ctx: Ctx, id: string, forUpdate = false): Promise<Row> {
@@ -212,7 +213,7 @@ export async function projectDetail(ctx: Ctx, id: string): Promise<ProjectDetail
 
   const expected: ProfitSummary | null = refOption ? refOption.totals : null;
   const fin = (await ctx.db.query(
-    `SELECT kind, sum(amount_eur) AS s FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled'
+    `SELECT kind, sum(COALESCE(amount_base, amount_eur)) AS s FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled'
        AND kind IN ('supplier_invoice','customer_invoice') GROUP BY kind`, [id])).rows;
   const cost = fin.find((r) => r.kind === 'supplier_invoice')?.s;
   const sale = fin.find((r) => r.kind === 'customer_invoice')?.s;
@@ -269,13 +270,16 @@ export async function similarProjects(ctx: Ctx, id: string): Promise<SimilarProj
      ORDER BY (p.customer_id = $2) DESC NULLS LAST, p.received_at DESC LIMIT 10`,
     [id, p.customer_id, p.event_type, p.pax, p.district],
   );
+  // v0.5 S-19: projects may have different base currencies — compared through the EUR equivalent (*_eur), shown in THIS project's base
+  const base: string = p.base_currency ?? 'EUR';
+  const k = base === 'EUR' ? 1 : (await currentFx(ctx.db)).rates[base] ?? null;
   const out = rows.map((r) => {
     // §8 imported past projects carry their verified totals (no quotes in the system)
     const sale = r.sale != null ? Number(r.sale) : r.historical_sale_eur != null ? Number(r.historical_sale_eur) : null;
     const cost = r.cost != null ? Number(r.cost) : r.historical_cost_eur != null ? Number(r.historical_cost_eur) : null;
     return {
       projectId: r.id, code: r.code, customerName: r.customer_name, eventType: r.event_type, pax: r.pax, outcome: r.outcome,
-      totalSaleEur: sale != null ? Math.round(sale * 100) / 100 : null,
+      totalSaleEur: sale != null && k != null ? Math.round(sale * k * 100) / 100 : null,
       margin: sale && cost != null ? (sale - cost) / sale : null, lostReason: r.lost_reason,
     };
   });

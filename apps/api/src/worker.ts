@@ -67,7 +67,7 @@ async function execute(ctx: Ctx, a: FollowupAction, now: Date): Promise<string> 
       if (!r) return 'skip';
       await ctx.db.query('UPDATE rfqs SET reminder_sent_at = $2 WHERE id = $1', [a.rfqId, now]);
       if (r.email && r.sender_email) {
-        const tpl = (RFQ_REMINDER_TEMPLATE[r.language] ?? RFQ_REMINDER_TEMPLATE.tr)({ contact: r.contact_name ?? r.supplier_name, code: await supplierRef(ctx, r.code), item: r.description, sender: r.sender_name });
+        const tpl = (RFQ_REMINDER_TEMPLATE[r.language] ?? RFQ_REMINDER_TEMPLATE.tr)({ contact: r.contact_name ?? r.supplier_name, code: await supplierRef(ctx, r.code, r.supplier_id), item: r.description, sender: r.sender_name });
         await ctx.deps.email.send(ctx.db, { tenantId: ctx.tenantId, projectId: r.project_id, from: r.sender_email, to: r.email, subject: tpl.subject, body: tpl.body, autonomous: true });
         await logAiAction(ctx, { actionType: 'supplier_rfq_reminder', projectId: r.project_id, entityType: 'rfq', entityId: r.id, result: { confidence: 1, model: 'template', data: { template: r.language } } });
       }
@@ -111,7 +111,7 @@ async function execute(ctx: Ctx, a: FollowupAction, now: Date): Promise<string> 
       await task(ctx, { projectId: o.project_id, assigneeId: o.owner_id, kind: 'option_expiry', title: `${o.code}: ${o.supplier_name} opsiyonu ${a.optionUntil} tarihinde bitiyor`, originKey: `offer:${o.id}:option`, entityType: 'supplier_offer', entityId: o.id, dueAt: now });
       const draft = await aiDraft(ctx, {
         kind: 'option_extension', language: 'tr', recipientName: o.contact_name ?? o.supplier_name,
-        facts: { projectCode: await supplierRef(ctx, o.code), optionUntil: a.optionUntil },
+        facts: { projectCode: await supplierRef(ctx, o.code, o.supplier_id), optionUntil: a.optionUntil },
       }, { projectId: o.project_id, to: o.email, status: 'pending_approval', requiresApproval: true, fromUserId: o.owner_id, entityType: 'supplier_offer', entityId: o.id });
       await aiGate(ctx, 'option_extension_request', {
         projectId: o.project_id, kind: 'outbound_message', badge: 'critical', urgent: true,

@@ -12,6 +12,8 @@ import { pushRoutes } from './push.js';
 import { inboundRoutes, inboundStaffRoutes } from './inbound.js';
 import { importRoutes } from './import.js';
 import { integrationRoutes } from './integrations.js';
+import { teamRoutes } from './team.js';
+import { procurementRoutes } from './procurement.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/health (liveness + db status), GET /api/ready (readiness)
@@ -34,4 +36,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(integrationRoutes);
   // §8 initial historical data import (admin only)
   await app.register(importRoutes);
+  // v0.5-A ekip, iletişim ve kontrol (hızlı onay, nöbet, ekipler, devir-teslim, saha paketi, istisnalar)
+  await app.register(teamRoutes);
+  // v0.5-A para ve tedarik çekirdeği: settings (base currency), contract rates, allotments, supplier options
+  await app.register(procurementRoutes);
 }

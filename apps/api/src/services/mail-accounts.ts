@@ -24,6 +24,8 @@ import { purposeKey, signToken, verifyToken } from '../lib/signed-token.js';
 import { retryDelayMs } from './email-smtp.js';
 import { HttpError, formBody, httpCall, isRetryableStatus } from './integrations-http.js';
 import { getNotificationService } from './notifications.js';
+import { isCorporateAddress } from '@mice/domain';
+import { loadRules } from './rules.js';
 
 export type MailOAuthProvider = 'google' | 'microsoft';
 export const MAIL_OAUTH_PROVIDERS: MailOAuthProvider[] = ['google', 'microsoft'];
@@ -76,6 +78,7 @@ const stateKey = (secret: string) => purposeKey(secret, 'mail-oauth-state');
 export async function startMailOAuth(ctx: Ctx, provider: MailOAuthProvider, cfg: OAuthMailConfig): Promise<{ url: string; expiresAt: string }> {
   const user = ctx.user;
   if (!user) throw forbidden('Giriş gerekli');
+  await assertCorporateMailbox(ctx.db, user.id, user.email);
   const c = client(provider, cfg);
   const ep = providerEndpoints(provider, cfg);
   const now = ctx.now();
@@ -148,6 +151,11 @@ export async function completeMailOAuth(
   return withTenant(s.t, { type: 'user', id: s.u }, async (db) => {
     const u = (await db.query('SELECT id, email, active FROM users WHERE id = $1', [s.u])).rows[0];
     if (!u || !u.active) throw new OAuthCallbackError('user_inactive');
+    try {
+      await assertCorporateMailbox(db, s.u, address);
+    } catch {
+      throw new OAuthCallbackError('personal_account_blocked', address);
+    }
     if (cfg.requireSameAddress && String(u.email).toLowerCase() !== address) throw new OAuthCallbackError('mailbox_mismatch', `${address} ≠ ${u.email}`);
     await db.query(
       `UPDATE user_mail_accounts SET status = 'disconnected', disconnected_at = $2, disconnected_reason = 'replaced', updated_at = $2 WHERE user_id = $1 AND status <> 'disconnected'`,
@@ -278,5 +286,17 @@ export async function notifyUserDirect(db: Db, userId: string, title: string, bo
   } catch (e) {
     await db.query('ROLLBACK TO SAVEPOINT notify_direct').catch(() => {});
     console.error('[mail-oauth] notification failed', (e as Error).message);
+  }
+}
+
+/** v0.5 S-09: only corporate mailboxes by default (personal providers / foreign domains refused); the admin can grant a per-user
+ *  exception (users.personal_account_allowed). Personal accounts are never read — personal WhatsApp / mail enters only through
+ *  "Projeye ilet". */
+export async function assertCorporateMailbox(db: Db, userId: string, address: string): Promise<void> {
+  const u = (await db.query('SELECT email, personal_account_allowed FROM users WHERE id = $1', [userId])).rows[0];
+  if (!u || u.personal_account_allowed) return;
+  const rules = await loadRules(db);
+  if (!isCorporateAddress(address, { corporateDomains: rules.corporateMailDomains ?? [], loginEmail: u.email })) {
+    throw forbidden('Yalnız kurumsal posta kutusu bağlanabilir; kişisel hesap için yöneticinizden istisna isteyin', 'PERSONAL_ACCOUNT_BLOCKED');
   }
 }

@@ -263,11 +263,13 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
     title: z.string().min(1),
     lines: z.array(z.object({ serviceItemId: z.string().uuid(), offerId: z.string().uuid().nullish(), markup: z.number().min(-0.5).max(5).optional(), unitPriceEur: z.number().nonnegative().optional() })).min(1),
   })).min(1).max(5);
+  // v0.5 S-07: quote FX policy (omitted fields → defaults)
+  const fxPolicy = z.object({ rateSource: z.string().max(100).optional(), rateDate: isoDate.optional(), validUntil: isoDate.optional(), bufferPct: z.number().min(0).max(0.5).optional() }).optional();
   app.post('/api/projects/:id/quotes', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(z.object({
       currency: z.string().optional(), optionUntil: isoDate.optional(), marginOverrideReason: z.string().optional(),
-      options: quoteOptions,
+      options: quoteOptions, fxPolicy,
     }), req.body);
     return asUser(req, (ctx) => buildQuote(ctx, id, body as never));
   });
@@ -275,7 +277,7 @@ export async function coreRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/quotes/:id/revise', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const body = parse(z.object({
-      currency: z.string().optional(), optionUntil: isoDate.optional(), marginOverrideReason: z.string().optional(), options: quoteOptions.optional(),
+      currency: z.string().optional(), optionUntil: isoDate.optional(), marginOverrideReason: z.string().optional(), options: quoteOptions.optional(), fxPolicy,
     }), req.body);
     return asUser(req, async (ctx) => {
       await assertFinancialsVisible(ctx);

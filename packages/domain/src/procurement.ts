@@ -20,7 +20,8 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLocaleLowerCas
  * The active contract rate valid on `date` for supplier × kind; room type / board must match when both sides state them
  * (an unstated room type on the rate = valid for every room type). The most specific match wins, then the latest validFrom.
  */
-export function findContractRate<T extends Pick<ContractRate, 'supplierId' | 'kind' | 'roomType' | 'board' | 'validFrom' | 'validTo' | 'status'>>(rates: T[], q: ContractRateQuery): T | null {
+export interface ContractRateLike { supplierId: string; kind: ContractRate['kind'] | string; roomType: string | null; board: string | null; validFrom: string; validTo: string; status: ContractRate['status'] | string }
+export function findContractRate<T extends ContractRateLike>(rates: T[], q: ContractRateQuery): T | null {
   if (!q.date) return null;
   const date = q.date.slice(0, 10);
   let best: { r: T; score: number } | null = null;

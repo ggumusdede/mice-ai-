@@ -5,7 +5,7 @@ import type {
   BuildQuoteRequest, Customer, ProfitSummary, PublicQuoteView, Quote, QuoteLine, QuoteOption, SupplierStatus,
 } from '@mice/shared';
 import {
-  addBusinessDays, markupForAdvantage, profitSummary, quoteNeedsApproval, revisionTargetStep, round2, roleCan, validateQuote,
+  addBusinessDays, fxBufferAmount, markupForAdvantage, profitSummary, quoteNeedsApproval, resolveFxPolicy, revisionTargetStep, round2, roleCan, validateQuote,
   type QuoteValidationIssue,
 } from '@mice/domain';
 import type { Ctx } from '../context.js';
@@ -14,7 +14,7 @@ import { badRequest, conflict, forbidden, gone, notFound } from '../errors.js';
 import { mapCustomer, mapQuoteBase, mapQuoteLine, mapServiceItem, type Row } from '../lib/mappers.js';
 import { isoDate, minIsoDate } from '../lib/dates.js';
 import { newPublicToken } from '../lib/crypto.js';
-import { currentFx, rateFor } from './fx.js';
+import { currentFx, eurEquivalent, rateFor } from './fx.js';
 import { evaluateItemOffers } from './offers.js';
 import { getProjectRow, setStep } from './projects.js';
 import { aiGate } from './automation.js';
@@ -28,6 +28,8 @@ import type { RealizedPnl } from './documents-b.js';
 export interface BuildQuoteInput extends BuildQuoteRequest {
   /** (additive) explicit customer option date; blocked if later than any supplier option (§7 Adım 3) */
   optionUntil?: string;
+  /** (internal, v0.5 D-1) the accepted quote this revision changes — it stays accepted until the customer accepts the revision */
+  revisesAcceptedQuoteId?: string | null;
 }
 
 interface OptionMeta { optionNo: number; title: string }
@@ -36,7 +38,7 @@ interface QuoteMeta { options: OptionMeta[]; accommodationTaxRate: number }
 const mult = (l: { quantity: number; nights: number | null }) => l.quantity * (l.nights && l.nights > 0 ? l.nights : 1);
 
 /** Option totals: margin (Kâr÷Satış) and markup (Kâr÷Alış) separate; VAT and accommodation tax separate. */
-export function assembleOption(optionNo: number, title: string, lines: QuoteLine[], accommodationTaxRate: number, fxRate: number): QuoteOption {
+export function assembleOption(optionNo: number, title: string, lines: QuoteLine[], accommodationTaxRate: number, fxRate: number, fxBufferPct = 0): QuoteOption {
   let cost = 0, sale = 0, vat = 0, accTax = 0;
   for (const l of lines) {
     const m = mult(l);
@@ -50,6 +52,8 @@ export function assembleOption(optionNo: number, title: string, lines: QuoteLine
   return {
     optionNo, title, lines, totals, vatEur: round2(vat), accommodationTaxEur: round2(accTax),
     grandTotalCustomerCurrency: round2((sale + vat + accTax) * fxRate),
+    // v0.5 S-07: internal FX buffer line (customer rate = market × (1 + buffer)); 0 when quote currency = base currency
+    fxBufferEur: fxBufferAmount(sale, fxBufferPct),
   };
 }
 
@@ -68,7 +72,7 @@ export async function loadQuotes(ctx: Ctx, f: { projectId?: string; id?: string 
   return rows.map((r) => {
     const meta = metaOf(r);
     const ql = lines.filter((l) => l.quote_id === r.id).map(mapQuoteLine);
-    const options = meta.options.map((o) => assembleOption(o.optionNo, o.title, ql.filter((l) => l.optionNo === o.optionNo), meta.accommodationTaxRate, Number(r.fx_rate)));
+    const options = meta.options.map((o) => assembleOption(o.optionNo, o.title, ql.filter((l) => l.optionNo === o.optionNo), meta.accommodationTaxRate, Number(r.fx_rate), Number(r.fx_policy?.bufferPct ?? 0)));
     return { ...mapQuoteBase(r), options };
   });
 }
@@ -100,10 +104,20 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
   const p = await getProjectRow(ctx, projectId, true);
   if (['lost', 'cancelled', 'closed'].includes(p.outcome)) throw conflict('Kapalı proje için teklif hazırlanamaz', 'PROJECT_CLOSED');
   const customer = await customerOf(ctx, p);
-  const fx = await currentFx(ctx.db);
-  const currency = (req.currency ?? customer?.rules.preferredCurrency ?? 'EUR').toUpperCase();
-  const fxRate = rateFor(fx, currency);
+  // v0.5 S-19: the project computes in its own base currency (fixed at creation)
+  const baseCurrency: string = p.base_currency ?? 'EUR';
+  const fx = await currentFx(ctx.db, baseCurrency);
+  const currency = (req.currency ?? customer?.rules.preferredCurrency ?? baseCurrency).toUpperCase();
+  const marketRate = rateFor(fx, currency);
+  // v0.5 S-07: mandatory FX policy — defaults filled (source/date of the current rate, buffer when currency ≠ base)
+  const fxPol = resolveFxPolicy({ baseCurrency, quoteCurrency: currency, marketRate, ...req.fxPolicy }, { rateSource: fx.source, rateDate: fx.date, validUntil: '9999-12-31', rules });
+  if (fxPol.errors.length) throw badRequest(`Kur politikası: ${fxPol.errors.join('; ')}`, fxPol.errors, 'FX_POLICY_INVALID');
+  const fxRate = fxPol.policy.customerRate;
   if (!req.options?.length) throw badRequest('En az bir seçenek gerekli', undefined, 'OPTIONS_REQUIRED');
+  // v0.5 S-03 / K-13: an extended supplier option replaces the offer's own option date
+  const optionDates = new Map<string, string>(
+    (await ctx.db.query(`SELECT offer_id, max(option_until)::text AS d FROM supplier_options WHERE project_id = $1 AND offer_id IS NOT NULL
+       AND status IN ('active','extension_requested','confirmed') GROUP BY offer_id`, [projectId])).rows.map((r) => [r.offer_id, r.d]));
 
   const itemIds = [...new Set(req.options.flatMap((o) => o.lines.map((l) => l.serviceItemId)))];
   const itemRows = (await ctx.db.query('SELECT * FROM service_items WHERE id = ANY($1) AND project_id = $2', [itemIds, projectId])).rows;
@@ -142,7 +156,7 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
         advantage = e.advantage;
         markup ??= e.suggestedMarkup ?? lowestMarkup;
         supplierId = offer.supplierId;
-        optionUntil = offer.optionUntil;
+        optionUntil = optionDates.get(offer.id) ?? offer.optionUntil;
         const st = ev.suppliers.find((s) => s.id === offer.supplierId)?.status ?? 'candidate';
         const prev = supplierStatusByItem[item.id];
         if (!prev || STATUS_RANK[st] > STATUS_RANK[prev]) supplierStatusByItem[item.id] = st;
@@ -168,13 +182,15 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
       lines.push(line);
       lineRows.push({ ...line, supplierId, suggestedMarkup, advantage });
     }
-    options.push(assembleOption(optionNo, opt.title, lines, rules.accommodationTaxRate, fxRate));
+    options.push(assembleOption(optionNo, opt.title, lines, rules.accommodationTaxRate, fxRate, fxPol.policy.bufferPct));
   }
 
   // option date: min(today + standard business days, earliest supplier option); explicit date may not exceed suppliers
   const standard = isoDate(addBusinessDays(ctx.now(), rules.customerOptionBusinessDays, rules.businessHours));
   const earliestSupplier = minIsoDate(...lineRows.map((l) => l.supplierOptionUntil));
   const optionUntil = req.optionUntil ?? minIsoDate(standard, earliestSupplier);
+  const fxPolicy = { ...fxPol.policy, validUntil: req.fxPolicy?.validUntil?.slice(0, 10) ?? optionUntil ?? fxPol.policy.validUntil };
+  if (fxPolicy.validUntil < fxPolicy.rateDate) throw badRequest('Kur politikası: geçerlilik tarihi kur tarihinden önce olamaz', undefined, 'FX_POLICY_INVALID');
 
   const isAdminOverride = user.role === 'admin' && !!req.marginOverrideReason?.trim();
   const validation = validateQuote({
@@ -188,28 +204,34 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
   const status = validation.blocked ? 'blocked' : needsApproval ? 'pending_approval' : 'approved';
 
   // supersede previous versions
-  const prev = (await ctx.db.query(`SELECT id FROM quotes WHERE project_id = $1 AND status <> 'superseded'`, [projectId])).rows;
+  // v0.5 D-1: a revision of an ACCEPTED quote leaves the accepted version in force until the customer accepts the revision
+  const prev = (await ctx.db.query(`SELECT id FROM quotes WHERE project_id = $1 AND status <> 'superseded' AND ($2::uuid IS NULL OR status <> 'accepted')`,
+    [projectId, req.revisesAcceptedQuoteId ?? null])).rows;
   const version = (await ctx.db.query('SELECT COALESCE(max(version), 0) + 1 AS v FROM quotes WHERE project_id = $1', [projectId])).rows[0].v;
   const meta: QuoteMeta = { options: options.map((o) => ({ optionNo: o.optionNo, title: o.title })), accommodationTaxRate: rules.accommodationTaxRate };
   const q = (await ctx.db.query(
     `INSERT INTO quotes (tenant_id, project_id, version, status, currency, fx_rate, fx_source, fx_date, option_until, options_meta,
-       applied_customer_rules, block_reasons, validation, requires_approval, created_by, approved_by, approved_at, margin_override_reason, margin_override_by)
-     VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-    [projectId, version, status, currency, fxRate, fx.source, fx.date, optionUntil, JSON.stringify(meta),
+       applied_customer_rules, block_reasons, validation, requires_approval, created_by, approved_by, approved_at, margin_override_reason, margin_override_by,
+       base_currency, fx_policy, revises_accepted_quote_id)
+     VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
+    [projectId, version, status, currency, fxRate, fxPolicy.rateSource, fxPolicy.rateDate, optionUntil, JSON.stringify(meta),
       JSON.stringify(validation.appliedCustomerRules), JSON.stringify(blocking.map((b) => b.message)), JSON.stringify(validation),
       needsApproval, user.id, status === 'approved' ? user.id : null, status === 'approved' ? ctx.now() : null,
-      isAdminOverride ? req.marginOverrideReason : null, isAdminOverride ? user.id : null],
+      isAdminOverride ? req.marginOverrideReason : null, isAdminOverride ? user.id : null,
+      baseCurrency, JSON.stringify(fxPolicy), req.revisesAcceptedQuoteId ?? null],
   )).rows[0];
   let sort = 0;
   for (const l of lineRows) {
     await ctx.db.query(
       `INSERT INTO quote_lines (tenant_id, quote_id, option_no, service_item_id, offer_id, supplier_id, description, kind, quantity, unit, nights,
-         unit_cost_eur, unit_price_eur, markup, vat_rate, value_add, supplier_option_until, sort, suggested_markup, advantage)
-       VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-      [q.id, l.optionNo, l.serviceItemId, l.offerId, l.supplierId, l.description, l.kind, l.quantity, l.unit, l.nights, l.unitCostEur,
-        l.unitPriceEur, l.markup, l.vatRate, l.valueAdd, l.supplierOptionUntil, sort++,
+         unit_cost_eur, unit_price_eur, markup, vat_rate, value_add, supplier_option_until, sort, suggested_markup, advantage, unit_cost_base, unit_price_base)
+       VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+      [q.id, l.optionNo, l.serviceItemId, l.offerId, l.supplierId, l.description, l.kind, l.quantity, l.unit, l.nights,
+        // v0.5 S-19: *_base = project base currency; deprecated *_eur keeps the EUR equivalent
+        Math.round(eurEquivalent(fx, l.unitCostEur, baseCurrency) * 10000) / 10000, Math.round(eurEquivalent(fx, l.unitPriceEur, baseCurrency) * 10000) / 10000, l.markup, l.vatRate, l.valueAdd, l.supplierOptionUntil, sort++,
         l.suggestedMarkup == null ? null : Math.round(l.suggestedMarkup * 10000) / 10000,
-        l.advantage == null || !Number.isFinite(l.advantage) ? null : Math.max(-9999, Math.min(9999, Math.round(l.advantage * 10000) / 10000))],
+        l.advantage == null || !Number.isFinite(l.advantage) ? null : Math.max(-9999, Math.min(9999, Math.round(l.advantage * 10000) / 10000)),
+        l.unitCostEur, l.unitPriceEur],
     );
   }
   for (const pr of prev) {
@@ -235,7 +257,7 @@ export async function buildQuote(ctx: Ctx, projectId: string, req: BuildQuoteInp
   } else if (needsApproval) {
     await aiGate(ctx, 'customer_quote', {
       projectId, kind: 'quote_approval', badge: warnings.length ? 'critical' : 'within_rules',
-      summary: `${p.code} v${version}: ${options.map((o) => `${o.title} ${money(o.totals.saleEur, 'EUR')} (marj ${pct(o.totals.margin)})`).join(' · ')}`,
+      summary: `${p.code} v${version}${req.revisesAcceptedQuoteId ? ' (kabul edilmiş teklifin revizyonu — müşteri yeniden onaylayacak)' : ''}: ${options.map((o) => `${o.title} ${money(o.totals.saleEur, baseCurrency)} (marj ${pct(o.totals.margin)})`).join(' · ')}`,
       // §15: rule-compliant quote → one tap; otherwise ONLY the out-of-rule items are shown
       detail: {
         quoteId: q.id, outOfRule: warnings, appliedCustomerRules: validation.appliedCustomerRules, optionUntil, createdBy: user.fullName,
@@ -284,13 +306,17 @@ export async function reviseQuote(ctx: Ctx, quoteId: string, patch: Partial<Buil
   requireUser(ctx);
   const row = await getQuoteRow(ctx, quoteId, true);
   if (row.status === 'superseded' || row.superseded_by) throw conflict('Bu revizyonun daha yeni bir sürümü var; en son revizyonu revize edin', 'QUOTE_NOT_LATEST', { latestQuoteId: row.superseded_by ?? null });
-  if (row.status === 'accepted') throw conflict('Kabul edilmiş teklif buradan revize edilemez (sözleşme / değişiklik akışı)', 'QUOTE_ACCEPTED');
+  // v0.5 D-1 (ürün sahibi kararı): an accepted quote CAN be revised — Rev.N needs the customer's re-approval (new link); the accepted
+  // version stays in force until then. A pending revision of an accepted quote carries the link forward.
+  const revisesAcceptedQuoteId: string | null = row.status === 'accepted' ? row.id : row.revises_accepted_quote_id ?? null;
   const base = await revisionRequestOf(ctx, await getQuote(ctx, quoteId));
   const req: BuildQuoteInput = {
     currency: patch.currency ?? base.currency,
     options: patch.options?.length ? patch.options : base.options,
     ...(patch.marginOverrideReason ? { marginOverrideReason: patch.marginOverrideReason } : {}),
     ...(patch.optionUntil ? { optionUntil: patch.optionUntil } : {}),
+    ...(patch.fxPolicy ? { fxPolicy: patch.fxPolicy } : row.fx_policy ? { fxPolicy: { bufferPct: Number(row.fx_policy.bufferPct ?? 0) } } : {}),
+    revisesAcceptedQuoteId,
   };
   return buildQuote(ctx, row.project_id, req);
 }
@@ -428,6 +454,7 @@ export async function publicAccept(ctx: Ctx, id: string, input: { optionNo: numb
       await ctx.db.query(`UPDATE service_items SET selected_offer_id = $2, status = 'selected' WHERE id = $1 AND selected_offer_id IS DISTINCT FROM $2`, [l.serviceItemId, l.offerId]);
     }
   }
+  if (q.revises_accepted_quote_id) await acceptRevisionOfAccepted(ctx, q, p);
   if (firm) {
     await ctx.db.query(`UPDATE projects SET outcome = 'won', step = GREATEST(step, 5) WHERE id = $1`, [p.id]);
   } else {
@@ -437,6 +464,20 @@ export async function publicAccept(ctx: Ctx, id: string, input: { optionNo: numb
       [p.id, p.owner_id, `${p.code}: müşteri online seçti — imzalı onay formu / PO bekleniyor`, `quote:${id}:signed_form`, id]);
   }
   return { ok: true, firm };
+}
+
+/** v0.5 D-1: the customer accepted a revision of an accepted quote → the earlier accepted version is superseded; with a signed
+ *  contract the change goes through the ek protokol (amendment) flow: one task per signed contract, linked to the contract. */
+async function acceptRevisionOfAccepted(ctx: Ctx, q: Row, p: Row): Promise<void> {
+  await ctx.db.query(`UPDATE quotes SET status = 'superseded', superseded_by = $2 WHERE project_id = $1 AND status = 'accepted' AND id <> $2`, [p.id, q.id]);
+  const signed = (await ctx.db.query(
+    `SELECT c.id, s.name FROM contracts c JOIN suppliers s ON s.id = c.supplier_id WHERE c.project_id = $1 AND c.superseded_by IS NULL AND c.status IN ('signed','amended')`, [p.id])).rows;
+  for (const c of signed) {
+    await ctx.db.query(
+      `INSERT INTO tasks (tenant_id, project_id, assignee_id, kind, title, source, origin_key, entity_type, entity_id)
+       VALUES (app_tenant_id(), $1, $2, 'contract_amendment', $3, 'rule', $4, 'contract', $5) ON CONFLICT (tenant_id, origin_key) DO NOTHING`,
+      [p.id, p.owner_id, `${p.code}: müşteri Rev.${q.version}'i onayladı — ${c.name} sözleşmesi imzalı: ek protokol hazırlayın`, `quote:${q.id}:amend:${c.id}`, c.id]);
+  }
 }
 
 /** Staff records the signed form / PO for 'signed_or_po' customers → firm approval. */
@@ -513,6 +554,16 @@ function registerQuoteDocuments(): void {
       clauses.push('Ödeme: konfirmasyonla birlikte sözleşmede belirtilen takvime göre.', 'İptal: tedarikçi iptal koşulları geçerlidir; detaylar sözleşmede.');
     }
     for (const c of customer?.rules.specialClauses ?? []) clauses.push(c);
+    // v0.5 S-07: FX buffer is internal — the customer sees the rate only when the agency rule says so; optional FX clause
+    const base = quote.baseCurrency ?? 'EUR';
+    const pol = quote.fxPolicy ?? null;
+    const buffer = Number(pol?.bufferPct ?? 0);
+    if (rules.showFxClauseOnQuote && cur !== base) {
+      clauses.push(`${rules.quoteFxClauseText} Kur esası: ${quote.fxSource} ${quote.fxDate}; geçerlilik: ${pol?.validUntil ?? quote.optionUntil ?? '-'}.`);
+    }
+    const fxLine = cur === base ? cur
+      : buffer > 0 && !rules.showFxBufferToCustomer ? `${cur} (fiyatlar ${pol?.validUntil ?? quote.optionUntil ?? '-'} tarihine kadar sabit)`
+        : `${cur} (1 ${base} = ${fx} ${cur}, ${quote.fxSource} ${quote.fxDate}${buffer > 0 ? `, kur payı ${pct(buffer)} dahil` : ''})`;
     const content = {
       agencyName: tenantName, projectCode: p.code, reference: p.code, revision: quote.version, customerName: p.customer_name, currency: cur, fxRate: fx, fxSource: quote.fxSource, fxDate: quote.fxDate,
       optionUntil: quote.optionUntil, appliedCustomerRules: quote.appliedCustomerRules, clauses,
@@ -531,7 +582,7 @@ function registerQuoteDocuments(): void {
         meta: [['Müşteri', p.customer_name ?? '-'], ['Tarih', isoDate(ctx.now())], ['Etkinlik', `${p.start_date ?? '?'} – ${p.end_date ?? '?'}, ${p.pax ?? '?'} kişi`],
           // Q8: our project code is the reference the customer cites on THEIR purchase order (PO no ≠ project code)
           ['Referans', p.code],
-          ['Opsiyon', quote.optionUntil ?? '-'], ['Para birimi', `${cur} (1 EUR = ${fx} ${cur}, ${quote.fxSource} ${quote.fxDate})`], ['Teklif sürümü', `Rev.${quote.version}`]],
+          ['Opsiyon', quote.optionUntil ?? '-'], ['Para birimi', fxLine], ['Teklif sürümü', `Rev.${quote.version}`]],
       },
       sections: [
         ...content.options.map((o) => ({
@@ -563,15 +614,18 @@ function registerQuoteDocuments(): void {
   registerDocumentGenerator('pnl', 'quote', async (ctx, { entityId }) => {
     const { quote, p, tenantName, deps } = await quoteDocData(ctx, entityId!);
     const fin = (await ctx.db.query(
-      `SELECT kind, status, sum(amount_eur) AS total FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled' GROUP BY kind, status`, [p.id])).rows;
+      `SELECT kind, status, sum(COALESCE(amount_base, amount_eur)) AS total FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled' GROUP BY kind, status`, [p.id])).rows;
     const contracts = (await ctx.db.query('SELECT id, status FROM contracts WHERE project_id = $1 AND superseded_by IS NULL', [p.id])).rows;
+    const base = quote.baseCurrency ?? 'EUR';
     const content = {
-      projectCode: p.code, quoteVersion: quote.version, acceptedOptionNo: quote.acceptedOptionNo,
+      projectCode: p.code, quoteVersion: quote.version, acceptedOptionNo: quote.acceptedOptionNo, baseCurrency: base, fxPolicy: quote.fxPolicy ?? null,
       options: quote.options.map((o) => ({
         optionNo: o.optionNo, title: o.title,
         lines: o.lines.map((l) => ({ description: l.description, costEur: round2(l.unitCostEur * mult(l)), saleEur: round2(l.unitPriceEur * mult(l)), markup: l.markup, valueAdd: l.valueAdd })),
         // §9 / §7 Adım 3: margin (Kâr÷Satış) and markup (Kâr÷Alış) on SEPARATE rows
         costEur: o.totals.costEur, saleEur: o.totals.saleEur, profitEur: o.totals.profitEur, margin: o.totals.margin, markup: o.totals.markup,
+        // v0.5 S-07: FX buffer visible internally as its own line
+        fxBufferEur: o.fxBufferEur ?? 0,
       })),
       finance: fin.map((f) => ({ kind: f.kind, status: f.status, totalEur: Number(f.total) })),
       contracts: contracts.map((c) => ({ id: c.id, status: c.status })),
@@ -585,46 +639,47 @@ function registerQuoteDocuments(): void {
         kind: 'table' as const,
         table: {
           title: `Seçenek ${o.optionNo}: ${o.title}${quote.acceptedOptionNo === o.optionNo ? ' (kabul edildi)' : ''}`,
-          columns: [{ label: 'Kalem', width: 235 }, { label: 'Alış (EUR)', width: 95, align: 'right' as const }, { label: 'Satış (EUR)', width: 95, align: 'right' as const }, { label: 'Markup', width: 90, align: 'right' as const }],
-          rows: o.lines.map((l) => [l.description, money(l.costEur, 'EUR'), money(l.saleEur, 'EUR'), l.valueAdd ? 'katma değer' : pct(l.markup)]),
+          columns: [{ label: 'Kalem', width: 235 }, { label: `Alış (${base})`, width: 95, align: 'right' as const }, { label: `Satış (${base})`, width: 95, align: 'right' as const }, { label: 'Markup', width: 90, align: 'right' as const }],
+          rows: o.lines.map((l) => [l.description, money(l.costEur, base), money(l.saleEur, base), l.valueAdd ? 'katma değer' : pct(l.markup)]),
           footer: [
-            { label: 'Toplam alış', value: money(o.costEur, 'EUR') }, { label: 'Toplam satış', value: money(o.saleEur, 'EUR') },
-            { label: 'Kâr', value: money(o.profitEur, 'EUR'), bold: true },
+            { label: 'Toplam alış', value: money(o.costEur, base) }, { label: 'Toplam satış', value: money(o.saleEur, base) },
+            { label: 'Kâr', value: money(o.profitEur, base), bold: true },
             { label: 'Marj (Kâr ÷ Satış)', value: pct(o.margin) }, { label: 'Markup (Kâr ÷ Alış)', value: pct(o.markup) },
+            ...(o.fxBufferEur ? [{ label: `Kur payı ${pct(Number(quote.fxPolicy?.bufferPct ?? 0))} (müşteriye gizli, ek güvence)`, value: money(o.fxBufferEur, base) }] : []),
           ],
         },
       })),
-        ...(realized ? await realizedSections(realized) : []),
+        ...(realized ? await realizedSections(realized, base) : []),
       ],
     });
     return { content, pdf, fileName: `${p.code}-kar-zarar-v${quote.version}.pdf`, deps };
   });
 }
 
-async function realizedSections(r: RealizedPnl): Promise<PdfSpec['sections']> {
+async function realizedSections(r: RealizedPnl, base = 'EUR'): Promise<PdfSpec['sections']> {
   const { planVsActualRows, realizedFxSections } = await import('./documents-b.js');
   const out: PdfSpec['sections'] = [{
     kind: 'table',
     table: {
-      title: 'Plan vs gerçekleşen (EUR)',
+      title: `Plan vs gerçekleşen (${base})`,
       columns: [{ label: '', width: 175 }, { label: 'Plan', width: 110, align: 'right' }, { label: 'Gerçekleşen', width: 110, align: 'right' }, { label: 'Fark', width: 110, align: 'right' }],
-      rows: planVsActualRows(r),
+      rows: planVsActualRows(r, base),
     },
   }];
   if (r.suppliers.length) {
     out.push({
       kind: 'table',
       table: {
-        title: 'Tedarikçi: sözleşme vs fatura (EUR)',
+        title: `Tedarikçi: sözleşme vs fatura (${base})`,
         columns: [{ label: 'Tedarikçi', width: 205 }, { label: 'Sözleşme', width: 100, align: 'right' }, { label: 'Fatura', width: 100, align: 'right' }, { label: 'Fark', width: 100, align: 'right' }],
-        rows: r.suppliers.map((s) => [s.supplier, money(s.contractEur, 'EUR'), money(s.invoicedEur, 'EUR'), money(s.differenceEur, 'EUR')]),
+        rows: r.suppliers.map((s) => [s.supplier, money(s.contractEur, base), money(s.invoicedEur, base), money(s.differenceEur, base)]),
       },
     });
   }
   const lines = [
-    `Müşteri faturası: ${money(r.customerInvoicedEur, 'EUR')}`,
-    `Saha ekstraları: ${money(r.extras.totalEur, 'EUR')} (yansıtılan ${money(r.extras.reflectedEur, 'EUR')}, yansıtılmayan ${money(r.extras.unreflectedEur, 'EUR')})`,
-    ...r.deviations.map((d) => `${d.reason}: ${money(d.amountEur, 'EUR')}`),
+    `Müşteri faturası: ${money(r.customerInvoicedEur, base)}`,
+    `Saha ekstraları: ${money(r.extras.totalEur, base)} (yansıtılan ${money(r.extras.reflectedEur, base)}, yansıtılmayan ${money(r.extras.unreflectedEur, base)})`,
+    ...r.deviations.map((d) => `${d.reason}: ${money(d.amountEur, base)}`),
   ];
   out.push({ kind: 'text', title: 'Sapma nedenleri', lines });
   // Q5: both currencies, average rates, FX lines and the evidence table

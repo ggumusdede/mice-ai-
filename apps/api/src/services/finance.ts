@@ -5,7 +5,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import type { BankTransaction, Currency, FinanceEntry, SupplierInvoiceInput } from '@mice/shared';
-import { deriveMovementRates, matchBankTransaction, parseBankCsv, roleCan, slugTr } from '@mice/domain';
+import { depositFirstCheck, deriveMovementRates, matchBankTransaction, parseBankCsv, roleCan, slugTr } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
@@ -93,6 +93,9 @@ export async function recordSupplierInvoice(ctx: Ctx, input: InvoiceRequest): Pr
   const fx = await currentFx(ctx.db);
   const currency = data.currency as Currency;
   const amountEur = r2(toEur(fx, data.amount, currency));
+  // v0.5 S-19: the contract / payable comparison in the project's base currency (amount_base is filled by the DB from the same rate)
+  const base: string = p.base_currency ?? 'EUR';
+  const amountBase = r2(toEur(await currentFx(ctx.db, base), data.amount, currency));
 
   // link: signed (latest) contract(s) of this supplier in the project, the service items and the open payables
   const contracts = (await ctx.db.query(
@@ -107,20 +110,20 @@ export async function recordSupplierInvoice(ctx: Ctx, input: InvoiceRequest): Pr
   }
   const payables = (await ctx.db.query(
     `SELECT * FROM finance_entries WHERE project_id = $1 AND supplier_id = $2 AND kind = 'payable' AND status <> 'cancelled'`, [p.id, supplier.id])).rows;
-  const expectedEur = payables.length ? r2(payables.reduce((s, e) => s + Number(e.amount_eur), 0)) : null;
+  const expectedEur = payables.length ? r2(payables.reduce((s, e) => s + Number(e.amount_base ?? e.amount_eur), 0)) : null;
   const prevInvoicedEur = Number((await ctx.db.query(
-    `SELECT COALESCE(sum(amount_eur), 0) AS s FROM finance_entries WHERE project_id = $1 AND supplier_id = $2 AND kind = 'supplier_invoice' AND status <> 'cancelled'`, [p.id, supplier.id])).rows[0].s);
+    `SELECT COALESCE(sum(COALESCE(amount_base, amount_eur)), 0) AS s FROM finance_entries WHERE project_id = $1 AND supplier_id = $2 AND kind = 'supplier_invoice' AND status <> 'cancelled'`, [p.id, supplier.id])).rows[0].s);
   let mismatch = false;
   if (!contract) {
     alarms.push(`${supplier.name} için imzalı sözleşme yok — fatura sözleşme kalemine bağlanamadı`);
     mismatch = true;
   } else if (expectedEur != null) {
-    const invoicedTotal = prevInvoicedEur + amountEur;
+    const invoicedTotal = prevInvoicedEur + amountBase;
     const diff = r2(invoicedTotal - expectedEur);
     const tol = Math.max(1, expectedEur * 0.005);
     if (Math.abs(diff) > tol) {
       mismatch = true;
-      alarms.push(`Tutar farkı: faturalanan ${r2(invoicedTotal)} EUR, sözleşme/borç ${expectedEur} EUR (fark ${diff > 0 ? '+' : ''}${diff} EUR)`);
+      alarms.push(`Tutar farkı: faturalanan ${r2(invoicedTotal)} ${base}, sözleşme/borç ${expectedEur} ${base} (fark ${diff > 0 ? '+' : ''}${diff} ${base})`);
     }
   }
   if (contract && (contract.fields?.currency ?? null) && contract.fields.currency !== currency) alarms.push(`Para birimi farklı: sözleşme ${contract.fields.currency}, fatura ${currency}`);
@@ -187,23 +190,55 @@ export async function recordCustomerInvoice(ctx: Ctx, input: { projectId: string
 }
 
 // ------------------------------------------------------------------ payment requests (finance creates, admin approves EACH one)
-export async function createPaymentRequest(ctx: Ctx, entryId: string): Promise<FinanceEntry> {
+/** v0.5 S-06 "Kapora önce": a supplier PREpayment (contract prepayment part, or any payment before the event) while the customer
+ *  deposit agreed in the customer's rules is not collected yet. Base-currency amounts of the project. */
+export async function depositFirstStatus(ctx: Ctx, e: Row, p: Row | null): Promise<ReturnType<typeof depositFirstCheck> & { applies: boolean }> {
+  const rules = await ctx.rules();
+  const none = { status: 'ok' as const, message: null, missing: null, applies: false };
+  if (!p?.customer_id) return none;
+  const before = !p.start_date || isoDate(ctx.now()) < String(p.start_date).slice(0, 10);
+  if (e.meta?.part !== 'prepayment' && !before) return none;
+  const c = (await ctx.db.query('SELECT rules FROM customers WHERE id = $1', [p.customer_id])).rows[0];
+  const depositRate = Number(c?.rules?.depositRate ?? 0);
+  if (!(depositRate > 0)) return none;
+  const amt = `COALESCE(amount_base, amount_eur)`;
+  const r = (await ctx.db.query(
+    `SELECT COALESCE(sum(${amt}) FILTER (WHERE kind = 'receivable' AND meta->>'part' = 'deposit'), 0) AS expected,
+            COALESCE(sum(${amt}) FILTER (WHERE (kind = 'receivable' AND status IN ('paid','matched')) OR kind = 'payment_in'), 0) AS collected,
+            count(*) FILTER (WHERE kind = 'receivable' AND meta->>'part' = 'deposit')::int AS n
+       FROM finance_entries WHERE project_id = $1 AND status <> 'cancelled'`, [p.id])).rows[0];
+  const res = depositFirstCheck({ depositRate, expectedDeposit: r.n ? Number(r.expected) : null, collected: Number(r.collected), mode: rules.depositFirstMode ?? 'warn' });
+  return { ...res, applies: res.status !== 'ok' };
+}
+
+export async function createPaymentRequest(ctx: Ctx, entryId: string, opts: { depositFirstReason?: string } = {}): Promise<FinanceEntry> {
   const user = requireUser(ctx);
   if (!roleCan(user.role, 'create_payment_request')) throw forbidden('Ödeme talebini finans oluşturur', 'FORBIDDEN');
   const e = await getEntry(ctx, entryId, true);
   if (!['payable', 'supplier_invoice'].includes(e.kind)) throw badRequest('Yalnızca tedarikçi borcu / faturası için ödeme talebi açılır', undefined, 'NOT_PAYABLE');
   if (e.status !== 'open') throw conflict(`Kayıt durumu uygun değil: ${e.status}`, 'ENTRY_NOT_OPEN');
   const p = e.project_id ? await getProjectRow(ctx, e.project_id) : null;
+  // v0.5 S-06: warn + mandatory reason + Face ID exception (the payment approval card itself is the Face ID step) | block
+  const dep = await depositFirstStatus(ctx, e, p);
+  if (dep.status === 'block') throw conflict(dep.message ?? 'Kapora önce', 'DEPOSIT_FIRST_BLOCKED', { missing: dep.missing, currency: p?.base_currency ?? 'EUR' });
+  if (dep.status === 'warn' && !opts.depositFirstReason?.trim()) {
+    throw conflict(dep.message ?? 'Kapora önce', 'DEPOSIT_FIRST_REASON_REQUIRED', { missing: dep.missing, currency: p?.base_currency ?? 'EUR' });
+  }
+  const depositException = dep.status === 'warn' ? { reason: opts.depositFirstReason!.trim(), message: dep.message, missing: dep.missing, by: user.id, byName: user.fullName, at: ctx.now().toISOString() } : null;
   const supplier = e.supplier_id ? (await ctx.db.query('SELECT name FROM suppliers WHERE id = $1', [e.supplier_id])).rows[0] : null;
   const daysToDue = e.due_date ? (Date.parse(e.due_date) - Date.parse(isoDate(ctx.now()))) / 86_400_000 : null;
   const urgent = daysToDue != null && daysToDue <= 2;
   const d = await createDecision(ctx, {
-    projectId: e.project_id, kind: 'payment_approval', badge: urgent ? 'critical' : 'within_rules', urgent,
-    summary: `${p?.code ?? ''}: ödeme onayı — ${supplier?.name ?? ''} ${Number(e.amount).toLocaleString('tr-TR')} ${e.currency}${e.due_date ? ` (vade ${e.due_date})` : ''}`,
-    detail: { entryId: e.id, kind: e.kind, amount: Number(e.amount), currency: e.currency, amountEur: Number(e.amount_eur), dueDate: e.due_date, invoiceNo: e.invoice_no, supplier: supplier?.name ?? null, requestedBy: user.fullName, part: e.meta?.part ?? null },
-    aiNote: 'Onay ödemeyi yapmaz: ödeme bankada insan tarafından yapılır ve "ödendi" olarak işaretlenir (§6).',
+    projectId: e.project_id, kind: 'payment_approval', badge: urgent || depositException ? 'critical' : 'within_rules', urgent,
+    summary: `${depositException ? 'KAPORA ÖNCE İSTİSNASI — ' : ''}${p?.code ?? ''}: ödeme onayı — ${supplier?.name ?? ''} ${Number(e.amount).toLocaleString('tr-TR')} ${e.currency}${e.due_date ? ` (vade ${e.due_date})` : ''}`,
+    detail: { entryId: e.id, kind: e.kind, amount: Number(e.amount), currency: e.currency, amountEur: Number(e.amount_base ?? e.amount_eur), baseCurrency: e.base_currency ?? 'EUR', dueDate: e.due_date, invoiceNo: e.invoice_no, supplier: supplier?.name ?? null, requestedBy: user.fullName, part: e.meta?.part ?? null, depositFirstException: depositException },
+    aiNote: depositException
+      ? `${depositException.message} Gerekçe (${user.fullName}): ${depositException.reason}. Onay = Face ID ile istisna; ödeme yine bankada insan tarafından yapılır.`
+      : 'Onay ödemeyi yapmaz: ödeme bankada insan tarafından yapılır ve "ödendi" olarak işaretlenir (§6).',
     requiredRole: 'admin', requiresBiometric: true, entityType: 'finance_entry', entityId: e.id,
   });
+  // the exception stays on the entry (weekly exception list / audit)
+  if (depositException) await ctx.db.query(`UPDATE finance_entries SET meta = meta || $2::jsonb WHERE id = $1`, [e.id, JSON.stringify({ depositFirstException: depositException })]);
   const row = (await ctx.db.query(
     `UPDATE finance_entries SET status = 'pending_approval', payment_decision_id = $2, requested_by = $3, requested_at = $4 WHERE id = $1 RETURNING *`,
     [e.id, d.id, user.id, ctx.now()])).rows[0];

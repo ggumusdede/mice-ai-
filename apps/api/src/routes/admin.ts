@@ -12,6 +12,7 @@ import { closeProject, computeClosingCheck } from '../services/closing.js';
 import { FX_RATE_TYPES } from '@mice/domain';
 import { canSeeFinancials } from '../services/visibility.js';
 import { teamPerformance, userStats, weeklyReport } from '../services/reports.js';
+import { withTeams } from '../services/team-reports.js';
 import { expireDecisionsFor } from '../services/decisions.js';
 import type { Ctx } from '../context.js';
 
@@ -56,7 +57,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // (additive, Q7) Ekip performansı — rolling period per salesperson (§4 karar verisi, §16.7)
   app.get('/api/reports/team-performance', auth, async (req) => {
     const q = parse(z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }), req.query);
-    return asUser(req, (ctx) => teamPerformance(ctx, q), ['admin']);
+    return asUser(req, async (ctx) => withTeams(ctx, await teamPerformance(ctx, q)), ['admin']); // v0.5 D-2: + per-team rows
   });
 
   // ---------------- rules (Blok 5: table, not code — admin changes)

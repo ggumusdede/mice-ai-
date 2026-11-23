@@ -10,6 +10,9 @@ import { notifyUnbilledPayment } from './services/finance.js';
 import { runOutboxJobs } from './services/delivery.js';
 import { runCriticalPushFallback } from './services/critical-fallback.js';
 import { runWeeklyRuleSuggestions } from './services/rule-suggestions.js';
+import { runBusyDelegation, runCollectionReminders, runEscalations } from './services/team-control.js';
+import { runPlannedHandovers } from './services/handover.js';
+import { runProcurementJobs } from './services/procurement.js';
 
 /** Before the follow-up scheduler: state the scheduler depends on. */
 export async function runPreJobs(ctx: Ctx, now: Date): Promise<string[]> {
@@ -34,6 +37,14 @@ export async function runPostJobs(ctx: Ctx, now: Date, followupsDone: { type: st
   out.push(...(await runOutboxJobs(ctx, now)));
   // §16.5 weekly rule-suggestion generator (idempotent; admin-only decisions)
   out.push(...(await runWeeklyRuleSuggestions(ctx, now)));
+  // v0.5-A: planned handovers close access; outbound cards escalate (nöbetçi → vekili → yönetici); deadline cards → deputy;
+  // overdue customer invoices → one-tap reminder card. Nothing is approved or sent here.
+  out.push(...(await runPlannedHandovers(ctx, now)));
+  out.push(...(await runEscalations(ctx, now)));
+  out.push(...(await runBusyDelegation(ctx, now)));
+  out.push(...(await runCollectionReminders(ctx, now)));
+  // v0.5 S-03: T-x allotment release cards and T-3 supplier option cards (idempotent; never an automatic release)
+  out.push(...(await runProcurementJobs(ctx, now)));
   return out;
 }
 

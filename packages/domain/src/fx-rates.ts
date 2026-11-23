@@ -100,7 +100,22 @@ export function rateOnValueDate(rows: { rateDate: string; rate: number }[], valu
  * rates come from the dated table (one rate type) at the movement's value date — source 'tcmb', note "TCMB <date> <type>".
  * Proven rates (bank-derived, e-Fatura, payment record) are never overwritten.
  */
-export function fillRatesFromTable(movements: FxMovement[], table: { currency: string; rateDate: string; rate: number }[], rateType: FxRateType, lookbackDays = FX_LOOKBACK_DAYS): FxMovement[] {
+export function fillRatesFromTable(movements: FxMovement[], table: { currency: string; rateDate: string; rate: number }[], rateType: FxRateType, lookbackDays = FX_LOOKBACK_DAYS, baseCurrency?: string): FxMovement[] {
+  const filled = fillRatesFromTableEurTry(movements, table, rateType, lookbackDays);
+  const b = baseCurrency?.toUpperCase();
+  if (!b || b === 'EUR' || b === 'TRY') return filled;
+  // v0.5 S-19 (base USD …): 1 EUR = x base at the movement — the movement's own rate when it is in the base currency, else the table
+  const rows = table.filter((r) => r.currency === b);
+  return filled.map((m) => {
+    if (m.eurBaseRate != null && m.eurBaseRate > 0) return m;
+    if (m.currency === b && m.eurRate != null && m.eurRate > 0) return { ...m, eurBaseRate: m.eurRate };
+    if (!m.date) return m;
+    const r = rateOnValueDate(rows, m.date, lookbackDays);
+    return r ? { ...m, eurBaseRate: r.rate, rateNote: [m.rateNote, `TCMB ${r.rateDate} ${FX_RATE_TYPE_LABEL[rateType]} (${b})`].filter(Boolean).join(' · ') } : m;
+  });
+}
+
+function fillRatesFromTableEurTry(movements: FxMovement[], table: { currency: string; rateDate: string; rate: number }[], rateType: FxRateType, lookbackDays: number): FxMovement[] {
   const by = new Map<string, { rateDate: string; rate: number }[]>();
   for (const r of table) by.set(r.currency, [...(by.get(r.currency) ?? []), r]);
   const pick = (cur: string, date: string) => rateOnValueDate(by.get(cur) ?? [], date, lookbackDays);

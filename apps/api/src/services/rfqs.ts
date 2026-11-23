@@ -66,7 +66,6 @@ export async function createRfqs(ctx: Ctx, itemId: string, req: CreateRfqsReques
   const ownerId = p.owner_id ?? user.id;
   const owner = (await ctx.db.query('SELECT full_name FROM users WHERE id = $1', [ownerId])).rows[0];
   const language = req.language ?? 'tr';
-  const ref = await supplierRef(ctx, p.code); // supplier-facing: no customer name ([Ürün kararı] hideCustomerFromSuppliers)
   const created: Row[] = [];
   const draftIds: string[] = [];
   for (const s of suppliers) {
@@ -80,7 +79,7 @@ export async function createRfqs(ctx: Ctx, itemId: string, req: CreateRfqsReques
     const draft = await aiDraft(ctx, {
       kind: 'rfq', language, senderName: owner?.full_name, recipientName: s.contact_name ?? s.name,
       facts: {
-        projectCode: ref, item: { kind: item.kind, description: item.description, dateFrom: item.date_from, dateTo: item.date_to, quantity: Number(item.quantity), unit: item.unit, nights: item.nights, specs: item.specs },
+        projectCode: await supplierRef(ctx, p.code, s.id) /* S-08: customer's own corporate-agreement hotel may see the name */, item: { kind: item.kind, description: item.description, dateFrom: item.date_from, dateTo: item.date_to, quantity: Number(item.quantity), unit: item.unit, nights: item.nights, specs: item.specs },
         pax: p.pax, deadlineHours, optionRequested: true, link: LINK_PLACEHOLDER,
       },
     }, { projectId: p.id, to: s.email, status: 'pending_approval', requiresApproval: true, fromUserId: ownerId, entityType: 'rfq', entityId: rfq.id });
@@ -190,7 +189,7 @@ export async function publicRfqView(ctx: Ctx, rfqId: string): Promise<PublicRfqV
   const offers = (await ctx.db.query(
     'SELECT * FROM supplier_offers WHERE service_item_id = $1 AND supplier_id = $2 ORDER BY version', [rfq.service_item_id, rfq.supplier_id])).rows.map(mapOffer);
   return {
-    agencyName: tenant?.name ?? '', projectCode: await supplierRef(ctx, p.code), supplierName: supplier?.name ?? '',
+    agencyName: tenant?.name ?? '', projectCode: await supplierRef(ctx, p.code, rfq.supplier_id), supplierName: supplier?.name ?? '',
     item: {
       kind: item.kind, description: item.description, dateFrom: item.date_from, dateTo: item.date_to, quantity: Number(item.quantity),
       unit: item.unit, nights: item.nights, specs: item.specs ?? {},

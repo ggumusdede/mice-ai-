@@ -10,7 +10,7 @@ interface MailAccountsResponse { items: MailAccount[]; providers: { google: bool
 
 const PROVIDER_LABEL = { google: 'Google', microsoft: 'Microsoft' } as const;
 const REASON: Record<string, string> = {
-  mailbox_mismatch: 'Bağlanan posta kutusu giriş adresinizle aynı olmalı.', state_expired: 'Bağlantı süresi doldu, yeniden deneyin.',
+  mailbox_mismatch: 'Bağlanan posta kutusu giriş adresinizle aynı olmalı.', personal_account_blocked: 'Yalnız kurumsal posta kutusu bağlanabilir; kişisel hesap için yöneticinizden istisna isteyin.', state_expired: 'Bağlantı süresi doldu, yeniden deneyin.',
   invalid_state: 'Geçersiz bağlantı isteği.', denied: 'İzin verilmedi.', no_refresh_token: 'Sağlayıcı kalıcı izin vermedi; yeniden deneyin.',
 };
 

@@ -14,7 +14,7 @@ import { addDaysIso, isoDate, nightsBetween } from '../lib/dates.js';
 import type { Row } from '../lib/mappers.js';
 import { computeClosingCheck } from './closing.js';
 import { registerDocumentGenerator } from './documents.js';
-import { currentFx, toEur } from './fx.js';
+import { currentFx, projectBase, toEur } from './fx.js';
 import { listGuests } from './guests.js';
 import { money, pct, renderPdf, type PdfSpec } from './pdf.js';
 import { getProjectRow } from './projects.js';
@@ -126,12 +126,14 @@ export interface RealizedPnl {
   /** (additive, Q5) evidence-based realized EUR + TRY, average rates, FX gain/loss and the evidence table */
   realizedFx?: RealizedFx | null;
   plannedTry?: { cost: number; sale: number; profit: number } | null;
+  /** (additive, v0.5 S-19) currency of the *Eur amounts (project base currency) */
+  baseCurrency?: string;
 }
 
 export async function realizedPnl(ctx: Ctx, projectId: string): Promise<RealizedPnl | null> {
   const check = await computeClosingCheck(ctx, projectId);
   const sup = (await ctx.db.query(
-    `SELECT s.name, e.kind, sum(e.amount_eur) AS eur FROM finance_entries e JOIN suppliers s ON s.id = e.supplier_id
+    `SELECT s.name, e.kind, sum(COALESCE(e.amount_base, e.amount_eur)) AS eur FROM finance_entries e JOIN suppliers s ON s.id = e.supplier_id
       WHERE e.project_id = $1 AND e.kind IN ('payable','supplier_invoice') AND e.status <> 'cancelled' GROUP BY s.name, e.kind ORDER BY s.name`, [projectId])).rows;
   const names = [...new Set(sup.map((r) => r.name as string))];
   const suppliers = names.map((n) => {
@@ -140,29 +142,30 @@ export async function realizedPnl(ctx: Ctx, projectId: string): Promise<Realized
     return { supplier: n, contractEur, invoicedEur, differenceEur: r2(invoicedEur - contractEur) };
   });
   const cust = Number((await ctx.db.query(
-    `SELECT COALESCE(sum(amount_eur),0) AS s FROM finance_entries WHERE project_id = $1 AND kind = 'customer_invoice' AND status <> 'cancelled'`, [projectId])).rows[0].s);
+    `SELECT COALESCE(sum(COALESCE(amount_base, amount_eur)),0) AS s FROM finance_entries WHERE project_id = $1 AND kind = 'customer_invoice' AND status <> 'cancelled'`, [projectId])).rows[0].s);
   const ex = (await ctx.db.query(
     `SELECT COALESCE(sum(amount_try),0) AS total, COALESCE(sum(amount_try) FILTER (WHERE reflected_to_customer), 0) AS refl,
             COALESCE(sum(amount_try) FILTER (WHERE reflected_to_customer = false), 0) AS unrefl
        FROM field_extras WHERE project_id = $1 AND admin_status <> 'rejected'`, [projectId])).rows[0];
-  const fx = await currentFx(ctx.db);
+  const baseCurrency = await projectBase(ctx.db, projectId);
+  const fx = await currentFx(ctx.db, baseCurrency);
   const toEurTry = (v: unknown) => (fx.rates.TRY ? r2(toEur(fx, Number(v), 'TRY')) : 0);
   if (!check.planVsActual.planned && !check.planVsActual.actual && !suppliers.length && check.planVsActual.realizedFx?.status !== 'complete' && check.planVsActual.realizedFx?.status !== 'partial') return null;
   return {
     planned: check.planVsActual.planned, actual: check.planVsActual.actual, deviations: check.planVsActual.deviations, suppliers,
     customerInvoicedEur: r2(cust), extras: { totalEur: toEurTry(ex.total), reflectedEur: toEurTry(ex.refl), unreflectedEur: toEurTry(ex.unrefl) },
-    realizedFx: check.planVsActual.realizedFx ?? null, plannedTry: check.planVsActual.plannedTry ?? null,
+    realizedFx: check.planVsActual.realizedFx ?? null, plannedTry: check.planVsActual.plannedTry ?? null, baseCurrency,
   };
 }
 
 /** PDF section rows for the plan vs actual table (margin and markup on separate rows, §9). */
-export function planVsActualRows(r: RealizedPnl): string[][] {
+export function planVsActualRows(r: RealizedPnl, base = r.baseCurrency ?? 'EUR'): string[][] {
   const row = (label: string, f: (s: ProfitSummary) => number, fmt: (n: number) => string, diff = true) => {
     const a = r.planned ? f(r.planned) : null;
     const b = r.actual ? f(r.actual) : null;
     return [label, a != null ? fmt(a) : '—', b != null ? fmt(b) : '—', diff && a != null && b != null ? fmt(b - a) : '—'];
   };
-  const eur = (n: number) => money(r2(n), 'EUR');
+  const eur = (n: number) => money(r2(n), base);
   return [
     row('Alış (maliyet)', (s) => s.costEur, eur), row('Satış', (s) => s.saleEur, eur), row('Kâr', (s) => s.profitEur, eur),
     row('Marj (Kâr ÷ Satış)', (s) => s.margin, pct, false), row('Markup (Kâr ÷ Alış)', (s) => s.markup, pct, false),
@@ -216,6 +219,11 @@ export function realizedFxSections(r: RealizedPnl): PdfSpec['sections'] {
         ]),
       },
     },
+    // v0.5 S-19: a base other than EUR / TRY gets its own realized line
+    ...(fx.base && !['EUR', 'TRY'].includes(fx.base.currency) ? [{
+      kind: 'text' as const, title: `Gerçekleşen (${fx.base.currency}, proje ana para birimi)`,
+      lines: [`Satış ${fx.base.revenue == null ? '—' : money(fx.base.revenue, fx.base.currency)} · Alış ${fx.base.cost == null ? '—' : money(fx.base.cost, fx.base.currency)} · Kâr ${fx.base.profit == null ? '—' : money(fx.base.profit, fx.base.currency)}${fx.base.missing ? ` (${fx.base.missing} harekette kur yok — toplamlara girmedi)` : ''}`],
+    }] : []),
     ...(fx.reasons.length ? [{ kind: 'text' as const, title: 'Eksik / kısmi', lines: fx.reasons.map((x) => x.message) }] : []),
   ];
 }

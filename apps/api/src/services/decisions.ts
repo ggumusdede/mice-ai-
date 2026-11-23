@@ -2,7 +2,7 @@
 // Effects per decision kind are registered by services/decision-effects.ts (extension point for phase B:
 // registerDecisionEffect('payment_approval', ...)).
 import type { DecideResponse, Decision, DecisionBadge, DecisionInput, DecisionKind, Role, AiActionType } from '@mice/shared';
-import { canDecide, requiresBiometric } from '@mice/domain';
+import { canDecide, deadlineFromDetail, requiresBiometric, routedDecisionAllowed } from '@mice/domain';
 import type { AutomationOutcome } from '@mice/domain';
 import type { Ctx } from '../context.js';
 import { requireUser } from '../context.js';
@@ -30,6 +30,11 @@ export interface DecisionSpec {
   aiActionId?: string | null;
   /** set by aiGate when the counter is in 'auto' mode */
   autoExecuted?: boolean;
+  /** v0.5 S-13 (additive): deadline-linked card (option expiry, ticket time limit, release …). Default: derived from detail
+   *  (deadlineAt / optionUntil / ticketTimeLimit / releaseDate …). Used for busy-deputy routing — never auto-approval. */
+  deadlineAt?: string | Date | null;
+  /** v0.5 S-01 (additive): route the card to a person (on-call); normally set by the on-call hook */
+  assignedTo?: string | null;
 }
 
 const DEFAULT_LABELS: Partial<Record<DecisionKind, string>> = {
@@ -66,6 +71,15 @@ export async function createDecision(ctx: Ctx, spec: DecisionSpec): Promise<Deci
     ],
   );
   if (spec.aiActionId) await ctx.db.query('UPDATE ai_actions SET decision_id = $2 WHERE id = $1', [spec.aiActionId, rows[0].id]);
+  // v0.5 S-01 / S-13: routing columns (deadline-linked card, explicit assignee)
+  const deadline = spec.deadlineAt !== undefined ? spec.deadlineAt : deadlineFromDetail(spec.detail);
+  if (!auto && (deadline || spec.assignedTo)) {
+    const u = await ctx.db.query(
+      `UPDATE decisions SET deadline_at = COALESCE($2::timestamptz, deadline_at), assigned_to = COALESCE($3, assigned_to),
+         assigned_at = CASE WHEN $3::uuid IS NULL THEN assigned_at ELSE $4 END WHERE id = $1 RETURNING *`,
+      [rows[0].id, deadline ? new Date(deadline) : null, spec.assignedTo ?? null, ctx.now()]);
+    rows[0] = u.rows[0];
+  }
   const decision = mapDecision(rows[0]);
   if (!auto) for (const h of createdHooks) await h(ctx, decision);
   return decision;
@@ -111,7 +125,13 @@ async function activeDelegations(ctx: Ctx) {
   return rows.map(mapDelegation);
 }
 
-const SELECT_DECISION = `SELECT d.*, p.code AS project_code FROM decisions d LEFT JOIN projects p ON p.id = d.project_id`;
+const SELECT_DECISION = `SELECT d.*, p.code AS project_code, au.full_name AS assigned_to_name FROM decisions d LEFT JOIN projects p ON p.id = d.project_id
+  LEFT JOIN users au ON au.id = d.assigned_to`;
+
+/** v0.5 S-01 / S-13: a card routed to this user (on-call / escalation / busy-deputy) — see routedDecisionAllowed. */
+function routedTo(row: Row, userId: string): boolean {
+  return routedDecisionAllowed({ kind: row.kind, requiresBiometric: row.requires_biometric, assignedTo: row.assigned_to ?? null, deputyId: row.deputy_id ?? null, deadlineAt: row.deadline_at ?? null }, userId);
+}
 
 export async function listDecisions(ctx: Ctx, opts: { status?: string; projectId?: string } = {}): Promise<Decision[]> {
   const user = requireUser(ctx);
@@ -126,8 +146,8 @@ export async function listDecisions(ctx: Ctx, opts: { status?: string; projectId
   const delegations = await activeDelegations(ctx);
   const now = ctx.now();
   return rows
-    .map(mapDecision)
-    .filter((d) => canDecide(user, { kind: d.kind, requiredRole: d.requiredRole }, delegations, now).allowed);
+    .filter((r) => canDecide(user, { kind: r.kind, requiredRole: r.required_role }, delegations, now).allowed || routedTo(r, user.id))
+    .map(mapDecision);
 }
 
 export async function getDecision(ctx: Ctx, id: string): Promise<Decision> {
@@ -148,7 +168,9 @@ export async function decide(ctx: Ctx, id: string, input: DecisionInput): Promis
   if (!row) throw notFound('Karar');
   if (row.status !== 'open') throw conflict('Bu karar zaten verilmiş', 'DECISION_CLOSED');
   const delegations = await activeDelegations(ctx);
-  const perm = canDecide(user, { kind: row.kind, requiredRole: row.required_role }, delegations, ctx.now());
+  const base = canDecide(user, { kind: row.kind, requiredRole: row.required_role }, delegations, ctx.now());
+  // v0.5 S-01 / S-13: the on-call / escalation assignee or the busy-deputy decides a routed card (biometric gates unchanged)
+  const perm = !base.allowed && routedTo(row, user.id) ? { allowed: true, viaDelegation: true, reason: undefined as string | undefined } : base;
   if (!perm.allowed) throw forbidden(perm.reason ?? 'Bu kararı verme yetkiniz yok', 'DECISION_FORBIDDEN');
   if (input.action === 'edit' && (!input.edits || Object.keys(input.edits).length === 0)) {
     throw badRequest('Düzelt eylemi düzeltilmiş içerik gerektirir (edits)', undefined, 'EDITS_REQUIRED');

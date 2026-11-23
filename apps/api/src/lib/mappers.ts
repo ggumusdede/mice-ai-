@@ -56,6 +56,7 @@ export function mapProject(r: Row): Project {
     targetBusinessDays: Number(r.target_business_days), targetOverrideReason: r.target_override_reason,
     customerWaitMinutes: r.customer_wait_minutes, eventEndedAt: iso(r.event_ended_at), closedAt: iso(r.closed_at),
     createdAt: iso(r.created_at)!, historical: r.historical === true,
+    baseCurrency: r.base_currency ?? 'EUR',
   };
 }
 
@@ -93,8 +94,10 @@ export function mapOffer(r: Row): SupplierOffer {
 export function mapQuoteLine(r: Row): QuoteLine {
   return {
     id: r.id, optionNo: r.option_no, serviceItemId: r.service_item_id, offerId: r.offer_id, description: r.description,
-    kind: r.kind, quantity: Number(r.quantity), unit: r.unit, nights: num(r.nights), unitCostEur: Number(r.unit_cost_eur),
-    unitPriceEur: Number(r.unit_price_eur), markup: Number(r.markup), vatRate: Number(r.vat_rate), valueAdd: r.value_add,
+    kind: r.kind, quantity: Number(r.quantity), unit: r.unit, nights: num(r.nights),
+    // v0.5 S-19: amounts in the quote's base currency (*_base); *_eur is the deprecated EUR equivalent
+    unitCostEur: Number(r.unit_cost_base ?? r.unit_cost_eur),
+    unitPriceEur: Number(r.unit_price_base ?? r.unit_price_eur), markup: Number(r.markup), vatRate: Number(r.vat_rate), valueAdd: r.value_add,
     supplierOptionUntil: r.supplier_option_until,
   };
 }
@@ -111,6 +114,8 @@ export function mapQuoteBase(r: Row): Omit<Quote, 'options'> {
     // (additive, Q8 / Q9)
     poNumber: r.po_number ?? null, acceptedByName: r.accepted_by_name ?? null, firmApprovedAt: iso(r.firm_approved_at),
     awaitingSignedForm: !!r.awaiting_signed_form, supersededBy: r.superseded_by ?? null,
+    // (additive, v0.5)
+    baseCurrency: r.base_currency ?? 'EUR', fxPolicy: r.fx_policy ?? null, revisesAcceptedQuoteId: r.revises_accepted_quote_id ?? null,
   };
 }
 
@@ -118,7 +123,7 @@ export function mapContract(r: Row): Contract {
   return {
     id: r.id, tenantId: r.tenant_id, projectId: r.project_id, supplierId: r.supplier_id, serviceItemIds: r.service_item_ids ?? [],
     version: r.version, template: r.template, status: r.status, fields: r.fields, extractionConfidence: num(r.extraction_confidence),
-    diff: r.diff ?? [], conditionRiskEur: num(r.condition_risk_eur), conditionRiskNote: r.condition_risk_note, locked: r.locked,
+    diff: r.diff ?? [], conditionRiskEur: num(r.condition_risk_base ?? r.condition_risk_eur), conditionRiskNote: r.condition_risk_note, locked: r.locked,
     signedAt: iso(r.signed_at), signedBy: r.signed_by, amendmentOf: r.amendment_of, createdAt: iso(r.created_at)!,
   };
 }
@@ -145,6 +150,8 @@ export function mapDecision(r: Row): Decision {
     requiredRole: r.required_role, requiresBiometric: r.requires_biometric, urgent: r.urgent, entityType: r.entity_type,
     entityId: r.entity_id, draft: r.draft, status: r.status, decidedBy: r.decided_by, decidedAt: iso(r.decided_at),
     decidedDevice: r.decided_device, viaDelegation: r.via_delegation, createdAt: iso(r.created_at)!,
+    assignedTo: r.assigned_to ?? null, assignedToName: r.assigned_to_name ?? null, escalationLevel: r.escalation_level ?? 0,
+    deadlineAt: iso(r.deadline_at) ?? null, routedToDeputy: !!r.routed_to_deputy_at,
   };
 }
 
@@ -159,7 +166,7 @@ export function mapDraft(r: Row): MessageDraft {
 export function mapFinance(r: Row): FinanceEntry {
   return {
     id: r.id, tenantId: r.tenant_id, projectId: r.project_id, serviceItemId: r.service_item_id, supplierId: r.supplier_id,
-    kind: r.kind, amount: Number(r.amount), currency: r.currency, amountEur: Number(r.amount_eur), dueDate: r.due_date,
+    kind: r.kind, amount: Number(r.amount), currency: r.currency, amountEur: Number(r.amount_base ?? r.amount_eur), baseCurrency: r.base_currency ?? 'EUR', dueDate: r.due_date,
     status: r.status, reference: r.reference, invoiceNo: r.invoice_no, meta: r.meta ?? {}, createdAt: iso(r.created_at)!,
     fxEvidence: {
       actualFxRate: num(r.actual_fx_rate), eurTryRate: num(r.eur_try_rate), rateSource: r.rate_source ?? null, valueDate: r.value_date ?? null,

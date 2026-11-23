@@ -89,25 +89,31 @@ export async function projectMovements(ctx: Ctx, projectId: string): Promise<FxM
 /** EUR/TRY (and the quote currency) of the accepted quote, at its fx_date (the quote-time rate). */
 export async function quoteRates(ctx: Ctx, projectId: string): Promise<QuoteRates | null> {
   const q = (await ctx.db.query(
-    `SELECT currency, fx_rate, fx_date FROM quotes WHERE project_id = $1 AND status = 'accepted' ORDER BY version DESC LIMIT 1`, [projectId])).rows[0]
-    ?? (await ctx.db.query(`SELECT currency, fx_rate, fx_date FROM quotes WHERE project_id = $1 AND status <> 'superseded' ORDER BY version DESC LIMIT 1`, [projectId])).rows[0];
+    `SELECT currency, fx_rate, fx_date, base_currency, fx_policy FROM quotes WHERE project_id = $1 AND status = 'accepted' ORDER BY version DESC LIMIT 1`, [projectId])).rows[0]
+    ?? (await ctx.db.query(`SELECT currency, fx_rate, fx_date, base_currency, fx_policy FROM quotes WHERE project_id = $1 AND status <> 'superseded' ORDER BY version DESC LIMIT 1`, [projectId])).rows[0];
   if (!q) return null;
   const rows = (await ctx.db.query(
     `SELECT DISTINCT ON (currency) currency, rate FROM fx_rates WHERE rate_type IS NULL AND rate_date <= $1 ORDER BY currency, rate_date DESC, created_at DESC`, [q.fx_date])).rows;
   const rates: Record<string, number> = Object.fromEntries(rows.map((r) => [r.currency, Number(r.rate)]));
-  rates[q.currency] = Number(q.fx_rate);
-  return { eurTry: q.currency === 'TRY' ? Number(q.fx_rate) : rates.TRY ?? null, rates };
+  // v0.5: fx_rate = 1 <base> = x <quote currency>, buffer included → the quote-time MARKET rate (fx_policy.marketRate) in EUR terms
+  const base = (q.base_currency ?? 'EUR') as string;
+  const market = Number(q.fx_policy?.marketRate ?? q.fx_rate);
+  const eurBase = base === 'EUR' ? 1 : rates[base] ?? null;
+  if (eurBase != null) rates[q.currency] = q.currency === 'EUR' ? 1 : market * eurBase;
+  return { eurTry: rates.TRY ?? null, rates };
 }
 
 export async function projectRealizedFx(ctx: Ctx, projectId: string): Promise<RealizedFx> {
   const [movements, qr, p] = await Promise.all([
     projectMovements(ctx, projectId), quoteRates(ctx, projectId),
-    ctx.db.query('SELECT historical FROM projects WHERE id = $1', [projectId]).then((r) => r.rows[0]),
+    ctx.db.query('SELECT historical, base_currency FROM projects WHERE id = $1', [projectId]).then((r) => r.rows[0]),
   ]);
   // movements made without conversion (EUR paid in EUR …): TRY value from the TCMB rate of the value date (rule fxRateTypeForReporting)
   const rateType = (await ctx.rules()).fxRateTypeForReporting ?? 'tcmb_forex_buying';
   const table = await ratesTable(ctx, rateType, movements.map((m) => m.date ?? ''));
-  const r = realizedFx(fillRatesFromTable(movements, table, rateType), { quoteRates: qr });
+  // v0.5 S-19: realized figures also in the project's base currency (USD base: EUR/USD of each movement's value date)
+  const baseCurrency = p?.base_currency ?? 'EUR';
+  const r = realizedFx(fillRatesFromTable(movements, table, rateType, undefined, baseCurrency), { quoteRates: qr, baseCurrency });
   if (p?.historical && !movements.length) {
     r.reasons.push({ code: 'no_fx_evidence', message: 'Geçmiş proje: finansal hareket aktarılmadı — kur kanıtı yok; toplamlar aktarım günündeki kayıtlı kurla (kanıtsız)' });
   }

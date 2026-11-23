@@ -90,7 +90,7 @@ function valueTry(n: Node, amount: number): number | null {
   return e != null && n.r.eurTryRate ? e * n.r.eurTryRate : null;
 }
 
-export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRates | null } = {}): RealizedFx {
+export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRates | null; baseCurrency?: Currency | string } = {}): RealizedFx {
   const nodes: Node[] = movements
     .filter((m) => SIDE[m.type] && Number.isFinite(m.amount) && Math.abs(m.amount) > 0)
     .map((m) => ({ m: { ...m, amount: Math.abs(m.amount) }, r: normalizeMovementRates(m), isInvoice: SIDE[m.type].invoice, side: SIDE[m.type].side, counted: Math.abs(m.amount), usage: 'cash' as const, obligations: [] as { cur: string; amount: number }[] }));
@@ -241,8 +241,42 @@ export function realizedFx(movements: FxMovement[], opts: { quoteRates?: QuoteRa
     if (unbilled) reasons.push({ code: 'unbilled_cash', message: `${unbilled} tahsilat / ödeme bir faturayla kapanmadı (faturasız veya fazla)` });
   }
 
+  // v0.5 S-19: the same figures in the project's base currency
+  const baseCur = String(opts.baseCurrency ?? 'EUR').toUpperCase();
+  let base: NonNullable<RealizedFx['base']>;
+  if (baseCur === 'EUR' || baseCur === 'TRY') {
+    const k = baseCur === 'EUR' ? 'eur' : 'try';
+    base = {
+      currency: baseCur as Currency, revenue: revenue[k], cost: cost[k], profit: profit[k], margin: margin[k], markup: markup[k], fxGainLoss: fxGainLoss[k],
+      missing: missingRates.filter((m) => m.need.includes(baseCur as 'EUR' | 'TRY')).length,
+    };
+  } else {
+    const valueBase = (n: Node, amount: number): number | null => {
+      if (n.m.currency === baseCur) return amount;
+      const e = valueEur(n, amount);
+      const r = pos(n.m.eurBaseRate);
+      return e != null && r != null ? e * r : null;
+    };
+    let missing = 0;
+    const tot = (side: 'revenue' | 'cost') => {
+      if (!has[side]) return null;
+      let sum = 0;
+      for (const n of nodes) {
+        if (n.side !== side || n.counted <= 0) continue;
+        const v = valueBase(n, n.counted);
+        if (v == null) missing++; else sum += v;
+      }
+      return round2(sum);
+    };
+    const rv = tot('revenue');
+    const cs = tot('cost');
+    const pf = both && rv != null && cs != null ? round2(rv - cs) : null;
+    base = { currency: baseCur as Currency, revenue: rv, cost: cs, profit: pf, margin: pf != null ? ratio(pf, rv) : null, markup: pf != null ? ratio(pf, cs) : null, fxGainLoss: null, missing };
+  }
+
   return {
     status: !nodes.length ? 'none' : reasons.length ? 'partial' : 'complete',
+    base,
     revenue, cost, profit, margin, markup,
     avgCollectionRate, avgPaymentRate, projectAvgRate, quoteRate: pos(q?.eurTry),
     fxGainLoss, collectionVsPaymentFx, evidence, missingRates, reasons,
