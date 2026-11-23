@@ -55,7 +55,15 @@ export function newQueueId(now = Date.now()): string {
   return `${now.toString(36)}-${seq.toString(36)}-${rnd}`;
 }
 
+/** v0.5 S-15 / K-24: nothing that needs an approval is ever done offline (decisions, batch approvals, Face ID step-ups, quote /
+ *  payment / contract approvals, sending messages). Such requests are refused instead of being queued. */
+const APPROVAL_PATHS = [/^\/decisions(\/|$)/, /\/approve(\/|$)/, /\/send$/, /\/sign$/, /^\/auth\/webauthn/, /\/batch-approve$/, /\/mark-paid$/, /\/handovers/];
+export function isApprovalPath(path: string): boolean {
+  return APPROVAL_PATHS.some((re) => re.test(path));
+}
+
 export function makeQueued(input: Pick<QueuedRequest, 'method' | 'path' | 'body' | 'label'>, now = Date.now()): QueuedRequest {
+  if (isApprovalPath(input.path)) throw new Error('Onay gerektiren işlemler çevrimdışı yapılamaz; bağlantı gelince tekrar deneyin.');
   return { ...input, id: newQueueId(now), createdAt: now, attempts: 0 };
 }
 

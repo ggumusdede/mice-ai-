@@ -151,12 +151,12 @@ export async function completeMailOAuth(
   return withTenant(s.t, { type: 'user', id: s.u }, async (db) => {
     const u = (await db.query('SELECT id, email, active FROM users WHERE id = $1', [s.u])).rows[0];
     if (!u || !u.active) throw new OAuthCallbackError('user_inactive');
+    if (cfg.requireSameAddress && String(u.email).toLowerCase() !== address) throw new OAuthCallbackError('mailbox_mismatch', `${address} ≠ ${u.email}`);
     try {
       await assertCorporateMailbox(db, s.u, address);
     } catch {
       throw new OAuthCallbackError('personal_account_blocked', address);
     }
-    if (cfg.requireSameAddress && String(u.email).toLowerCase() !== address) throw new OAuthCallbackError('mailbox_mismatch', `${address} ≠ ${u.email}`);
     await db.query(
       `UPDATE user_mail_accounts SET status = 'disconnected', disconnected_at = $2, disconnected_reason = 'replaced', updated_at = $2 WHERE user_id = $1 AND status <> 'disconnected'`,
       [s.u, now]);

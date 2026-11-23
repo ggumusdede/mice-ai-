@@ -53,5 +53,6 @@ export function prefillFromQuote(items: ServiceItemDetail[], q: Quote): OptionSt
 
 /** The latest live revision that may be revised (not superseded, not accepted). */
 export function canRevise(q: Quote, outcome: string): boolean {
-  return q.status !== 'superseded' && !q.supersededBy && q.status !== 'accepted' && (outcome === 'open' || outcome === 'won');
+  // v0.5 D-1: an accepted quote can be revised too (Rev.N → the customer approves it again with a new link)
+  return q.status !== 'superseded' && !q.supersededBy && (outcome === 'open' || outcome === 'won');
 }

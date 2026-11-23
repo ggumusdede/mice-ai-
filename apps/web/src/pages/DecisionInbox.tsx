@@ -13,6 +13,7 @@ import { DraftEditor } from '../components/DraftEditor';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { Button, Callout, DecisionBadgePill, ErrorBox, InlineError, Pill, Spinner } from '../components/ui';
+import { OneTapStrip, QuickBatchCard, isQuickCard } from '../components/QuickApproval';
 
 /** Decision effects come back as machine codes (`project_assigned:<uuid>`, `rfq_sent:<id>`); show them in Turkish. */
 const EFFECT_LABELS: Record<string, string> = {
@@ -53,6 +54,11 @@ export function DecisionInboxPage() {
   const res = useApi(() => api.decisions.list('open'), [], { pollMs: 30_000 });
   const [openId, setOpenId] = useState<string | null>(null);
   const list = useMemo(() => sortDecisions(res.data ?? []), [res.data]);
+  // v0.5 S-01: outbound message cards — one-tap strip under each, a batch card on top when 2+ wait ("tek tek bak" filters)
+  const quick = useMemo(() => list.filter(isQuickCard), [list]);
+  const [onlyMessages, setOnlyMessages] = useState(false);
+  const shown = onlyMessages && quick.length ? quick : list;
+  const dropIds = (ids: string[]) => res.setData((prev) => (prev ?? []).filter((x) => !ids.includes(x.id)));
   const current = list.find((d) => d.id === openId) ?? null;
 
   // pull-to-refresh
@@ -107,11 +113,14 @@ export function DecisionInboxPage() {
 
       {res.data && list.length === 0 ? <AllGood lastLoadedAt={res.lastLoadedAt} /> : null}
 
-      {list.length > 0 ? (
+      <QuickBatchCard cards={quick} onlyMessages={onlyMessages} onToggle={() => setOnlyMessages((x) => !x)} onDone={dropIds} />
+
+      {shown.length > 0 ? (
         <ul className="decision-list" aria-label={t.inbox.title}>
-          {list.map((d) => (
+          {shown.map((d) => (
             <li key={d.id}>
               <DecisionCard d={d} onOpen={() => setOpenId(d.id)} />
+              {isQuickCard(d) ? <OneTapStrip d={d} onDone={(id) => dropIds([id])} /> : null}
             </li>
           ))}
         </ul>
@@ -139,6 +148,7 @@ function DecisionCard({ d, onOpen }: { d: Decision; onOpen: () => void }) {
         <span className="dcard__kind">{t.decisionKind[d.kind] ?? d.kind}</span>
         <span className="dcard__badges">
           {d.urgent ? <Pill tone="danger" icon="alert">{t.inbox.urgent}</Pill> : null}
+          {d.routedToDeputy ? <Pill tone="purple" icon="shield">Vekil olarak size</Pill> : null}
           <DecisionBadgePill badge={d.badge} />
         </span>
       </div>

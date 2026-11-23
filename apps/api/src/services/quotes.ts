@@ -566,7 +566,7 @@ function registerQuoteDocuments(): void {
         : `${cur} (1 ${base} = ${fx} ${cur}, ${quote.fxSource} ${quote.fxDate}${buffer > 0 ? `, kur payı ${pct(buffer)} dahil` : ''})`;
     const content = {
       agencyName: tenantName, projectCode: p.code, reference: p.code, revision: quote.version, customerName: p.customer_name, currency: cur, fxRate: fx, fxSource: quote.fxSource, fxDate: quote.fxDate,
-      optionUntil: quote.optionUntil, appliedCustomerRules: quote.appliedCustomerRules, clauses,
+      optionUntil: quote.optionUntil, appliedCustomerRules: quote.appliedCustomerRules, clauses, fxDisclosure: fxLine,
       options: quote.options.map((o) => ({
         optionNo: o.optionNo, title: o.title,
         lines: o.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit: l.unit, nights: l.nights, unitPrice: round2(l.unitPriceEur * fx), total: round2(l.unitPriceEur * mult(l) * fx), vatRate: l.vatRate, valueAdd: l.valueAdd })),

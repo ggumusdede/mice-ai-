@@ -841,3 +841,25 @@ tr.diff th { font-weight: 600; }
 .fx-reasons { margin: 4px 0; padding-left: 18px; color: var(--text-2); }
 .link-button { background: none; border: 0; padding: 4px 0; color: var(--accent); cursor: pointer; text-align: left; min-height: 32px; }
 @media (max-width: 360px) { .fx-cols { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- v0.5-A ekip, iletişim ve kontrol */
+.qa-batch { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); border-left: 4px solid var(--accent); }
+.qa-batch__title { font-size: 17px; font-weight: 600; margin: 0 0 2px; }
+.qa-batch__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.qa-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 6px 4px 2px; }
+.qa-strip__to { min-width: 0; overflow-wrap: anywhere; flex: 1 1 140px; }
+.simple-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.simple-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); }
+.simple-item__main { min-width: 0; flex: 1 1 180px; overflow-wrap: anywhere; }
+.simple-item__title { font-weight: 600; }
+.stack-sm { display: flex; flex-direction: column; gap: 8px; }
+.row-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.row-wrap > * { flex: 1 1 160px; min-width: 0; }
+details.more { border-top: 0.5px solid var(--border); padding-top: 8px; margin-top: 8px; }
+details.more > summary { cursor: pointer; color: var(--accent); font-weight: 500; list-style: none; padding: 6px 0; }
+details.more > summary::-webkit-details-marker { display: none; }
+.progress { height: 8px; border-radius: 4px; background: var(--neutral-tint); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--success); }
+.big-number { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.pack-guest { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+.pack-guest:last-child { border-bottom: 0; }

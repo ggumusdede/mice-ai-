@@ -7,6 +7,7 @@ import { useT } from '../../i18n';
 import { marginFromMarkup, pct } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, Card, ErrorBox, InlineError, Loading } from '../../components/ui';
+import { ProductDecisionRules } from '../../components/ProductDecisionRules';
 
 /** Keys whose values are fractions → edited as %. */
 const FRACTION_KEYS = new Set<keyof TenantRules>(['targetMarginMin', 'goodPriceAdvantage', 'goodPriceVsMedian', 'automationSampleRate', 'aiConfidenceThreshold', 'accommodationTaxRate']);
@@ -187,6 +188,8 @@ export function RulesPage() {
           </label>
         </div>
       </Card>
+
+      <ProductDecisionRules rules={rules} setRules={setRules} changed={changed} isAdmin={isAdmin} />
 
       {isAdmin ? (
         <div className="sticky-actions">

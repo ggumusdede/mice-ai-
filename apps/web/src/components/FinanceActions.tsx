@@ -2,7 +2,8 @@
 // The system never moves money (§6): "Ödendi" only records a payment a human made in the bank after the admin approval.
 import { useState } from 'react';
 import type { BankTransaction, FinanceEntry } from '@mice/shared';
-import { api, errorMessage } from '../api/client';
+import { api, ApiClientError, errorMessage } from '../api/client';
+import { moneyApi } from '../api/moneyClient';
 import { useT } from '../i18n';
 import { money, todayISO } from '../lib/format';
 import { Button, InlineError } from './ui';
@@ -135,6 +136,40 @@ export function ManualMatchAction({ tx, entries, kindLabel, onDone }: { tx: Bank
         }
       }}>{t.finance.match}</Button>
       <InlineError message={error} />
+    </div>
+  );
+}
+
+/** v0.5 S-06 "Kapora önce": payment request; when the customer deposit is not collected yet the server asks for a reason — shown
+ *  in place (plain warning + one reason field); the admin then approves the exception with Face ID on the payment card. */
+export function PaymentRequestAction({ entry, onDone, onError }: { entry: FinanceEntry; onDone: (e: FinanceEntry) => void; onError: (msg: string) => void }) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const send = async (why?: string) => {
+    setBusy(true);
+    try {
+      onDone(await moneyApi.paymentRequest(entry.id, why));
+      setWarning(null);
+    } catch (e) {
+      if (e instanceof ApiClientError && e.code === 'DEPOSIT_FIRST_REASON_REQUIRED') setWarning(e.message);
+      else onError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!warning) return <Button size="sm" variant="secondary" busy={busy} onClick={() => void send()}>{t.finance.paymentRequest}</Button>;
+  return (
+    <div className="inline-form">
+      <p className="small text-warning" role="alert">{warning}</p>
+      <label className="sr-only" htmlFor={`dfr-${entry.id}`}>{t.money.depositFirstReason}</label>
+      <textarea id={`dfr-${entry.id}`} className="input" rows={2} placeholder={t.money.depositFirstReason} value={reason} onChange={(e) => setReason(e.target.value)} />
+      <p className="muted small">{t.money.depositFirstHint}</p>
+      <div className="row">
+        <Button size="sm" variant="ghost" onClick={() => setWarning(null)}>{t.common.cancel}</Button>
+        <Button size="sm" busy={busy} disabled={!reason.trim()} onClick={() => void send(reason.trim())}>{t.money.depositFirstSend}</Button>
+      </div>
     </div>
   );
 }

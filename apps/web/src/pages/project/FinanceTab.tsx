@@ -4,11 +4,11 @@ import { CURRENCIES, type SupplierInvoiceInput } from '@mice/shared';
 import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
-import { date, eur, money } from '../../lib/format';
+import { date, displayBaseCurrency, eur, money } from '../../lib/format';
 import { useToast } from '../../components/Toast';
 import { Button, Callout, Card, Checkbox, ErrorBox, FilePicker, InlineError, Loading, Pill, Select, TextInput, type Tone } from '../../components/ui';
 import { useProject } from './ProjectContext';
-import { MarkPaidAction, ReconcileAction } from '../../components/FinanceActions';
+import { MarkPaidAction, PaymentRequestAction, ReconcileAction } from '../../components/FinanceActions';
 import { supplierName, useSuppliers } from './useSuppliers';
 
 const PART_LABEL: Record<string, string> = { prepayment: 'Ön ödeme', balance: 'Bakiye', deposit: 'Kapora', full: 'Tamamı' };
@@ -20,7 +20,6 @@ export function FinanceTab() {
   const { detail } = useProject();
   const { byId } = useSuppliers();
   const res = useApi(() => api.finance.entries({ projectId: detail.project.id }), [detail.project.id]);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   const { reload: reloadProject } = useProject();
   // references of contract entries are the project code (at signing time) — redundant inside the project
@@ -61,7 +60,7 @@ export function FinanceTab() {
                   <th scope="col">{t.finance.supplier}</th>
                   <th scope="col">{t.finance.invoiceNo} / {t.finance.reference}</th>
                   <th scope="col" className="num">{t.common.amount}</th>
-                  <th scope="col" className="num">EUR</th>
+                  <th scope="col" className="num">{displayBaseCurrency()}</th>
                   <th scope="col">{t.finance.dueDate}</th>
                   <th scope="col">{t.common.status}</th>
                   <th scope="col"><span className="sr-only">İşlem</span></th>
@@ -79,18 +78,7 @@ export function FinanceTab() {
                     <td><Pill tone={STATUS_TONE[e.status] ?? 'neutral'}>{t.financeStatus[e.status] ?? e.status}</Pill></td>
                     <td className="num">
                       {(e.kind === 'payable' || e.kind === 'supplier_invoice') && e.status === 'open' ? (
-                        <Button size="sm" variant="secondary" busy={busyId === e.id} onClick={async () => {
-                          setBusyId(e.id);
-                          try {
-                            const n = await api.finance.paymentRequest(e.id);
-                            res.setData((p) => (p ?? []).map((x) => (x.id === n.id ? n : x)));
-                            toast(t.finance.paymentRequested);
-                          } catch (err) {
-                            toast(errorMessage(err), 'danger');
-                          } finally {
-                            setBusyId(null);
-                          }
-                        }}>{t.finance.paymentRequest}</Button>
+                        <PaymentRequestAction entry={e} onDone={(n) => { replace(n); toast(t.finance.paymentRequested); }} onError={(m) => toast(m, 'danger')} />
                       ) : null}
                       {(e.kind === 'payable' || e.kind === 'supplier_invoice') && e.status === 'approved' ? (
                         <MarkPaidAction entry={e} onDone={(n) => { replace(n); toast(t.finance.markedPaid); }} />

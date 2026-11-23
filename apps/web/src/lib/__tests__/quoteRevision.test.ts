@@ -31,7 +31,7 @@ describe('Q9 quick revision prefill', () => {
     expect(revisionLabel(2)).toBe('Rev.2');
     expect(canRevise(quote, 'open')).toBe(true);
     expect(canRevise({ ...quote, status: 'superseded' }, 'open')).toBe(false);
-    expect(canRevise({ ...quote, status: 'accepted' }, 'won')).toBe(false);
+    expect(canRevise({ ...quote, status: 'accepted' }, 'won')).toBe(true); // v0.5 D-1
     expect(canRevise(quote, 'lost')).toBe(false);
   });
 });

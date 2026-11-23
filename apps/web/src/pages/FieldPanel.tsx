@@ -7,6 +7,7 @@ import { dateRange, dateTime, todayISO, tl } from '../lib/format';
 import { extraLimitStatus } from '../lib/fieldLimits';
 import { isToday, isUpcoming } from '../lib/fieldDates';
 import { useOfflineQueue } from '../lib/OfflineQueueProvider';
+import { FieldPackCard } from '../components/FieldPackCard';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { Button, Callout, CopyLink, EmptyState, ErrorBox, InlineError, Loading, Pill, Segmented } from '../components/ui';
@@ -44,6 +45,7 @@ export function FieldPanelPage() {
         </div>
       </header>
       <QueueIndicator />
+      <FieldPackCard />
 
       {projects.error && !projects.data ? <ErrorBox error={projects.error} onRetry={() => void projects.reload()} /> : null}
       {projects.loading && !projects.data ? <Loading /> : null}

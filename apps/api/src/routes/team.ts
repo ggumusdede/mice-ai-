@@ -170,7 +170,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     const { id } = parse(idParam, req.params);
     return asUser(req, async (ctx) => list(await listFieldStaff(ctx, id)));
   });
-  app.put('/api/projects/:id/field-staff', auth, async (req) => {
+  app.post('/api/projects/:id/field-staff', auth, async (req) => {
     const { id } = parse(idParam, req.params);
     const b = parse(z.object({ userId: z.string().uuid(), transferGroup: z.string().max(80).nullable().optional(), active: z.boolean().optional() }), req.body);
     return asUser(req, async (ctx) => list(await setFieldStaff(ctx, id, b)));

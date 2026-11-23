@@ -3,7 +3,7 @@ import { NavLink, useParams } from 'react-router-dom';
 import { api, errorMessage } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { useT } from '../../i18n';
-import { businessDuration, dateRange, staleReason } from '../../lib/format';
+import { businessDuration, dateRange, setDisplayBase, staleReason } from '../../lib/format';
 import { StepProgress } from '../../components/StepProgress';
 import { Icon } from '../../components/Icon';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -22,6 +22,7 @@ import { OperationsTab } from './OperationsTab';
 import { FinanceTab } from './FinanceTab';
 import { ClosingTab } from './ClosingTab';
 import { FINANCIAL_TABS, useCanSeeFinancials } from '../../lib/visibility';
+import { ProjectMessaging } from '../../components/ProjectMessaging';
 
 const TABS = ['overview', 'items', 'offers', 'comparison', 'quote', 'contracts', 'operations', 'finance', 'closing'] as const;
 type TabKey = (typeof TABS)[number];
@@ -39,6 +40,8 @@ export function ProjectPage() {
   if (!ctx) return <div className="page"><Loading /></div>;
 
   const { project, customer, alerts, stepTimer } = ctx.detail;
+  // v0.5 S-19: every amount on the project screens is in the project's own base currency (fixed at creation)
+  setDisplayBase(project.baseCurrency ?? 'EUR');
   const tabs = canSeeFinancials ? TABS : TABS.filter((k) => !FINANCIAL_TABS.includes(k));
   const current = (tabs as readonly string[]).includes(tab) ? (tab as TabKey) : 'overview';
   const poNumber = [...ctx.detail.quotes].sort((a, b) => b.version - a.version).find((q) => q.poNumber)?.poNumber ?? null;
@@ -77,6 +80,7 @@ export function ProjectPage() {
                 <Button variant="secondary" size="sm" icon="x" onClick={() => setOutcomeOpen('lost')}>{t.project.lost}</Button>
               </div>
             ) : null}
+            <ProjectMessaging projectId={project.id} />
           </div>
         </header>
 

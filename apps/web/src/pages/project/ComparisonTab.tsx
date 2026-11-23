@@ -57,6 +57,9 @@ function ItemComparison({ item }: { item: ServiceItemDetail }) {
                   {ev.normalized.perRoomNightEur !== null ? <div className="kv__row"><dt>{t.comparison.perRoomNight}</dt><dd>{eur(ev.normalized.perRoomNightEur)}</dd></div> : null}
                   <div className="kv__row"><dt>KDV / {t.publicPages.accTax}</dt><dd>{eur(ev.normalized.vatEur)} / {eur(ev.normalized.accommodationTaxEur)}</dd></div>
                   <div className="kv__row"><dt>{t.comparison.benchmark}</dt><dd>{t.comparison.benchmarkType[ev.benchmark.type]}{ev.benchmark.value !== null ? ` · ${eur(ev.benchmark.value)}` : ''}{ev.benchmark.sampleSize ? ` (n=${ev.benchmark.sampleSize})` : ''}</dd></div>
+                  {ev.contractBenchmark ? (
+                    <div className="kv__row"><dt>{t.comparison.contractPrice}</dt><dd>{eur(ev.contractBenchmark.price)}{ev.contractBenchmark.advantage !== null ? <span className={ev.contractBenchmark.advantage < 0 ? 'text-warning' : 'text-success'}> · {signedPct(-ev.contractBenchmark.advantage)} {ev.contractBenchmark.advantage < 0 ? t.comparison.contractAbove : t.comparison.contractBelow}</span> : null}</dd></div>
+                  ) : null}
                   <div className="kv__row"><dt>{t.project.advantage}</dt><dd className={ev.advantage !== null && ev.advantage > 0 ? 'text-success' : ''}>{signedPct(ev.advantage)}</dd></div>
                   <div className="kv__row"><dt>{t.comparison.suggestedMarkup}</dt><dd>{ev.suggestedMarkup !== null ? <>{t.profit.markupShort} {pct(ev.suggestedMarkup)} · {t.profit.marginShort} {pct(ev.suggestedMarkup / (1 + ev.suggestedMarkup))}</> : '—'}</dd></div>
                   <div className="kv__row"><dt>{t.offers.optionUntil}</dt><dd>{date(offer?.optionUntil)}</dd></div>

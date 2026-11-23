@@ -205,5 +205,5 @@ export interface FieldPackStatus { packId: ID; valid: boolean; revokedAt: ISODat
 export interface FieldPackSummary { id: ID; userId: ID; userName: string; date: ISODate; issuedAt: ISODateTime; expiresAt: ISODateTime; revokedAt: ISODateTime | null; guestCount: number }
 // POST /api/field/packs {date?} -> FieldPackResponse ; GET /api/field/packs/:id/status -> FieldPackStatus
 // GET  /api/field/packs -> List<FieldPackSummary> (admin: all recent; others: own) ; POST /api/field/packs/:id/revoke (admin)
-// PUT  /api/projects/:id/field-staff {userId, transferGroup?} (admin / ops) ; GET -> List<{userId, userName, transferGroup}>
+// POST /api/projects/:id/field-staff {userId, transferGroup?} (admin / ops) ; GET -> List<{userId, userName, transferGroup}>
 // PATCH /api/guests/:id/field-info {roomNo?, transferGroup?} (admin / ops)

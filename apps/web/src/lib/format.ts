@@ -23,7 +23,16 @@ export function money(value: number | null | undefined, currency = 'EUR', digits
   return moneyFmt(currency, d).format(value);
 }
 
-export const eur = (v: number | null | undefined, digits?: number) => money(v, 'EUR', digits);
+/** v0.5 S-19: amounts are in the PROJECT's base currency (the agency's choice: TL / EUR / USD). The project page (and agency-level
+ *  reports) set the display currency; the legacy name `eur` is kept so every screen follows it. */
+let displayBase = 'EUR';
+export function setDisplayBase(currency: string | null | undefined): void {
+  displayBase = currency || 'EUR';
+}
+export function displayBaseCurrency(): string {
+  return displayBase;
+}
+export const eur = (v: number | null | undefined, digits?: number) => money(v, displayBase, digits);
 export const tl = (v: number | null | undefined, digits = 0) => money(v, 'TRY', digits);
 
 const numFmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 2 });

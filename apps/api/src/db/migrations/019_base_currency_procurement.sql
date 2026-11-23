@@ -115,6 +115,13 @@ DROP TRIGGER IF EXISTS propagate_staleness ON finance_entries;
 CREATE TRIGGER propagate_staleness AFTER INSERT OR UPDATE ON finance_entries FOR EACH ROW EXECUTE FUNCTION propagate_staleness(
   'finance_entry', 'project_id', 'amount', 'amount_eur', 'amount_base', 'currency', 'kind', 'status');
 
+-- decision kinds of v0.5-A (mirrors DECISION_KINDS in packages/shared/src/enums.ts — security.test.ts asserts it)
+ALTER TABLE decisions DROP CONSTRAINT IF EXISTS decisions_kind_check;
+ALTER TABLE decisions ADD CONSTRAINT decisions_kind_check CHECK (kind IN ('quote_approval','margin_override','contract_diff','contract_approval',
+  'condition_risk','payment_approval','supplier_accreditation','automation_promotion','automation_demotion','audit_sample','rule_suggestion',
+  'checklist_question','assignment','rfq_send','negotiation_message','outbound_message','field_extra','low_confidence_review',
+  'unbilled_payment_escalation','low_supplier_score','closing_overdue','base_currency_change','allotment_release','supplier_option_expiry'));
+
 -- ---------------------------------------------------------------- S-03 / K-11 contract rates
 CREATE TABLE IF NOT EXISTS contract_rates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

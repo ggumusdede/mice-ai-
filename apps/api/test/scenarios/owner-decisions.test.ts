@@ -202,9 +202,11 @@ describe('Q9 — hızlı revizyon (Rev.N, aynı teklif dosyası)', () => {
     const n = await w.flow().intake(REQUEST_TEXT, { customer: 'new' }).offers(OFFERS).as('admin').quote();
     const nr = (await w.clerk.post(`/api/quotes/${n.quote.id}/revise`, {})).body;
     expect(nr).toMatchObject({ version: 2, status: 'pending_approval' });
-    // an accepted quote is not revised here
+    // v0.5 D-1 (ürün sahibi kararı): an accepted quote CAN be revised — Rev.N waits for the customer's re-approval (details: D1-01)
     n.quote = nr;
     await n.flow().as('admin').approveQuote().send().accept(1, { poNumber: 'PO-9' });
-    expect((await w.admin.post(`/api/quotes/${nr.id}/revise`, {})).body.error.code).toBe('QUOTE_ACCEPTED');
+    const ra = await w.admin.post(`/api/quotes/${nr.id}/revise`, {});
+    expect(ra.status).toBe(200);
+    expect(ra.body).toMatchObject({ version: 3, revisesAcceptedQuoteId: nr.id });
   });
 });

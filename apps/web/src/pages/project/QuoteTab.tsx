@@ -89,6 +89,11 @@ function QuoteBuilder({ revising, onDone }: { revising: Quote | null; onDone: ()
     return Array.from({ length: Math.min(n, DEFAULT_RULES.quoteOptionsMin) }, (_, k) => ({ title: `Seçenek ${k + 1}`, lines: items.map((i) => initialLine(i, k)) }));
   });
   const [overrideReason, setOverrideReason] = useState('');
+  // v0.5 S-07 kur politikası: defaults come from the server (rate source/date, validity = option date, rule buffer); only what the
+  // user changes is sent
+  const base = detail.project.baseCurrency ?? 'EUR';
+  const [bufferPct, setBufferPct] = useState<string>(revising?.fxPolicy?.bufferPct ? String(Math.round(revising.fxPolicy.bufferPct * 1000) / 10) : '');
+  const [fxValidUntil, setFxValidUntil] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Quote | null>(null);
@@ -122,6 +127,12 @@ function QuoteBuilder({ revising, onDone }: { revising: Quote | null; onDone: ()
           })),
         })),
         marginOverrideReason: overrideReason.trim() || undefined,
+        ...(bufferPct.trim() !== '' || fxValidUntil ? {
+          fxPolicy: {
+            ...(bufferPct.trim() !== '' && currency !== base ? { bufferPct: Math.max(0, Number(bufferPct.replace(',', '.')) || 0) / 100 } : {}),
+            ...(fxValidUntil ? { validUntil: fxValidUntil } : {}),
+          },
+        } : {}),
       };
       const q = revising ? await api.quotes.revise(revising.id, body) : await api.projects.buildQuote(detail.project.id, body);
       setResult(q);
@@ -163,7 +174,8 @@ function QuoteBuilder({ revising, onDone }: { revising: Quote | null; onDone: ()
           <div className="row"><span className="small">{t.quote.revisingHint}</span><Button size="sm" variant="ghost" onClick={onDone}>{t.common.cancel}</Button></div>
         </Callout>
       ) : null}
-      <p className="muted small">{t.quote.optionCountHint(DEFAULT_RULES.quoteOptionsMin, DEFAULT_RULES.quoteOptionsMax)} İç hesap EUR; müşteri para birimine sunucu çevirir.</p>
+      <p className="muted small">{t.quote.optionCountHint(DEFAULT_RULES.quoteOptionsMin, DEFAULT_RULES.quoteOptionsMax)} {t.quote.baseHint(base)}</p>
+      {revising?.status === 'accepted' ? <Callout tone="warning" icon="alert" title={t.quote.revisingAccepted}><span className="small">{t.quote.revisingAcceptedHint}</span></Callout> : null}
       <div className={`qb qb--${options.length}`}>
         {options.map((o, oi) => (
           <section key={oi} className="qb__opt" aria-label={o.title}>
@@ -246,6 +258,25 @@ function QuoteBuilder({ revising, onDone }: { revising: Quote | null; onDone: ()
         ))}
       </div>
 
+      {/* v0.5 S-07: mandatory FX policy — filled with sensible defaults, details only on demand */}
+      <details className="more">
+        <summary>{t.quote.fxPolicy}: {currency === base ? t.quote.fxSameCurrency : t.quote.fxSummary(bufferPct.trim() === '' ? null : bufferPct)}</summary>
+        <div className="grid-2">
+          {currency !== base ? (
+            <label className="field">
+              <span className="field__label">{t.quote.fxBuffer}</span>
+              <input className="input" inputMode="decimal" placeholder={t.quote.fxBufferDefault} value={bufferPct} onChange={(e) => setBufferPct(e.target.value)} />
+              <span className="field__hint">{t.quote.fxBufferHint}</span>
+            </label>
+          ) : null}
+          <label className="field">
+            <span className="field__label">{t.quote.fxValidUntil}</span>
+            <input className="input" type="date" value={fxValidUntil} onChange={(e) => setFxValidUntil(e.target.value)} />
+            <span className="field__hint">{t.quote.fxValidUntilHint}</span>
+          </label>
+        </div>
+      </details>
+
       {belowTarget && isAdmin ? (
         <TextArea label={t.quote.marginOverride} rows={2} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
       ) : null}
@@ -317,7 +348,9 @@ function QuoteCard({ q, onRevise }: { q: Quote; onRevise?: () => void }) {
     >
       <div className="muted small row">
         <span>{t.quote.reference}: <span className="mono">{detail.project.code}</span></span>
-        <span>{q.currency} · 1 EUR = {q.fxRate} ({q.fxSource}, {date(q.fxDate)})</span>
+        <span>{q.currency} · 1 {q.baseCurrency ?? 'EUR'} = {q.fxRate} ({q.fxSource}, {date(q.fxDate)})</span>
+        {q.fxPolicy?.bufferPct ? <span title={t.quote.fxBufferHint}>{t.quote.fxBuffer}: {pct(q.fxPolicy.bufferPct)} · {t.quote.fxHidden}</span> : null}
+        {q.revisesAcceptedQuoteId ? <Pill tone="warning">{t.quote.revisionOfAccepted}</Pill> : null}
         {q.optionUntil ? <span>{t.offers.optionUntil}: {date(q.optionUntil)}</span> : null}
         {q.sentAt ? <span>{t.quoteStatus.sent}: {dateTime(q.sentAt)}</span> : null}
         {q.openedAt ? <span>{t.quote.opened}: {dateTime(q.openedAt)}</span> : null}

@@ -66,9 +66,9 @@ describe('EK — Ekip, iletişim ve kontrol (v0.5-A)', () => {
     expect(out.some((x) => x.startsWith('cards_escalated'))).toBe(true);
     const row = (await ownerSql('SELECT assigned_to, escalation_level, status FROM decisions WHERE id = $1', [c.id]))[0];
     expect(row).toMatchObject({ assigned_to: w.user('finance').id, escalation_level: 1, status: 'open' });
-    // the deputy (finance role) can now handle the routed outbound card with one tap; ops no longer can
+    // the deputy (finance role) can now handle the routed outbound card with one tap; an unrouted field user cannot
     setClock('2026-11-20T23:15');
-    expect((await w.decide({ id: c.id }, 'approve', { who: 'ops' })).status).toBe(403);
+    expect((await w.decide({ id: c.id }, 'approve', { who: 'field' })).status).toBe(403);
     const ok = await w.decide({ id: c.id }, 'approve', { who: 'finance' });
     expect(ok.status).toBe(200);
     expect(ok.body.decision.viaDelegation).toBe(true);
@@ -78,8 +78,8 @@ describe('EK — Ekip, iletişim ve kontrol (v0.5-A)', () => {
     const w = await makeWorld(S, 'ek3');
     await w.admin.patch(`/api/team-settings/users/${w.user('admin').id}`, { deputyUserId: w.user('ops').id });
     const id = (await ownerSql(`INSERT INTO decisions (tenant_id, kind, badge, summary, detail, required_role, requires_biometric, primary_action_label, created_at, deadline_at)
-      VALUES ($1, 'payment_approval', 'critical', 'Opsiyon ödemesi', '{"optionUntil":"2026-11-21"}', 'admin', true, 'Face ID ile onayla', $2, $3) RETURNING id`,
-      [w.t.tenantId, ist('2026-11-20T09:00'), ist('2026-11-21T18:00')]))[0].id;
+      VALUES ($1, 'outbound_message', 'critical', 'Opsiyon uzatma (Face ID)', '{"optionUntil":"2026-11-21"}', 'admin', true, 'Face ID ile onayla', $2, $3) RETURNING id`,
+      [w.t.tenantId, ist('2026-11-20T09:00'), ist('2026-11-21T12:00')]))[0].id;
     expect((await w.cards({ who: 'ops' })).some((x) => x.id === id)).toBe(false);
     await w.worker('2026-11-20T15:00');
     let r = (await ownerSql('SELECT approver_notified_at, deputy_id, status FROM decisions WHERE id = $1', [id]))[0];
@@ -189,7 +189,8 @@ describe('EK — Ekip, iletişim ve kontrol (v0.5-A)', () => {
     const p = await project(w);
     await ownerSql(`INSERT INTO decisions (tenant_id, project_id, kind, badge, summary, detail, required_role, primary_action_label, status, decided_at)
       VALUES ($1, $2, 'outbound_message', 'critical', 'opsiyon', '{"optionUntil":"2026-11-10"}', 'admin', 'x', 'approved', '2026-11-09T10:00:00Z'),
-             ($1, $2, 'outbound_message', 'critical', 'opsiyon', '{"optionUntil":"2026-11-12"}', 'admin', 'x', 'open', NULL)`, [w.t.tenantId, p.id]);
+             ($1, $2, 'outbound_message', 'critical', 'opsiyon', '{"optionUntil":"2026-11-12"}', 'admin', 'x', 'open', NULL)`.replace("status, decided_at)", "status, decided_at, decided_by)")
+      .replace("'2026-11-09T10:00:00Z')", "'2026-11-09T10:00:00Z', $3)").replace("'open', NULL)", "'open', NULL, NULL)"), [w.t.tenantId, p.id, w.user('admin').id]);
     const r = await w.clerk.get('/api/reports/promise-keeping');
     expect(r.body.agency).toMatchObject({ optionsDue: 2, optionsHandled: 1, score: 50 });
     expect(r.body.projects[0]).toMatchObject({ projectId: p.id, score: 50 });
@@ -264,7 +265,7 @@ describe('EK — Ekip, iletişim ve kontrol (v0.5-A)', () => {
     await w.ops.patch(`/api/guests/${g1.id}/field-info`, { roomNo: '204', transferGroup: 'Otobüs 1' });
     await w.ops.patch(`/api/guests/${g2.id}/field-info`, { roomNo: '101', transferGroup: 'Otobüs 2' });
     expect((await w.field.patch(`/api/guests/${g1.id}/field-info`, { roomNo: '1' })).status).toBe(403);
-    await w.ops.put(`/api/projects/${p.id}/field-staff`, { userId: w.user('field').id, transferGroup: 'Otobüs 1' });
+    await w.ops.post(`/api/projects/${p.id}/field-staff`, { userId: w.user('field').id, transferGroup: 'Otobüs 1' });
     const pk = await w.field.post('/api/field/packs', {});
     expect(pk.status).toBe(200);
     expect(Buffer.from(pk.body.key, 'base64')).toHaveLength(32);
