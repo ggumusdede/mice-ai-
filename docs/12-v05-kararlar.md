@@ -36,5 +36,7 @@ Kaynak: [11-uzman-paneli.md](11-uzman-paneli.md) soruları S-01…S-26 + gelişt
 
 | M-1 | Mobil | **Mağaza uygulaması**: mevcut web uygulaması Capacitor ile iOS/Android'e sarılır, App Store / Google Play'e konur (yerel Face ID, APNs/FCM bildirim, güçlü çevrimdışı). v0.5-A'dan sonra. Apple/Google geliştirici hesabı gerekir | 23.11.2026; docs/08 güncellenecek; ana çatı 1'e `apps/mobile` eklendi |
 
+| L-1 | Diller | **TR + EN (v0.6), sonra RU**: ekranlar, teklif PDF'i, müşteri/tedarikçi link sayfaları; yazışma taslakları ve belge okuma zaten TR/EN/RU | 23.11.2026; i18n altyapısı hazır (`apps/web/src/i18n`) |
+
 ## Kapsam etkisi
 Panelin v0.5 tahmini (≈95–110 geliştirici-haftası) üç büyütmeyle artar: S-04 tam kongre (+≈15–25), S-16 GDS ile bilet kesimi (+≈15–20, lisans/sertifikasyon süresi hariç), S-19 acenta para birimi (+≈4–6). Önerilen sıralama `docs/11` §v0.5 tablosunda güncellenecek; GDS ve kongre kaydı için ayrı alt fazlar (v0.5-A çekirdek, v0.5-B kongre, v0.5-C bilet) önerilir.
