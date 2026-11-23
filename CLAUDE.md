@@ -10,7 +10,8 @@ geldikçe geliştirme bu sürümlere göre devam eder.
 
 ### Ana çatı (mimari kararlar)
 1. Monorepo: `packages/shared` (tipler + HTTP sözleşmesi `api.ts`), `packages/domain` (saf iş kuralları), `packages/ai`
-   (Claude + deterministik mock), `apps/api` (Fastify + PostgreSQL), `apps/web` (React + Vite PWA). Sözleşme değişiklikleri **eklemeli**.
+   (Claude + deterministik mock), `apps/api` (Fastify + PostgreSQL), `apps/web` (React + Vite PWA), `apps/mobile` (aynı web kodunu Capacitor ile saran
+   iOS/Android mağaza uygulaması — ürün sahibi kararı 23.11.2026; ayrı mobil kod tabanı yok). Sözleşme değişiklikleri **eklemeli**.
 2. Veri: PostgreSQL, her kayıtta `tenant_id`, FORCE RLS (`apply_standard_policies`), kiracı-kapsamlı FK (`apply_tenant_foreign_keys`),
    uygulama `mice_app` (süper kullanıcı değil) rolüyle `withTenant` içinde çalışır.
 3. Silinmez kayıt + append-only `audit_log`; DELETE yok (durum alanları kullanılır).
