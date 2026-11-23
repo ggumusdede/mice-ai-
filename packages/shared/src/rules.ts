@@ -159,7 +159,7 @@ export interface TenantRules {
    *  zorunlu gerekçe + Face ID istisna) | 'block' (talep açılmaz). */
   depositFirstMode: 'warn' | 'block';
   /** v0.5 S-07 teklif kur politikası: varsayılan kur payı (tampon, 0.02 = %2) — teklif para birimi ana para biriminden farklıysa.
-   *  [Ürün kararı] temkinli varsayılan %2. */
+   *  [Ürün kararı] varsayılan 0 (müşteri fiyatı sorulmadan değişmez); acenta kuralla %x yapar, teklifte kişi değiştirebilir. */
   quoteFxBufferDefault: number;
   /** kur payı üst sınırı (bu değerin üstü reddedilir) */
   quoteFxBufferMax: number;
@@ -254,7 +254,7 @@ export const DEFAULT_RULES: TenantRules = {
   initialImportWindowMonths: 18,
   fxRateTypeForReporting: 'tcmb_forex_buying',
   depositFirstMode: 'warn',
-  quoteFxBufferDefault: 0.02,
+  quoteFxBufferDefault: 0,
   quoteFxBufferMax: 0.15,
   showFxBufferToCustomer: false,
   showFxClauseOnQuote: false,

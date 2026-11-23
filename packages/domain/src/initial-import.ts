@@ -78,6 +78,8 @@ export const IMPORT_TEMPLATES: Record<ImportEntity, ImportTemplate> = {
       col('outcome', 'Sonuç', 'kazanıldı', { required: true, aliases: ['durum', 'sonuc'], hint: 'kazanıldı / kaybedildi' }),
       col('lost_reason', 'Kayıp nedeni', '', { aliases: ['kayip nedeni', 'neden'], hint: 'kaybedildi ise zorunlu' }),
       col('notes', 'Notlar / öğrenilenler', '', { aliases: ['not', 'notlar', 'ogrenilenler'] }),
+      // v0.5 D-3: optional — matched to a user by e-mail or full name, so historical projects count in team performance
+      col('sales_owner', 'Satış sorumlusu', 'ayse@acenta.com', { aliases: ['satis sorumlusu', 'sorumlu', 'satisci', 'temsilci', 'proje sahibi'], hint: 'isteğe bağlı: kullanıcının e-postası veya adı soyadı' }),
     ],
   },
   service_lines: {
@@ -479,6 +481,7 @@ export function normalizeImportRow(entity: ImportEntity, input: Record<string, I
       if (o === 'lost' && !data.lostReason) err('LOST_REASON_REQUIRED', 'Kaybedilen proje için kayıp nedeni zorunlu', 'lost_reason');
       if (o === 'won' && data.lostReason) { warn('LOST_REASON_IGNORED', 'Kazanılan projede kayıp nedeni yok sayılır', 'lost_reason'); data.lostReason = null; }
       data.notes = text('notes');
+      data.salesOwner = text('sales_owner');
       break;
     }
     case 'service_lines': {

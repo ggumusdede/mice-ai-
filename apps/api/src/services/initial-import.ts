@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import {
   IMPORT_COMMIT_ORDER, IMPORT_ENTITIES, IMPORT_TEMPLATES, cellText, historicalProjectCode, importNaturalKey, importWindowStart,
-  localDate, matchHeaders, normalizeImportRow, normalizeName, parseCsv, rowStatus, slugTr, supplierScore,
+  localDate, matchHeaders, matchSalesOwner, normalizeImportRow, normalizeName, parseCsv, rowStatus, slugTr, supplierScore,
   type ImportCell, type ImportEntity, type ImportIssue,
 } from '@mice/domain';
 import type { ImportBatch, ImportBatchDetail, ImportFile, ImportReviewRequest, ImportRow, ImportSummary } from '@mice/shared';
@@ -222,6 +222,8 @@ interface Lookup {
   customers: Row[];
   histProjects: Map<string, Row>;
   liveProjectKeys: Set<string>;
+  /** v0.5 D-3: users for the optional "Satış sorumlusu" column */
+  users: Row[];
   histItemKeys: Set<string>;
   priceKeys: Set<string>;
   channelKeys: Set<string>;
@@ -242,6 +244,7 @@ async function loadLookup(ctx: Ctx, windowStart: string): Promise<Lookup> {
     suppliers: await q('SELECT id, name, tax_number, city, district, kinds, status, segment FROM suppliers'),
     customers: await q('SELECT id, name, tax_number, short_code FROM customers'),
     histProjects: new Map(hist.map((h) => [h.source_ref, h])),
+    users: await q('SELECT id, email, full_name, active FROM users'),
     liveProjectKeys: new Set((await q(`SELECT customer_id, start_date FROM projects WHERE NOT historical AND customer_id IS NOT NULL AND start_date IS NOT NULL`))
       .map((r) => `${r.customer_id}|${r.start_date}`)),
     histItemKeys: new Set((await q(`SELECT si.project_id, si.kind, si.description, si.date_from, si.quantity FROM service_items si JOIN projects p ON p.id = si.project_id WHERE p.historical`))
@@ -340,6 +343,13 @@ export async function validateBatch(ctx: Ctx, batchId: string): Promise<ImportSu
       case 'projects': {
         const ref = slugTr(String(data.code ?? ''));
         if (ref && L.histProjects.has(ref)) err('ALREADY_IMPORTED', 'Bu proje kodu daha önce aktarıldı', 'code');
+        // v0.5 D-3: optional sales owner → user (e-mail or full name); unmatched = warning, the project is imported without owner
+        if (data.salesOwner) {
+          const m = matchSalesOwner(String(data.salesOwner), L.users.map((u) => ({ id: u.id, email: u.email, fullName: u.full_name })));
+          if (m.userId) resolved.ownerId = m.userId;
+          else warn(m.reason === 'ambiguous' ? 'SALES_OWNER_AMBIGUOUS' : 'SALES_OWNER_NOT_FOUND',
+            m.reason === 'ambiguous' ? `Satış sorumlusu birden fazla kullanıcıyla eşleşti: ${data.salesOwner} — e-posta yazın` : `Satış sorumlusu kullanıcılarla eşleşmedi: ${data.salesOwner} — proje sahipsiz aktarılır (ekip performansına girmez)`, 'sales_owner');
+        }
         if (data.customer || data.customerVkn) {
           const res = resolveParty(L.customers, staged.customers, (data.customerVkn as string | null) ?? null, (data.customer as string | null) ?? null);
           if (res.ambiguous) err('CUSTOMER_AMBIGUOUS', 'Müşteri adı birden fazla kayıtla eşleşti — VKN girin', 'customer');
@@ -616,6 +626,7 @@ export async function commitBatch(ctx: Ctx, batchId: string): Promise<ImportBatc
               d.title ?? `${d.eventType ?? 'Proje'} — ${cust?.name ?? d.customer}`, d.eventType, d.startDate, d.endDate, d.pax, d.city, d.district, d.venue,
               d.outcome === 'won' ? 'closed' : 'lost', d.outcome === 'lost' ? d.lostReason : null, d.startDate, d.endDate ?? d.startDate, closed,
               d.notes, user.id, batchId, slugTr(String(d.code)), totals ? r2(totals.cost) : null, totals ? r2(totals.sale) : null])).rows[0];
+          if (typeof r.resolved.ownerId === 'string') await ctx.db.query('UPDATE projects SET owner_id = $2 WHERE id = $1', [p.id, r.resolved.ownerId]);
           await mark(r, p.id, 'created');
           break;
         }
