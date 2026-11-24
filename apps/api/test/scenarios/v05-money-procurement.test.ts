@@ -42,7 +42,7 @@ describe('v0.5-A — para ve tedarik çekirdeği', () => {
     // fixed for life — even the owner role cannot change it
     await expect(ownerSql(`UPDATE projects SET base_currency = 'USD' WHERE id = $1`, [fresh.id])).rejects.toThrow(/sabittir/);
     // audited: the tenants row change is in the audit log
-    const audit = await ownerSql(`SELECT after->>'base_currency' AS b FROM audit_log WHERE entity = 'tenants' AND entity_id = $1 ORDER BY at DESC LIMIT 1`, [w.t.tenantId]);
+    const audit = await ownerSql(`SELECT after->>'base_currency' AS b FROM audit_log WHERE entity = 'tenants' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [w.t.tenantId]);
     expect(audit[0]?.b).toBe('TRY');
   });
 

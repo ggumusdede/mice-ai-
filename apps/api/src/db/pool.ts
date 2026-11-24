@@ -45,14 +45,30 @@ export async function closePool(): Promise<void> {
  *   SET LOCAL app.tenant_id / app.user_id / app.actor_type / app.device
  * The settings are transaction-scoped, so a pooled connection never carries a tenant to the next request.
  */
+/** Injected application clock (tests). When set, DB-generated timestamps (column defaults, audit_log.at) follow it via
+ *  `app_now()` (migration 021) so reports that mix app-clock and DB-clock timestamps stay consistent. Production: unset → now(). */
+let dbClock: (() => Date) | null = null;
+let lastClockValue = NaN;
+let lastClockChangeReal = 0;
+export function setDbClock(fn: (() => Date) | null): void { dbClock = fn; lastClockValue = NaN; }
+/** Injected clock value + real time elapsed since the clock was last set → monotonic across transactions while
+ *  staying anchored to the injected clock (a fixed test clock no longer produces identical timestamps). */
+function dbNowIso(): string {
+  if (!dbClock) return '';
+  const c = dbClock().getTime();
+  if (c !== lastClockValue) { lastClockValue = c; lastClockChangeReal = Date.now(); }
+  return new Date(c + (Date.now() - lastClockChangeReal)).toISOString();
+}
+
 export async function withTenant<T>(tenantId: string, actor: Actor, fn: (db: Db) => Promise<T>): Promise<T> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     await client.query(
       `SELECT set_config('app.tenant_id', $1, true), set_config('app.user_id', $2, true),
-              set_config('app.actor_type', $3, true), set_config('app.device', $4, true)`,
-      [tenantId, actor.id ?? '', actor.type, actor.device ?? ''],
+              set_config('app.actor_type', $3, true), set_config('app.device', $4, true),
+              set_config('app.now', $5, true)`,
+      [tenantId, actor.id ?? '', actor.type, actor.device ?? '', dbNowIso()],
     );
     const result = await fn(client);
     await client.query('COMMIT');

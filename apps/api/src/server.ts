@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createAiService } from '@mice/ai';
 import { loadConfig, type AppConfig } from './config.js';
-import { closePool, initPool } from './db/pool.js';
+import { closePool, initPool, setDbClock } from './db/pool.js';
 import type { AppDeps } from './context.js';
 import { registerErrorHandler } from './errors.js';
 import { registerSecurityHeaders } from './security-headers.js';
@@ -45,6 +45,7 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
     now: opts.now ?? (() => new Date()),
     rng: opts.rng ?? Math.random,
   };
+  setDbClock(opts.now ?? null); // injected clock (tests) → DB timestamps follow it (app_now(), migration 021)
   if (opts.notifications) setNotificationService(opts.notifications);
   const logger = opts.logger === false ? false : opts.logger === true || config.nodeEnv !== 'test' ? loggerOptions() : false;
   const app = Fastify({

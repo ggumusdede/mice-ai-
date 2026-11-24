@@ -77,7 +77,7 @@ export const MOBILE = { viewport: { width: 390, height: 844 }, deviceScaleFactor
 export const DESKTOP = { viewport: { width: 1366, height: 900 }, deviceScaleFactor: 1, acceptDownloads: true };
 
 export async function newPage(label, mobile = false, extra = {}) {
-  const ctx = await browser.newContext({ ...(mobile ? MOBILE : DESKTOP), ...extra });
+  const ctx = await browser.newContext({ timezoneId: process.env.TZ || 'Europe/Istanbul', ...(mobile ? MOBILE : DESKTOP), ...extra });
   const page = await ctx.newPage();
   page.setDefaultTimeout(15_000);
   watch(page, label);

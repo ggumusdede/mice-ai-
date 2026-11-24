@@ -48,11 +48,11 @@ function watch(page, label) {
 }
 
 async function newPage(browser, label, mobile = false) {
-  const ctx = await browser.newContext(
+  const ctx = await browser.newContext({ timezoneId: process.env.TZ || 'Europe/Istanbul', ...(
     mobile
       ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true }
-      : { viewport: { width: 1366, height: 900 }, deviceScaleFactor: 1 },
-  );
+      : { viewport: { width: 1366, height: 900 }, deviceScaleFactor: 1 }
+  ) });
   const page = await ctx.newPage();
   page.setDefaultTimeout(15_000);
   watch(page, label);

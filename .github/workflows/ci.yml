@@ -97,6 +97,8 @@ jobs:
       WEBAUTHN_ORIGIN: http://localhost:4173
       BASE_URL: http://localhost:4173
       SHOTS: ${{ github.workspace }}/e2e/shots
+      # "today" must be the same day for the API, the scripts and the browser (agency time zone; avoids UTC-midnight flakiness)
+      TZ: Europe/Istanbul
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
