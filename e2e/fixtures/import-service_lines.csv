@@ -1,0 +1,4 @@
+Proje kodu;Tür;Açıklama;Tedarikçi;Tarih (başlangıç);Miktar;Birim;Gece;Para birimi;Birim alış (KDV hariç);Birim satış (KDV hariç);Oda tipi;Pansiyon
+E2E-{{RUN}}-1;konaklama;Oda (DBL, BB);Kuzguncuk Konak {{RUN}};{{D:-120}};25;oda/gece;2;EUR;110,00;132,00;DBL;BB
+E2E-{{RUN}}-1;salon;Toplantı salonu;Kuzguncuk Konak {{RUN}};{{D:-120}};2;gün;;EUR;2.900,00;3.480,00;;
+E2E-{{RUN}}-2;salon;Lansman salonu;Moda Sahil Otel;{{D:-200}};1;gün;;EUR;3.100,00;3.700,00;;

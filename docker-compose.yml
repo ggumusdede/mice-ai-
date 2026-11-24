@@ -1,0 +1,122 @@
+# MICE AI Operations OS — single-host deployment (PostgreSQL 16 + API + web/nginx + optional worker).
+#   cp .env.example .env   # set POSTGRES_PASSWORD, APP_DB_PASSWORD, JWT_SECRET, GUEST_DATA_KEY, … (see README → Dağıtım)
+#   docker compose up -d --build                     # db → migrate (one-shot, owner role) → api (mice_app) → web :8080
+#   docker compose --profile worker up -d            # + follow-up / digest / e-mail retry worker
+#   docker compose run --rm migrate                  # re-run migrations manually
+#   docker compose run --rm api seed --reset         # demo data (NOT in production)
+#
+# Two database connections (§3.8 RLS):
+#   MIGRATION_DATABASE_URL  postgres://postgres:${POSTGRES_PASSWORD}@db:5432/mice   owner — migrate service ONLY
+#   DATABASE_URL            postgres://mice_app:${APP_DB_PASSWORD}@db:5432/mice     non-superuser, RLS — api + worker
+# The migrate service sets mice_app's password from APP_DB_PASSWORD; the api/worker never receive the owner password.
+name: mice
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://mice_app:${APP_DB_PASSWORD:?set APP_DB_PASSWORD}@db:5432/mice
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+  GUEST_DATA_KEY: ${GUEST_DATA_KEY:?set GUEST_DATA_KEY}
+  OUTBOX_DATA_KEY: ${OUTBOX_DATA_KEY:-}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+  CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+  WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+  WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-MICE AI Operations OS}
+  WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:8080}
+  ALLOW_DEV_BIOMETRIC: ${ALLOW_DEV_BIOMETRIC:-}
+  PUBLIC_RATE_LIMIT: ${PUBLIC_RATE_LIMIT:-60}
+  TRUST_PROXY: ${TRUST_PROXY:-1}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  AI_PROVIDER: ${AI_PROVIDER:-}
+  AI_MODEL: ${AI_MODEL:-}
+  AI_MODEL_FAST: ${AI_MODEL_FAST:-}
+  AI_ALLOW_BINARY_DOCS: ${AI_ALLOW_BINARY_DOCS:-}
+  EMAIL_PROVIDER: ${EMAIL_PROVIDER:-outbox}
+  EMAIL_SEND_MODE: ${EMAIL_SEND_MODE:-immediate}
+  EMAIL_REPLY_ADDRESS: ${EMAIL_REPLY_ADDRESS:-}
+  EMAIL_MESSAGE_ID_DOMAIN: ${EMAIL_MESSAGE_ID_DOMAIN:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SMTP_ENVELOPE_FROM: ${SMTP_ENVELOPE_FROM:-}
+  MESSAGING_PROVIDER: ${MESSAGING_PROVIDER:-outbox}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+  WORKER_INTERVAL_MS: ${WORKER_INTERVAL_MS:-300000}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: mice
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mice"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # not published: only the containers on this network reach the database
+    # ports: ["127.0.0.1:5432:5432"]
+
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    image: mice-api:${IMAGE_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      MIGRATION_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/mice
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    image: mice-api:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    command: ["serve"]
+    environment: *app-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 20s
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  worker:
+    image: mice-api:${IMAGE_TAG:-local}
+    profiles: [worker]
+    restart: unless-stopped
+    command: ["worker"]
+    environment: *app-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck: { disable: true }
+    stop_grace_period: 40s
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    image: mice-web:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: api:3001
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      api: { condition: service_healthy }
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  pgdata:

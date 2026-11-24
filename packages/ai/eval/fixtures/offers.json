@@ -1,0 +1,307 @@
+[
+ {
+  "id": "off-tr-01",
+  "docType": "offer",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Sayın Ayşe Hanım,\n\nKadıköy Grand Otel olarak 12-14 Mart 2027 tarihli toplantınız için teklifimiz aşağıdadır:\n\nOda (DBL, BB): 120 EUR x 25 oda x 2 gece\nOda (SGL, BB): 100 EUR x 30 oda x 2 gece\nSalon kirası: 1.500 EUR\nCoffee break kişi başı 12 EUR\nÖğle yemeği kişi başı 35 EUR x 80 kişi x 2 gün\nTransfer (Vito, havalimanı-otel): 60 EUR x 4 araç\nToplam: 16.420 EUR\n\nFiyatlarımıza KDV dahil, konaklama vergisi hariçtir.\nOpsiyon tarihi: 15.02.2027\nRezervasyon için %30 ön ödeme, kalan bakiye etkinlikten 7 gün önce.\nİptal: 30 gün öncesine kadar ücretsiz, sonrasında %50 iptal bedeli.\nGaranti: minimum 70 kişi. Attrition: %10'a kadar düşüş hakkı.\nSaat 18:00'den sonra salon kullanımı için fazla mesai ücreti saat başı 200 EUR.\n\nSaygılarımızla,\nMehmet Yılmaz\nKadıköy Grand Otel Satış Müdürü\n0532 123 45 67"
+  },
+  "gold": {
+   "supplierName": "Kadıköy Grand Otel",
+   "currency": "EUR",
+   "optionUntil": "2027-02-15",
+   "guaranteePax": 70,
+   "prepaymentRate": 0.3,
+   "lines": [
+    {
+     "kind": "accommodation",
+     "unitPrice": 120,
+     "quantity": 25,
+     "nights": 2,
+     "roomType": "DBL",
+     "board": "BB",
+     "vatIncluded": true
+    },
+    {
+     "kind": "accommodation",
+     "unitPrice": 100,
+     "quantity": 30,
+     "nights": 2,
+     "roomType": "SGL",
+     "board": "BB",
+     "vatIncluded": true
+    },
+    {
+     "kind": "hall",
+     "unitPrice": 1500,
+     "quantity": 1,
+     "vatIncluded": true
+    },
+    {
+     "kind": "fnb",
+     "unitPrice": 12
+    },
+    {
+     "kind": "fnb",
+     "unitPrice": 35,
+     "quantity": 160
+    },
+    {
+     "kind": "transfer",
+     "unitPrice": 60,
+     "quantity": 4
+    }
+   ]
+  },
+  "tags": [
+   "email"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "off-tr-02",
+  "docType": "offer",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "ABC Transfer Hizmetleri\nHavalimanı transferi Vito: 3.250,00 TL x 6 araç + KDV\nGün boyu otobüs (46 kişilik): 18.000 TL %20 KDV hariç\nTeklif opsiyonu 10.01.2027 tarihine kadardır."
+  },
+  "gold": {
+   "supplierName": "ABC Transfer Hizmetleri",
+   "currency": "TRY",
+   "optionUntil": "2027-01-10",
+   "lines": [
+    {
+     "kind": "transfer",
+     "unitPrice": 3250,
+     "quantity": 6,
+     "vatIncluded": false
+    },
+    {
+     "kind": "transfer",
+     "unitPrice": 18000,
+     "quantity": 1,
+     "vatIncluded": false
+    }
+   ]
+  },
+  "tags": [
+   "email",
+   "try"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "off-tr-03",
+  "docType": "offer",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Moda Sahil Otel — Grup Teklifi\nTarih: 12-14 Mart 2027\nDBL HB oda: 140 EUR x 20 oda x 2 gece\nSGL HB oda: 115 EUR x 15 oda x 2 gece\nToplantı salonu (tiyatro, 100 kişi): günlük 1.200 EUR x 2 gün\nFiyatlar KDV hariçtir, konaklama vergisi hariçtir.\nOpsiyon: 20.01.2027\nÖdeme: %40 ön ödeme."
+  },
+  "gold": {
+   "supplierName": "Moda Sahil Otel",
+   "currency": "EUR",
+   "optionUntil": "2027-01-20",
+   "prepaymentRate": 0.4,
+   "lines": [
+    {
+     "kind": "accommodation",
+     "unitPrice": 140,
+     "quantity": 20,
+     "nights": 2,
+     "roomType": "DBL",
+     "board": "HB",
+     "vatIncluded": false
+    },
+    {
+     "kind": "accommodation",
+     "unitPrice": 115,
+     "quantity": 15,
+     "nights": 2,
+     "roomType": "SGL",
+     "board": "HB",
+     "vatIncluded": false
+    },
+    {
+     "kind": "hall",
+     "unitPrice": 1200,
+     "quantity": 2,
+     "vatIncluded": false
+    }
+   ]
+  },
+  "tags": [
+   "email"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "off-tr-04",
+  "docType": "offer",
+  "language": "tr",
+  "source": "csv",
+  "today": "2026-11-20",
+  "input": {
+   "file": {
+    "filename": "teklif.csv",
+    "mimeType": "text/csv",
+    "text": "Kalem;Birim Fiyat;Adet\nOda DBL BB;130 EUR;20 oda x 3 gece\nSalon kirası günlük;2.000 EUR;x 2 gün\n"
+   }
+  },
+  "gold": {
+   "currency": "EUR",
+   "lines": [
+    {
+     "kind": "accommodation",
+     "unitPrice": 130,
+     "quantity": 20,
+     "nights": 3
+    },
+    {
+     "kind": "hall",
+     "unitPrice": 2000,
+     "quantity": 2
+    }
+   ]
+  },
+  "tags": [
+   "excel"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "off-en-01",
+  "docType": "offer",
+  "language": "en",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Bosphorus Palace Hotel – Group Quotation\nDouble room BB: EUR 165 per room per night, 30 rooms x 3 nights\nSingle room BB: EUR 145 per room per night, 10 rooms x 3 nights\nMeeting room (classroom): EUR 2,500 per day x 2 days\nRates exclude VAT.\nOption valid until 31 January 2027.\nDeposit: 25% upon confirmation.\nCancellation: free until 45 days prior."
+  },
+  "gold": {
+   "supplierName": "Bosphorus Palace Hotel",
+   "currency": "EUR",
+   "optionUntil": "2027-01-31",
+   "prepaymentRate": 0.25,
+   "lines": [
+    {
+     "kind": "accommodation",
+     "unitPrice": 165,
+     "quantity": 30,
+     "nights": 3,
+     "roomType": "DBL",
+     "board": "BB",
+     "vatIncluded": false
+    },
+    {
+     "kind": "accommodation",
+     "unitPrice": 145,
+     "quantity": 10,
+     "nights": 3,
+     "roomType": "SGL",
+     "board": "BB",
+     "vatIncluded": false
+    },
+    {
+     "kind": "hall",
+     "unitPrice": 2500,
+     "quantity": 2,
+     "vatIncluded": false
+    }
+   ]
+  },
+  "tags": [
+   "email"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "off-en-02",
+  "docType": "offer",
+  "language": "en",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Prime AV Solutions\nLED wall 4x3m: EUR 1,800 per day x 2 days\nSound system with 4 wireless mics: EUR 650 per day x 2 days\nTechnician: EUR 300 per day x 2 days\nPrices + VAT 20%.\nQuote valid until 15.02.2027"
+  },
+  "gold": {
+   "supplierName": "Prime AV Solutions",
+   "currency": "EUR",
+   "optionUntil": "2027-02-15",
+   "lines": [
+    {
+     "kind": "technical",
+     "unitPrice": 1800,
+     "quantity": 2,
+     "vatIncluded": false
+    },
+    {
+     "kind": "technical",
+     "unitPrice": 650,
+     "quantity": 2,
+     "vatIncluded": false
+    },
+    {
+     "unitPrice": 300,
+     "quantity": 2,
+     "vatIncluded": false
+    }
+   ]
+  },
+  "tags": [
+   "email"
+  ],
+  "origin": "synthetic"
+ },
+ {
+  "id": "off-ru-01",
+  "docType": "offer",
+  "language": "ru",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "Отель Галата Резиденс\nДвухместный номер BB: 150 EUR x 12 номеров x 2 ночи\nОдноместный номер BB: 130 EUR x 8 номеров x 2 ночи\nКонференц-зал: 900 EUR в день x 1 день\nЦены без НДС.\nОпция до 01.02.2027\nПредоплата 50%."
+  },
+  "gold": {
+   "supplierName": "Отель Галата Резиденс",
+   "currency": "EUR",
+   "optionUntil": "2027-02-01",
+   "prepaymentRate": 0.5,
+   "lines": [
+    {
+     "kind": "accommodation",
+     "unitPrice": 150,
+     "quantity": 12,
+     "nights": 2,
+     "roomType": "DBL",
+     "board": "BB",
+     "vatIncluded": false
+    },
+    {
+     "kind": "accommodation",
+     "unitPrice": 130,
+     "quantity": 8,
+     "nights": 2,
+     "roomType": "SGL",
+     "board": "BB",
+     "vatIncluded": false
+    },
+    {
+     "kind": "hall",
+     "unitPrice": 900,
+     "quantity": 1,
+     "vatIncluded": false
+    }
+   ]
+  },
+  "tags": [
+   "email"
+  ],
+  "origin": "synthetic"
+ }
+]

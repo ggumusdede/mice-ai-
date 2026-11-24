@@ -1,0 +1,3 @@
+Tedarikçi;Hizmet tarihi;Tür;Açıklama;Birim;Birim fiyat (KDV hariç);Para birimi;Oda tipi;Pansiyon;İptal koşulu
+Beykoz Koru {{RUN}};{{D:-90}};salon;Salon (tiyatro);gün;2.750,00;EUR;;;esnek
+Moda Sahil Otel;{{D:-90}};konaklama;Oda DBL;oda/gece;{{PRICE2}};EUR;DBL;BB;esnek

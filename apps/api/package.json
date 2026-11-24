@@ -1,0 +1,47 @@
+{
+  "name": "@mice/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --no-experimental-require-module src/server.ts",
+    "start": "tsx --no-experimental-require-module src/server.ts",
+    "migrate": "tsx --no-experimental-require-module src/db/migrate.ts",
+    "seed": "tsx --no-experimental-require-module src/db/seed.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "worker": "tsx --no-experimental-require-module src/worker.ts",
+    "migrate:deploy": "tsx --no-experimental-require-module src/db/bootstrap.ts",
+    "vapid:generate": "tsx --no-experimental-require-module src/scripts/generate-vapid-keys.ts",
+    "inbound:imap": "tsx --no-experimental-require-module src/inbound-imap.ts",
+    "export-eval-set": "tsx --no-experimental-require-module src/scripts/export-eval-set.ts",
+    "fx:tcmb": "tsx --no-experimental-require-module src/scripts/import-tcmb.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@fastify/jwt": "^9.1.0",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@mice/ai": "*",
+    "@mice/domain": "*",
+    "@mice/shared": "*",
+    "@simplewebauthn/server": "^11.0.0",
+    "exceljs": "^4.4.0",
+    "fast-xml-parser": "^5.12.1",
+    "fastify": "^5.12.8",
+    "imapflow": "^2.12.2",
+    "mailparser": "^3.15.0",
+    "nodemailer": "^10.6.1",
+    "pdfkit": "^0.15.2",
+    "pg": "^8.23.1",
+    "web-push": "^4.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.9.0",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.7",
+    "@types/pg": "^8.23.1",
+    "@types/web-push": "^3.6.4"
+  }
+}

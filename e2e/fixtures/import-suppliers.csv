@@ -1,0 +1,4 @@
+Tedarikçi adı;VKN;Şehir;Semt;Hizmet türleri;Statü;Segment;E-posta
+Kuzguncuk Konak {{RUN}};{{VKN1}};İstanbul;Üsküdar;konaklama, salon;aday;butik;satis@kuzguncuk-{{run}}.example.com
+Beykoz Koru {{RUN}};{{VKN2}};İstanbul;Beykoz;konaklama, salon, yiyecek-içecek;akredite;5*;satis@beykoz-{{run}}.example.com
+Moda Sahil Otel;;İstanbul;Kadıköy;konaklama, salon;akredite;4*;

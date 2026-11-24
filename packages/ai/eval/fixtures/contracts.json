@@ -1,0 +1,134 @@
+[
+ {
+  "id": "con-tr-01",
+  "docType": "contract",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "KONAKLAMA VE TOPLANTI SÖZLEŞMESİ\nOtel: Kadıköy Grand Otel\nMüşteri: Acme İlaç A.Ş.\nGiriş: 12.03.2027  Çıkış: 14.03.2027\nKatılımcı: 80 kişi, garanti 70 kişi\n25 DBL oda x 2 gece x 120 EUR (BB)\n30 SGL oda x 2 gece x 100 EUR (BB)\nSalon kirası: 1.500 EUR (tiyatro düzeni)\nMenü: 3 çeşit öğle yemeği menüsü, 2 coffee break\nFiyatlar KDV hariçtir. Konaklama vergisi ayrıca faturalanır.\nToplam tutar: 14.700 EUR\nÖdeme: %30 ön ödeme imzada, bakiye giriş tarihinden 7 gün önce.\nİptal: 30 günden az kalan iptallerde %50.\nAttrition: 21 gün öncesine kadar %10 düşüş."
+  },
+  "gold": {
+   "supplierName": "Kadıköy Grand Otel",
+   "customerName": "Acme İlaç A.Ş.",
+   "startDate": "2027-03-12",
+   "endDate": "2027-03-14",
+   "pax": 80,
+   "guaranteePax": 70,
+   "currency": "EUR",
+   "totalAmount": 14700,
+   "prepaymentRate": 0.3,
+   "vatSeparated": true,
+   "rooms": [
+    {
+     "type": "DBL",
+     "count": 25,
+     "nights": 2,
+     "unitPrice": 120
+    },
+    {
+     "type": "SGL",
+     "count": 30,
+     "nights": 2,
+     "unitPrice": 100
+    }
+   ]
+  },
+  "tags": [],
+  "origin": "synthetic"
+ },
+ {
+  "id": "con-tr-02",
+  "docType": "contract",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "KONAKLAMA SÖZLEŞMESİ\nOtel: Boğaz Palas Otel\nMüşteri: Delta Sigorta A.Ş.\nGiriş: 22.01.2027 Çıkış: 24.01.2027\nKatılımcı: 45 kişi, garanti 40 kişi\n20 SGL oda x 2 gece x 95 EUR (BB)\n10 DBL oda x 2 gece x 115 EUR (BB)\nFiyatlar KDV dahildir.\nToplam tutar: 6.100 EUR\nÖdeme: %50 ön ödeme imzada, bakiye girişte.\nİptal: 14 günden az kalan iptallerde %100."
+  },
+  "gold": {
+   "supplierName": "Boğaz Palas Otel",
+   "customerName": "Delta Sigorta A.Ş.",
+   "startDate": "2027-01-22",
+   "endDate": "2027-01-24",
+   "pax": 45,
+   "guaranteePax": 40,
+   "currency": "EUR",
+   "totalAmount": 6100,
+   "prepaymentRate": 0.5,
+   "vatSeparated": false,
+   "rooms": [
+    {
+     "type": "SGL",
+     "count": 20,
+     "nights": 2,
+     "unitPrice": 95
+    },
+    {
+     "type": "DBL",
+     "count": 10,
+     "nights": 2,
+     "unitPrice": 115
+    }
+   ]
+  },
+  "tags": [],
+  "origin": "synthetic"
+ },
+ {
+  "id": "con-en-01",
+  "docType": "contract",
+  "language": "en",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "HOTEL AGREEMENT\nHotel: Bosphorus Palace Hotel\nClient: Initech GmbH\nCheck-in: 14.09.2027 Check-out: 17.09.2027\nParticipants: 25 persons, guarantee 22 persons\n25 SGL rooms x 3 nights x 180 EUR (BB)\nMeeting room: 1.000 EUR per day x 3 days\nPrices exclude VAT.\nTotal amount: 16.500 EUR\nPayment: 30% deposit upon signature, balance 14 days prior to arrival.\nCancellation: 50% within 30 days."
+  },
+  "gold": {
+   "supplierName": "Bosphorus Palace Hotel",
+   "customerName": "Initech GmbH",
+   "startDate": "2027-09-14",
+   "endDate": "2027-09-17",
+   "pax": 25,
+   "guaranteePax": 22,
+   "currency": "EUR",
+   "totalAmount": 16500,
+   "prepaymentRate": 0.3,
+   "vatSeparated": true,
+   "rooms": [
+    {
+     "type": "SGL",
+     "count": 25,
+     "nights": 3,
+     "unitPrice": 180
+    }
+   ]
+  },
+  "tags": [],
+  "origin": "synthetic"
+ },
+ {
+  "id": "con-tr-03",
+  "docType": "contract",
+  "language": "tr",
+  "source": "text",
+  "today": "2026-11-20",
+  "input": {
+   "text": "SÖZLEŞME\nTesis: Ortaköy Business Hotel\nMüşteri: Gamma Otomotiv\nEtkinlik tarihi: 05.06.2027\nKatılımcı: 200 kişi\nSalon kirası: 3.000 EUR (tiyatro)\nÖğle yemeği kişi başı 30 EUR x 200 kişi\nToplam: 9.000 EUR\nÖdeme koşulları: etkinlikten 7 gün önce tamamı."
+  },
+  "gold": {
+   "supplierName": "Ortaköy Business Hotel",
+   "customerName": "Gamma Otomotiv",
+   "startDate": "2027-06-05",
+   "pax": 200,
+   "guaranteePax": null,
+   "currency": "EUR",
+   "totalAmount": 9000,
+   "rooms": []
+  },
+  "tags": [
+   "missing_fields"
+  ],
+  "origin": "synthetic"
+ }
+]
